@@ -5,7 +5,31 @@ const SEVERITY_LABELS = {
   LOW: "low",
 };
 
-export default function AlertsList({ alerts = [] }) {
+function formatAlertTimestamp(timestamp) {
+  const parsedDate = new Date(timestamp);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return timestamp;
+  }
+
+  return parsedDate.toLocaleString([], {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+export default function AlertsList({ alerts = [], loading = false, error = "" }) {
+  if (loading) {
+    return <p className="dashboard-empty-state">Loading alerts...</p>;
+  }
+
+  if (error) {
+    return <p className="dashboard-empty-state">{error}</p>;
+  }
+
   if (!alerts.length) {
     return <p className="dashboard-empty-state">No active alerts</p>;
   }
@@ -18,7 +42,7 @@ export default function AlertsList({ alerts = [] }) {
             <span className={`alert-item__severity alert-item__severity--${SEVERITY_LABELS[alert.severity] ?? "low"}`}>
               {alert.severity}
             </span>
-            <span className="alert-item__timestamp">{alert.timestamp}</span>
+            <span className="alert-item__timestamp">{formatAlertTimestamp(alert.timestamp)}</span>
           </div>
 
           <h3 className="alert-item__title">{alert.title}</h3>

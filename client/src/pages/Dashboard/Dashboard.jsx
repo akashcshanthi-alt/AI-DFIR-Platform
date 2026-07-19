@@ -3,20 +3,93 @@ import { FiActivity, FiLogOut, FiShield, FiServer, FiUser } from "react-icons/fi
 import { useNavigate } from "react-router-dom";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import AlertsList from "./AlertsList";
-import { createDashboardState, dashboardMock, refreshDashboardState } from "./Dashboard.mock";
+import { dashboardMock, formatSyncTime } from "./Dashboard.mock";
 import RecentCases from "./RecentCases";
 import TelemetryGrid from "./TelemetryGrid";
 import "./Dashboard.css";
 
 const DEV_SESSION_KEY = "arclight-dev-session";
 const TELEMETRY_REFRESH_MS = 15000;
+const TELEMETRY_API_URL = "http://localhost:5000/api/dashboard/telemetry";
+const ALERTS_API_URL = "http://localhost:5000/api/dashboard/alerts";
 const EVENT_TICKER_MS = 5000;
 const CHANGE_FLASH_MS = 700;
+
+function buildTelemetryFromApi(apiTelemetry = {}) {
+  return dashboardMock.telemetry.map((item) => {
+    if (item.id === "active-alerts") {
+      const value = Number.parseInt(apiTelemetry.activeAlerts ?? item.value, 10);
+
+      return {
+        ...item,
+        value,
+        trend: value >= 12 ? "+4 since 15m" : value >= 8 ? "+2 since 15m" : "+1 since 15m",
+        trendTone: value >= 12 ? "critical" : item.trendTone,
+      };
+    }
+
+    if (item.id === "network-state") {
+      const value = apiTelemetry.networkState ?? item.value;
+
+      return {
+        ...item,
+        value,
+        trend: value,
+        trendTone: value === "Degraded" ? "critical" : item.trendTone,
+      };
+    }
+
+    if (item.id === "memory-checked") {
+      const value = Number.parseInt(apiTelemetry.memoryChecked ?? String(item.value), 10);
+
+      return {
+        ...item,
+        value: `${value}%`,
+        trend: `${value}% scanned`,
+        trendTone: "info",
+      };
+    }
+
+    if (item.id === "integrity-index") {
+      const value = Number.parseFloat(apiTelemetry.integrityIndex ?? String(item.value));
+
+      return {
+        ...item,
+        value: `${value.toFixed(1)}%`,
+        trend: `${value.toFixed(1)}% verified`,
+        trendTone: item.trendTone,
+      };
+    }
+
+    return item;
+  });
+}
+
+function formatLastSynced(lastSynced) {
+  if (!lastSynced) {
+    return formatSyncTime(new Date());
+  }
+
+  const parsedDate = new Date(lastSynced);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return formatSyncTime(new Date());
+  }
+
+  return formatSyncTime(parsedDate);
+}
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const hasSession = sessionStorage.getItem(DEV_SESSION_KEY) === "active";
-  const [dashboardState, setDashboardState] = useState(() => createDashboardState());
+  const [dashboardState, setDashboardState] = useState(() => ({
+    ...dashboardMock,
+    alerts: [],
+    currentEventIndex: 0,
+    lastSynced: formatSyncTime(new Date()),
+  }));
+  const [alertsLoading, setAlertsLoading] = useState(true);
+  const [alertsError, setAlertsError] = useState("");
   const [flashIds, setFlashIds] = useState([]);
   const [tickerVisible, setTickerVisible] = useState(true);
   const telemetryTimeoutRef = useRef(null);
@@ -37,14 +110,18 @@ export default function Dashboard() {
         .map((item) => item.id);
     };
 
-    if (telemetryTimeoutRef.current) {
-      window.clearTimeout(telemetryTimeoutRef.current);
-    }
+    const refreshTelemetry = async () => {
+      const response = await fetch(TELEMETRY_API_URL);
 
-    const refreshTelemetry = () => {
+      if (!response.ok) {
+        return;
+      }
+
+      const apiTelemetry = await response.json();
+
       setDashboardState((current) => {
-        const nextState = refreshDashboardState(current);
-        const changedIds = nextFlashIds(nextState.telemetry, current.telemetry);
+        const nextTelemetry = buildTelemetryFromApi(apiTelemetry);
+        const changedIds = nextFlashIds(nextTelemetry, current.telemetry);
 
         setFlashIds(changedIds);
 
@@ -54,9 +131,15 @@ export default function Dashboard() {
 
         telemetryTimeoutRef.current = window.setTimeout(() => setFlashIds([]), CHANGE_FLASH_MS);
 
-        return nextState;
+        return {
+          ...current,
+          telemetry: nextTelemetry,
+          lastSynced: formatLastSynced(apiTelemetry.lastSynced),
+        };
       });
     };
+
+    refreshTelemetry();
 
     const intervalId = window.setInterval(refreshTelemetry, TELEMETRY_REFRESH_MS);
 
@@ -91,6 +174,49 @@ export default function Dashboard() {
       if (eventTimeoutRef.current) {
         window.clearTimeout(eventTimeoutRef.current);
       }
+    };
+  }, [hasSession]);
+
+  useEffect(() => {
+    if (!hasSession) return undefined;
+
+    let cancelled = false;
+
+    const loadAlerts = async () => {
+      setAlertsLoading(true);
+      setAlertsError("");
+
+      try {
+        const response = await fetch(ALERTS_API_URL);
+
+        if (!response.ok) {
+          throw new Error("Failed to load alerts");
+        }
+
+        const apiAlerts = await response.json();
+        const sortedAlerts = [...apiAlerts].sort((left, right) => new Date(right.timestamp) - new Date(left.timestamp));
+
+        if (!cancelled) {
+          setDashboardState((current) => ({
+            ...current,
+            alerts: sortedAlerts,
+          }));
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setAlertsError("Unable to load alerts right now.");
+        }
+      } finally {
+        if (!cancelled) {
+          setAlertsLoading(false);
+        }
+      }
+    };
+
+    loadAlerts();
+
+    return () => {
+      cancelled = true;
     };
   }, [hasSession]);
 
@@ -225,7 +351,7 @@ export default function Dashboard() {
               </div>
             </div>
 
-            <AlertsList alerts={alerts} />
+            <AlertsList alerts={alerts} loading={alertsLoading} error={alertsError} />
           </section>
 
           <section className="dashboard-panel" aria-labelledby="cases-heading">
