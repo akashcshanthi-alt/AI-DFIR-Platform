@@ -1,0 +1,180 @@
+/* TRACE AI DFIR Global Design System CSS */
+
+:root {
+  /* Colors - Enterprise cybersecurity SOC appearance */
+  --bg-main: #060913;                 /* Near-black dark navy background */
+  --bg-secondary: #0a0f1d;            /* Slightly lighter dark navy for page headers / section dividers */
+  --bg-sidebar: #04070e;              /* Deep dark navy for structural elements like sidebar */
+  --bg-surface: #0e1626;              /* Main card and surface background */
+  --bg-surface-elevated: #162035;     /* Hovered or elevated cards / surfaces */
+  
+  --border-color: rgba(255, 255, 255, 0.08); /* Subtle border for layout structure */
+  --border-color-hover: rgba(255, 255, 255, 0.15);
+  
+  /* Primary & Accent Colors - SOC/DFIR vibe, avoiding excessive gaming neon */
+  --color-primary: #3b82f6;           /* Electric Blue - primary action accent */
+  --color-primary-hover: #2563eb;
+  --color-primary-light: rgba(59, 130, 246, 0.1);
+  
+  --color-secondary: #06b6d4;         /* Cyan Accent - secondary metrics / highlights */
+  --color-secondary-hover: #0891b2;
+  --color-secondary-light: rgba(6, 182, 212, 0.1);
+
+  /* Typography / Text Colors */
+  --text-primary: #f8fafc;            /* Crisp clean off-white */
+  --text-secondary: #cbd5e1;          /* Highly legible grey for details */
+  --text-muted: #64748b;              /* Darker grey for timestamps/subtext */
+
+  /* Status Colors (Required for DFIR triage and case management) */
+  --status-critical: #ef4444;         /* Alert Red */
+  --status-critical-bg: rgba(239, 68, 68, 0.1);
+  
+  --status-high: #f97316;             /* Orange */
+  --status-high-bg: rgba(249, 115, 22, 0.1);
+  
+  --status-medium: #eab308;           /* Yellow */
+  --status-medium-bg: rgba(234, 179, 8, 0.1);
+  
+  --status-low: #22c55e;              /* Green */
+  --status-low-bg: rgba(34, 197, 94, 0.1);
+  
+  --status-closed: #64748b;           /* Muted Grey */
+  --status-closed-bg: rgba(100, 116, 139, 0.1);
+
+  /* Spacing System */
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+
+  /* Border Radii */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  /* Shadows (Subtle depth, professional enterprise look) */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -1px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.5);
+
+  /* Transition Speeds */
+  --transition-speed: 200ms;
+
+  /* Glassmorphism/Transparency (Minimal/Subtle) */
+  --glass-bg: rgba(14, 22, 38, 0.7);
+  --glass-border: rgba(255, 255, 255, 0.05);
+  --glass-blur: blur(8px);
+}
+
+/* CSS Reset & Core Box-Sizing */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* Global Body Styling */
+body {
+  background-color: var(--bg-main);
+  color: var(--text-primary);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 0.9375rem; /* ~15px optimal text sizing */
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Headings & Paragraphs standard styling */
+h1, h2, h3, h4, h5, h6 {
+  color: var(--text-primary);
+  font-weight: 600;
+  line-height: 1.25;
+  margin-bottom: 0.5rem;
+}
+
+p {
+  color: var(--text-secondary);
+  margin-bottom: 1rem;
+}
+
+a {
+  color: var(--color-primary);
+  text-decoration: none;
+  transition: color var(--transition-speed) ease;
+}
+
+a:hover {
+  color: var(--color-secondary);
+}
+
+/* Media element layout reset */
+img, picture, video, canvas, svg {
+  display: block;
+  max-width: 100%;
+}
+
+/* Input, button reset */
+input, button, textarea, select {
+  font: inherit;
+}
+
+/* Selection Styling (Custom Accent Highlight) */
+::selection {
+  background-color: rgba(6, 182, 212, 0.3); /* Transparent Cyan */
+  color: var(--text-primary);
+}
+
+/* Accessible focus-visible styling */
+*:focus {
+  outline: none;
+}
+
+*:focus-visible {
+  outline: 2px solid var(--color-secondary);
+  outline-offset: 2px;
+}
+
+/* Focus styles for interactive elements for high visibility */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Sleek Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-main);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--bg-surface-elevated);
+  border-radius: var(--radius-sm);
+  border: 2px solid var(--bg-main);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* Firefox Scrollbar Support */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--bg-surface-elevated) var(--bg-main);
+}

@@ -1,533 +1,681 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import "./Login.css";
+import React, { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { FiShield, FiMail, FiLock, FiEye, FiEyeOff } from 'react-icons/fi';
 
-/* ---------------------------------------------------------
-   Deterministic pseudo-random (seeded) so background layers
-   are stable across renders instead of reshuffling on state
-   updates — avoids visual "jumps" and keeps memoization cheap.
---------------------------------------------------------- */
-function seededRandom(seed) {
-  let s = seed;
-  return () => {
-    s = (s * 9301 + 49297) % 233280;
-    return s / 233280;
-  };
-}
-
-const GLOBE_NODES = (() => {
-  const rand = seededRandom(42);
-  const nodes = [];
-  for (let i = 0; i < 16; i++) {
-    nodes.push({
-      id: `NODE-${(0x1000 + Math.floor(rand() * 0xefff)).toString(16).toUpperCase()}`,
-      rotY: Math.floor(rand() * 360),
-      rotX: Math.floor(rand() * 140) - 70,
-      threat: rand() > 0.78,
-      delay: (rand() * 4).toFixed(2),
-    });
-  }
-  return nodes;
-})();
-
-const MESH_NODES = (() => {
-  const rand = seededRandom(7);
-  const nodes = [];
-  for (let i = 0; i < 22; i++) {
-    nodes.push({
-      x: rand() * 100,
-      y: rand() * 100,
-      r: rand() * 1.6 + 0.6,
-      delay: (rand() * 5).toFixed(2),
-    });
-  }
-  return nodes;
-})();
-
-const MESH_LINES = (() => {
-  const lines = [];
-  for (let i = 0; i < MESH_NODES.length; i++) {
-    const a = MESH_NODES[i];
-    const b = MESH_NODES[(i + 3) % MESH_NODES.length];
-    const c = MESH_NODES[(i + 7) % MESH_NODES.length];
-    lines.push([a, b]);
-    if (i % 2 === 0) lines.push([a, c]);
-  }
-  return lines;
-})();
-
-const PARTICLES = (() => {
-  const rand = seededRandom(101);
-  return Array.from({ length: 34 }, (_, i) => ({
-    id: i,
-    x: rand() * 100,
-    y: rand() * 100,
-    size: rand() * 2.4 + 0.8,
-    duration: rand() * 14 + 12,
-    delay: rand() * -20,
-    depth: rand(),
-  }));
-})();
-
-const CODE_COLUMNS = (() => {
-  const rand = seededRandom(202);
-  const glyphs = "01ABCDEF{}<>/#$%*&^~".split("");
-  return Array.from({ length: 14 }, (_, i) => {
-    const len = 18 + Math.floor(rand() * 14);
-    let str = "";
-    for (let j = 0; j < len; j++) str += glyphs[Math.floor(rand() * glyphs.length)];
-    return {
-      id: i,
-      left: (i / 14) * 100 + rand() * 3,
-      duration: rand() * 6 + 9,
-      delay: rand() * -12,
-      text: str,
-    };
-  });
-})();
-
-const THREAT_FEED = [
-  "EVID-2291 hash re-verified :: match",
-  "Perimeter sensor sync :: nominal",
-  "Anomaly on NODE-A31F :: auto-contained",
-  "Chain of custody :: unbroken",
-  "Timeline reconstruction :: 98% complete",
-  "Volatile memory capture :: queued",
-  "Signature match against IOC feed :: none",
-  "Case index :: rebuilt in 0.4s",
-];
-
-function useReducedMotion() {
-  const [reduced, setReduced] = useState(false);
-  useEffect(() => {
-    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    setReduced(mq.matches);
-    const handler = (e) => setReduced(e.matches);
-    mq.addEventListener?.("change", handler);
-    return () => mq.removeEventListener?.("change", handler);
-  }, []);
-  return reduced;
-}
-
-function useClock() {
-  const [time, setTime] = useState(() => new Date());
-  useEffect(() => {
-    const t = setInterval(() => setTime(new Date()), 1000);
-    return () => clearInterval(t);
-  }, []);
-  return time;
-}
-
-function ShieldMark({ state }) {
-  return (
-    <div className={`shield-mark shield-mark--${state}`} aria-hidden="true">
-      <svg viewBox="0 0 120 132" className="shield-svg">
-        <defs>
-          <linearGradient id="shieldGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--cyan)" />
-            <stop offset="100%" stopColor="var(--blue)" />
-          </linearGradient>
-        </defs>
-        <path
-          className="shield-outline"
-          d="M60 4 L112 24 V64 C112 96 90 118 60 128 C30 118 8 96 8 64 V24 Z"
-          fill="rgba(10,30,40,0.35)"
-          stroke="url(#shieldGrad)"
-          strokeWidth="2.5"
-        />
-        <path
-          className="shield-inner-ring"
-          d="M60 16 L100 32 V64 C100 89 84 106 60 115 C36 106 20 89 20 64 V32 Z"
-          fill="none"
-          stroke="var(--cyan)"
-          strokeWidth="0.75"
-          opacity="0.4"
-        />
-        <g className="shield-lock">
-          <rect x="44" y="60" width="32" height="26" rx="4" fill="none" stroke="var(--cyan)" strokeWidth="3" />
-          <path d="M50 60 V50 a10 10 0 0 1 20 0 V60" fill="none" stroke="var(--cyan)" strokeWidth="3" />
-          <circle cx="60" cy="72" r="3.2" fill="var(--cyan)" />
-        </g>
-        <rect className="shield-scan" x="8" y="4" width="104" height="6" fill="url(#shieldGrad)" opacity="0.55" />
-      </svg>
-    </div>
-  );
-}
-
-export default function Login({ onLogin, productName = "ARCLIGHT", tagline = "AI-Driven Digital Forensics & Incident Response" }) {
-  const reducedMotion = useReducedMotion();
-  const clock = useClock();
+/**
+ * Login Component
+ * The entry point for security analysts into the TRACE AI DFIR platform.
+ * Features a split responsive view with a branded security visual panel and
+ * a focused, validated credentials login form.
+ */
+export default function Login() {
   const navigate = useNavigate();
 
-  const [formData, setFormData] = useState({ operatorId: "", passkey: "" });
-  const [showPasskey, setShowPasskey] = useState(false);
-  const [remember, setRemember] = useState(false);
-  const [authState, setAuthState] = useState("idle"); // idle | authenticating | success | error
-  const [errorMsg, setErrorMsg] = useState("");
-  const [feedIndex, setFeedIndex] = useState(0);
-  const [focusField, setFocusField] = useState(null);
+  // Form states
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  
+  // Validation and Loading states
+  const [errors, setErrors] = useState({});
+  const [isLoading, setIsLoading] = useState(false);
 
-  const sceneRef = useRef(null);
-  const cardRef = useRef(null);
-  const rafRef = useRef(null);
-  const pendingMove = useRef(null);
+  // Client-side validations
+  const validateForm = () => {
+    const tempErrors = {};
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-  /* Cycle the threat-feed ticker line */
-  useEffect(() => {
-    if (reducedMotion) return;
-    const t = setInterval(() => setFeedIndex((i) => (i + 1) % THREAT_FEED.length), 3200);
-    return () => clearInterval(t);
-  }, [reducedMotion]);
-
-  /* rAF-throttled pointer parallax + card tilt.
-     Writes transforms directly to the DOM via refs instead of
-     setState, so mouse movement never triggers a React re-render. */
-  const handlePointerMove = useCallback(
-    (e) => {
-      if (reducedMotion) return;
-      pendingMove.current = { clientX: e.clientX, clientY: e.clientY };
-      if (rafRef.current) return;
-
-      rafRef.current = requestAnimationFrame(() => {
-        rafRef.current = null;
-        const { clientX, clientY } = pendingMove.current;
-        const vw = window.innerWidth;
-        const vh = window.innerHeight;
-        const nx = (clientX / vw) * 2 - 1; // -1..1
-        const ny = (clientY / vh) * 2 - 1;
-
-        if (sceneRef.current) {
-          sceneRef.current.style.setProperty("--px", nx.toFixed(3));
-          sceneRef.current.style.setProperty("--py", ny.toFixed(3));
-        }
-
-        if (cardRef.current) {
-          const rect = cardRef.current.getBoundingClientRect();
-          const cx = (clientX - rect.left) / rect.width - 0.5;
-          const cy = (clientY - rect.top) / rect.height - 0.5;
-          const withinBounds =
-            clientX > rect.left - 120 &&
-            clientX < rect.right + 120 &&
-            clientY > rect.top - 120 &&
-            clientY < rect.bottom + 120;
-          if (withinBounds) {
-            const rx = (cy * -8).toFixed(2);
-            const ry = (cx * 10).toFixed(2);
-            cardRef.current.style.setProperty("--tiltx", `${rx}deg`);
-            cardRef.current.style.setProperty("--tilty", `${ry}deg`);
-          }
-        }
-      });
-    },
-    [reducedMotion]
-  );
-
-  useEffect(() => {
-    if (reducedMotion) return;
-    window.addEventListener("pointermove", handlePointerMove, { passive: true });
-    return () => {
-      window.removeEventListener("pointermove", handlePointerMove);
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    };
-  }, [handlePointerMove, reducedMotion]);
-
-  const handleCardLeave = () => {
-    if (!cardRef.current) return;
-    cardRef.current.style.setProperty("--tiltx", `0deg`);
-    cardRef.current.style.setProperty("--tilty", `0deg`);
-  };
-
-  const handleChange = (field) => (e) => {
-    setFormData((f) => ({ ...f, [field]: e.target.value }));
-    if (authState === "error") setAuthState("idle");
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (authState === "authenticating") return;
-
-    if (!formData.operatorId.trim() || !formData.passkey.trim()) {
-      setAuthState("error");
-      setErrorMsg("Operator ID and passkey are both required.");
-      return;
+    if (!email.trim()) {
+      tempErrors.email = 'Email address is required';
+    } else if (!emailRegex.test(email.trim())) {
+      tempErrors.email = 'Please enter a valid email address';
     }
 
-    setAuthState("authenticating");
-    setErrorMsg("");
+    if (!password) {
+      tempErrors.password = 'Password is required';
+    }
 
-    window.setTimeout(() => {
-      setAuthState("success");
-      sessionStorage.setItem("arclight-dev-session", "active");
-      onLogin?.({ ...formData, remember });
-      window.setTimeout(() => navigate("/dashboard", { replace: true }), 900);
-    }, 1850);
+    setErrors(tempErrors);
+    return Object.keys(tempErrors).length === 0;
   };
 
-  const timeString = useMemo(() => {
-    return clock.toISOString().slice(11, 19) + "Z";
-  }, [clock]);
+  // Submit Handler with prototype dashboard navigation
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (isLoading) return;
 
-  const dateString = useMemo(() => clock.toISOString().slice(0, 10), [clock]);
+    if (validateForm()) {
+      setIsLoading(true);
+
+      // Simulate network request latency before navigating
+      setTimeout(() => {
+        setIsLoading(false);
+        // Establish developer session token for the dashboard auth guard
+        sessionStorage.setItem('arclight-dev-session', 'active');
+        navigate('/dashboard', { replace: true });
+      }, 1500);
+    }
+  };
 
   return (
-    <div className={`login-page ${reducedMotion ? "reduced-motion" : ""}`}>
-      <div className="scene" ref={sceneRef}>
-        {/* ---- Background layers ---- */}
-        <div className="layer layer--mesh" aria-hidden="true">
-          <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="mesh-svg">
-            {MESH_LINES.map(([a, b], i) => (
-              <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} className="mesh-line" />
-            ))}
-            {MESH_NODES.map((n, i) => (
-              <circle
-                key={i}
-                cx={n.x}
-                cy={n.y}
-                r={n.r}
-                className="mesh-node"
-                style={{ animationDelay: `${n.delay}s` }}
-              />
-            ))}
-          </svg>
-        </div>
+    <main className="trace-login-page">
+      {/* Self-contained styling block for the login screen */}
+      <style dangerouslySetInnerHTML={{
+        __html: `
+          .trace-login-page {
+            display: flex;
+            min-height: 100vh;
+            background-color: var(--bg-main, #060913);
+            color: var(--text-primary, #f8fafc);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            overflow-x: hidden;
+            width: 100%;
+            box-sizing: border-box;
+          }
 
-        <div className="layer layer--particles" aria-hidden="true">
-          {PARTICLES.map((p) => (
-            <span
-              key={p.id}
-              className="particle"
-              style={{
-                left: `${p.x}%`,
-                top: `${p.y}%`,
-                width: `${p.size}px`,
-                height: `${p.size}px`,
-                animationDuration: `${p.duration}s`,
-                animationDelay: `${p.delay}s`,
-                opacity: 0.25 + p.depth * 0.5,
-              }}
-            />
-          ))}
-        </div>
+          /* Left Branding Column */
+          .trace-login-left {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            background: radial-gradient(circle at 30% 30%, #0c152b 0%, #04070e 100%);
+            border-right: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+            padding: 48px;
+            position: relative;
+            overflow: hidden;
+            box-sizing: border-box;
+          }
 
-        <div className="layer layer--coderain" aria-hidden="true">
-          {CODE_COLUMNS.map((c) => (
-            <div
-              key={c.id}
-              className="code-column"
-              style={{
-                left: `${c.left}%`,
-                animationDuration: `${c.duration}s`,
-                animationDelay: `${c.delay}s`,
-              }}
-            >
-              {c.text.split("").map((ch, idx) => (
-                <span key={idx}>{ch}</span>
-              ))}
+          /* Subtle digital matrix visual grid */
+          .trace-login-grid-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0.12;
+            background-size: 32px 32px;
+            background-image: 
+              linear-gradient(to right, rgba(59, 130, 246, 0.15) 1px, transparent 1px),
+              linear-gradient(to bottom, rgba(59, 130, 246, 0.15) 1px, transparent 1px);
+            pointer-events: none;
+            z-index: 1;
+          }
+
+          .trace-login-left-content {
+            display: flex;
+            flex-direction: column;
+            z-index: 2;
+          }
+
+          .trace-login-brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-decoration: none;
+            user-select: none;
+          }
+
+          .trace-login-brand-icon {
+            font-size: 2.2rem;
+            color: var(--color-primary, #3b82f6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }
+
+          .trace-login-brand-text {
+            display: flex;
+            flex-direction: column;
+          }
+
+          .trace-login-brand-name {
+            font-size: 1.6rem;
+            font-weight: 800;
+            letter-spacing: 0.1em;
+            line-height: 1.1;
+            color: var(--text-primary, #f8fafc);
+          }
+
+          .trace-login-brand-subtitle {
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--color-secondary, #06b6d4);
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            margin-top: 2px;
+          }
+
+          .trace-login-hero {
+            margin-top: 80px;
+            max-width: 460px;
+            z-index: 2;
+          }
+
+          .trace-login-hero-title {
+            font-size: 2.25rem;
+            font-weight: 700;
+            line-height: 1.25;
+            color: var(--text-primary, #f8fafc);
+            margin-bottom: 20px;
+          }
+
+          .trace-login-hero-title span {
+            color: var(--color-primary, #3b82f6);
+          }
+
+          .trace-login-hero-desc {
+            font-size: 0.95rem;
+            line-height: 1.6;
+            color: var(--text-secondary, #cbd5e1);
+          }
+
+          .trace-login-left-footer {
+            font-size: 0.8125rem;
+            font-weight: 600;
+            letter-spacing: 0.1em;
+            color: var(--color-secondary, #06b6d4);
+            text-transform: uppercase;
+            z-index: 2;
+            user-select: none;
+          }
+
+          /* Dynamic network vector visual using SVG */
+          .trace-login-network-visual {
+            position: absolute;
+            right: -40px;
+            bottom: -20px;
+            width: 320px;
+            height: 320px;
+            opacity: 0.2;
+            pointer-events: none;
+            z-index: 1;
+          }
+
+          /* Right Action Column */
+          .trace-login-right {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 48px;
+            box-sizing: border-box;
+            background-color: var(--bg-main, #060913);
+          }
+
+          .trace-login-card {
+            width: 100%;
+            max-width: 400px;
+            background-color: var(--bg-surface, #0e1626);
+            border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+            border-radius: var(--radius-lg, 12px);
+            padding: 40px 32px;
+            box-shadow: var(--shadow-lg);
+            box-sizing: border-box;
+          }
+
+          .trace-login-card-header {
+            margin-bottom: 28px;
+          }
+
+          .trace-login-title {
+            font-size: 1.35rem;
+            font-weight: 600;
+            margin-bottom: 6px;
+            color: var(--text-primary, #f8fafc);
+          }
+
+          .trace-login-support-text {
+            font-size: 0.875rem;
+            color: var(--text-muted, #64748b);
+          }
+
+          /* Form Controls */
+          .trace-login-form {
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+          }
+
+          .trace-login-field {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+          }
+
+          .trace-login-label {
+            font-size: 0.8125rem;
+            font-weight: 600;
+            color: var(--text-secondary, #cbd5e1);
+          }
+
+          .trace-login-input-container {
+            position: relative;
+            display: flex;
+            align-items: center;
+            width: 100%;
+          }
+
+          .trace-login-input-icon {
+            position: absolute;
+            left: 12px;
+            color: var(--text-muted, #64748b);
+            font-size: 1rem;
+            pointer-events: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }
+
+          .trace-login-input {
+            width: 100%;
+            background-color: var(--bg-secondary, #0a0f1d);
+            border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+            border-radius: var(--radius-sm, 4px);
+            padding: 10px 40px 10px 36px;
+            color: var(--text-primary, #f8fafc);
+            font-size: 0.875rem;
+            outline: none;
+            transition: all var(--transition-speed, 200ms) ease;
+            height: 40px;
+            box-sizing: border-box;
+          }
+
+          .trace-login-input:focus {
+            border-color: var(--color-primary, #3b82f6);
+            box-shadow: 0 0 0 1px var(--color-primary-light, rgba(59, 130, 246, 0.15));
+          }
+
+          .trace-login-input.error {
+            border-color: var(--status-critical, #ef4444);
+            box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.15);
+          }
+
+          .trace-login-password-toggle {
+            position: absolute;
+            right: 12px;
+            background: transparent;
+            border: none;
+            color: var(--text-muted, #64748b);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.05rem;
+            outline: none;
+            padding: 0;
+            height: 24px;
+            width: 24px;
+            transition: color var(--transition-speed, 200ms) ease;
+          }
+
+          .trace-login-password-toggle:hover {
+            color: var(--text-secondary, #cbd5e1);
+          }
+
+          .trace-login-password-toggle:focus-visible {
+            outline: 2px solid var(--color-primary, #3b82f6);
+            border-radius: var(--radius-sm, 4px);
+          }
+
+          .trace-login-validation-error {
+            font-size: 0.75rem;
+            color: var(--status-critical, #ef4444);
+            font-weight: 500;
+            margin-top: 3px;
+          }
+
+          /* Remember & Forgot Row */
+          .trace-login-options-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 0.8125rem;
+            margin-top: 4px;
+          }
+
+          .trace-login-remember {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            user-select: none;
+            color: var(--text-secondary, #cbd5e1);
+          }
+
+          .trace-login-checkbox {
+            accent-color: var(--color-primary, #3b82f6);
+            cursor: pointer;
+            width: 14px;
+            height: 14px;
+            border-radius: var(--radius-xs, 2px);
+          }
+
+          .trace-login-forgot-link {
+            color: var(--color-primary, #3b82f6);
+            text-decoration: none;
+            font-weight: 600;
+            transition: color var(--transition-speed, 200ms) ease;
+            outline: none;
+          }
+
+          .trace-login-forgot-link:hover {
+            color: var(--color-secondary, #06b6d4);
+          }
+
+          .trace-login-forgot-link:focus-visible {
+            outline: 2px solid var(--color-primary, #3b82f6);
+            outline-offset: 1px;
+          }
+
+          /* Submit Button & loading */
+          .trace-login-submit-btn {
+            background-color: var(--color-primary, #3b82f6);
+            color: #ffffff;
+            border: 1px solid transparent;
+            border-radius: var(--radius-sm, 4px);
+            padding: 10px 16px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all var(--transition-speed, 200ms) ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            width: 100%;
+            height: 40px;
+            box-sizing: border-box;
+            outline: none;
+            margin-top: 6px;
+          }
+
+          .trace-login-submit-btn:hover:not(:disabled) {
+            background-color: var(--color-primary-hover, #2563eb);
+          }
+
+          .trace-login-submit-btn:disabled {
+            opacity: 0.65;
+            cursor: not-allowed;
+            background-color: var(--bg-surface-elevated, #162035);
+            color: var(--text-muted, #64748b);
+            border-color: var(--border-color, rgba(255, 255, 255, 0.08));
+          }
+
+          .trace-login-submit-btn:focus-visible {
+            outline: 2px solid var(--color-secondary, #06b6d4);
+            outline-offset: 2px;
+          }
+
+          .trace-login-btn-spinner {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            border: 2px solid rgba(255, 255, 255, 0.15);
+            border-top-color: #ffffff;
+            animation: trace-btn-spin 0.75s linear infinite;
+            flex-shrink: 0;
+          }
+
+          @keyframes trace-btn-spin {
+            to { transform: rotate(360deg); }
+          }
+
+          /* Card Footer Registration link */
+          .trace-login-card-footer {
+            margin-top: 24px;
+            text-align: center;
+            font-size: 0.8125rem;
+            color: var(--text-muted, #64748b);
+          }
+
+          .trace-login-register-link {
+            color: var(--color-primary, #3b82f6);
+            text-decoration: none;
+            font-weight: 600;
+            margin-left: 6px;
+            transition: color var(--transition-speed, 200ms) ease;
+            outline: none;
+          }
+
+          .trace-login-register-link:hover {
+            color: var(--color-secondary, #06b6d4);
+          }
+
+          .trace-login-register-link:focus-visible {
+            outline: 2px solid var(--color-primary, #3b82f6);
+            outline-offset: 1px;
+          }
+
+          /* Responsive Layout */
+          @media (max-width: 992px) {
+            .trace-login-left {
+              padding: 36px;
+            }
+            .trace-login-right {
+              padding: 36px;
+            }
+            .trace-login-hero-title {
+              font-size: 1.85rem;
+            }
+          }
+
+          @media (max-width: 768px) {
+            .trace-login-page {
+              flex-direction: column;
+            }
+            .trace-login-left {
+              flex: none;
+              padding: 32px 24px;
+              border-right: none;
+              border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+              background: radial-gradient(circle at 50% 50%, #0c152b 0%, #04070e 100%);
+            }
+            .trace-login-hero {
+              margin-top: 20px;
+            }
+            .trace-login-hero-title {
+              font-size: 1.6rem;
+              margin-bottom: 8px;
+            }
+            .trace-login-hero-desc {
+              font-size: 0.875rem;
+            }
+            .trace-login-network-visual {
+              display: none; /* Hide SVG background graphic on small screens to save height */
+            }
+            .trace-login-right {
+              flex: 1;
+              padding: 32px 16px;
+              align-items: flex-start;
+            }
+            .trace-login-card {
+              padding: 24px 16px;
+              border: none;
+              background: transparent;
+              box-shadow: none;
+              max-width: 100%;
+            }
+          }
+        `
+      }} />
+
+      {/* Left Column: Branding and visual graphics */}
+      <section className="trace-login-left" aria-label="Product Information">
+        <div className="trace-login-grid-overlay" />
+        
+        <div className="trace-login-left-content">
+          <div className="trace-login-brand">
+            <div className="trace-login-brand-icon" aria-hidden="true">
+              <FiShield />
             </div>
-          ))}
-        </div>
-
-        {/* ---- Holographic globe + attack vectors ---- */}
-        <div className="layer layer--globe" aria-hidden="true">
-          <div className="globe-scene">
-            <div className="globe">
-              <div className="globe-sphere" />
-              {[0, 25, -25, 50, -50].map((deg, i) => (
-                <div key={i} className="globe-ring globe-ring--lat" style={{ transform: `rotateX(${90 + deg}deg)` }} />
-              ))}
-              {[0, 45, 90, 135].map((deg, i) => (
-                <div key={i} className="globe-ring globe-ring--lon" style={{ transform: `rotateY(${deg}deg)` }} />
-              ))}
-              {GLOBE_NODES.map((n) => (
-                <div
-                  key={n.id}
-                  className={`globe-node ${n.threat ? "globe-node--threat" : ""}`}
-                  style={{
-                    transform: `rotateY(${n.rotY}deg) rotateX(${n.rotX}deg) translateZ(148px)`,
-                    animationDelay: `${n.delay}s`,
-                  }}
-                >
-                  <span className="globe-node-dot" />
-                  <span className="globe-node-label">{n.id}</span>
-                </div>
-              ))}
+            <div className="trace-login-brand-text">
+              <span className="trace-login-brand-name">TRACE AI</span>
+              <span className="trace-login-brand-subtitle">DFIR</span>
             </div>
           </div>
 
-          <svg className="attack-vectors" viewBox="0 0 800 800" aria-hidden="true">
-            <defs>
-              <linearGradient id="vecGrad" x1="0" y1="0" x2="1" y2="0">
-                <stop offset="0%" stopColor="var(--magenta)" stopOpacity="0" />
-                <stop offset="100%" stopColor="var(--magenta)" stopOpacity="0.9" />
-              </linearGradient>
-            </defs>
-            {[
-              "M40,120 C240,180 340,300 400,400",
-              "M760,90 C560,160 460,280 400,400",
-              "M60,700 C260,600 340,480 400,400",
-              "M740,660 C540,580 460,480 400,400",
-              "M400,20 C400,150 400,260 400,400",
-            ].map((d, i) => (
-              <path key={i} d={d} className="vector-path" style={{ animationDelay: `${i * 0.9}s` }} />
-            ))}
-            <circle cx="400" cy="400" r="10" className="vector-impact" />
-          </svg>
-        </div>
-
-        <div className="layer layer--scanlines" aria-hidden="true" />
-        <div className="layer layer--vignette" aria-hidden="true" />
-
-        {/* ---- HUD chrome ---- */}
-        <div className="hud" aria-hidden="true">
-          <div className="hud-corner hud-corner--tl" />
-          <div className="hud-corner hud-corner--tr" />
-          <div className="hud-corner hud-corner--bl" />
-          <div className="hud-corner hud-corner--br" />
-
-          <div className="hud-status hud-status--top-left">
-            <span className="hud-dot" />
-            SYSTEM ONLINE
-          </div>
-
-          <div className="hud-status hud-status--top-right">
-            {dateString} &nbsp;•&nbsp; {timeString}
-          </div>
-
-          <div className="hud-ticker">
-            <span className="hud-ticker-label">FEED</span>
-            <span key={feedIndex} className="hud-ticker-text">
-              {THREAT_FEED[feedIndex]}
-            </span>
-          </div>
-        </div>
-
-        {/* ---- Login card ---- */}
-        <main
-          className="login-card"
-          ref={cardRef}
-          onMouseLeave={handleCardLeave}
-        >
-          <div className="login-card-inner">
-            <header className="card-header">
-              <ShieldMark state={authState} />
-              <h1 className="brand">{productName}</h1>
-              <p className="tagline">{tagline}</p>
-            </header>
-
-            <div className="integrity-row">
-              <span className="integrity-dot" />
-              EVIDENCE INTEGRITY: VERIFIED
-            </div>
-
-            <form className="login-form" onSubmit={handleSubmit} noValidate>
-              <div className={`field ${focusField === "operatorId" ? "field--focus" : ""}`}>
-                <label htmlFor="operatorId">Operator ID</label>
-                <input
-                  id="operatorId"
-                  name="operatorId"
-                  type="text"
-                  autoComplete="username"
-                  value={formData.operatorId}
-                  onChange={handleChange("operatorId")}
-                  onFocus={() => setFocusField("operatorId")}
-                  onBlur={() => setFocusField(null)}
-                  placeholder="e.g. J.RIVERA"
-                  disabled={authState === "authenticating"}
-                />
-                <span className="field-underline" />
-              </div>
-
-              <div className={`field ${focusField === "passkey" ? "field--focus" : ""}`}>
-                <label htmlFor="passkey">Passkey</label>
-                <div className="passkey-row">
-                  <input
-                    id="passkey"
-                    name="passkey"
-                    type={showPasskey ? "text" : "password"}
-                    autoComplete="current-password"
-                    value={formData.passkey}
-                    onChange={handleChange("passkey")}
-                    onFocus={() => setFocusField("passkey")}
-                    onBlur={() => setFocusField(null)}
-                    placeholder="••••••••••••"
-                    disabled={authState === "authenticating"}
-                  />
-                  <button
-                    type="button"
-                    className="ghost-btn"
-                    onClick={() => setShowPasskey((s) => !s)}
-                    aria-label={showPasskey ? "Hide passkey" : "Show passkey"}
-                  >
-                    {showPasskey ? "HIDE" : "SHOW"}
-                  </button>
-                </div>
-                <span className="field-underline" />
-              </div>
-
-              <div className="field-row">
-                <label className="checkbox">
-                  <input
-                    type="checkbox"
-                    checked={remember}
-                    onChange={(e) => setRemember(e.target.checked)}
-                  />
-                  <span className="checkbox-box" />
-                  Remember this workstation
-                </label>
-                <a href="#recover" className="link-muted" onClick={(ev) => ev.preventDefault()}>
-                  Forgot passkey?
-                </a>
-              </div>
-
-              <button
-                type="submit"
-                className={`submit-btn submit-btn--${authState}`}
-                disabled={authState === "authenticating"}
-              >
-                <span className="submit-btn-scan" />
-                <span className="submit-btn-label">
-                  {authState === "authenticating" && "VERIFYING CREDENTIALS…"}
-                  {authState === "success" && "ACCESS GRANTED"}
-                  {(authState === "idle" || authState === "error") && "AUTHENTICATE"}
-                </span>
-              </button>
-
-              <button type="button" className="biometric-btn" disabled={authState === "authenticating"}>
-                <svg viewBox="0 0 24 24" className="biometric-icon" aria-hidden="true">
-                  <path
-                    d="M12 2a7 7 0 0 0-7 7v3c0 3.5-1 5-2 6.5M12 2a7 7 0 0 1 7 7v3c0 1.2.15 2.2.4 3M8 12a4 4 0 0 1 8 0v1c0 3 .5 5 1.5 7M12 12v1c0 3.5.6 5.8 2 8M8 9v3c0 4-1 6.5-3 9"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.4"
-                    strokeLinecap="round"
-                  />
-                </svg>
-                Use biometric scan
-              </button>
-
-              <div className="form-status" role="status" aria-live="polite">
-                {authState === "error" && <span className="status-error">{errorMsg}</span>}
-                {authState === "success" && <span className="status-success">Session established. Redirecting to case dashboard…</span>}
-              </div>
-            </form>
-
-            <p className="auth-switch-row">
-              Don&apos;t have an account?{" "}
-              <Link to="/register" className="link-muted">
-                Create Account
-              </Link>
+          <div className="trace-login-hero">
+            <h2 className="trace-login-hero-title">
+              AI-Driven Digital Forensics &<br />
+              <span>Incident Response</span> Platform
+            </h2>
+            <p className="trace-login-hero-desc">
+              Harness autonomous triage heuristics, automated playbooks, and detailed event timeline correlation to outpace and contain modern threats.
             </p>
-
-            <footer className="card-footer">
-              <span>AES-256</span>
-              <span className="dot-sep">•</span>
-              <span>ZERO-TRUST</span>
-              <span className="dot-sep">•</span>
-              <span>SOC2</span>
-            </footer>
           </div>
-        </main>
-      </div>
-    </div>
+        </div>
+
+        {/* Vector SVG node visual */}
+        <div className="trace-login-network-visual" aria-hidden="true">
+          <svg viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
+            <circle cx="100" cy="100" r="80" stroke="var(--color-primary, #3b82f6)" strokeWidth="0.75" strokeDasharray="4 4" opacity="0.15"/>
+            <circle cx="100" cy="100" r="50" stroke="var(--color-secondary, #06b6d4)" strokeWidth="0.75" strokeDasharray="6 2" opacity="0.25"/>
+            <circle cx="100" cy="100" r="20" stroke="var(--color-primary, #3b82f6)" strokeWidth="1" opacity="0.35"/>
+            <circle cx="100" cy="20" r="3" fill="var(--color-secondary, #06b6d4)"/>
+            <circle cx="180" cy="100" r="3.5" fill="var(--color-primary, #3b82f6)"/>
+            <circle cx="100" cy="180" r="3" fill="var(--color-secondary, #06b6d4)"/>
+            <circle cx="20" cy="100" r="3.5" fill="var(--color-primary, #3b82f6)"/>
+            <circle cx="156" cy="44" r="4.5" fill="var(--color-primary, #3b82f6)"/>
+            <line x1="100" y1="20" x2="156" y2="44" stroke="var(--color-secondary, #06b6d4)" strokeWidth="0.5" opacity="0.4"/>
+            <line x1="156" y1="44" x2="180" y2="100" stroke="var(--color-primary, #3b82f6)" strokeWidth="0.5" opacity="0.4"/>
+            <line x1="100" y1="100" x2="156" y2="44" stroke="var(--color-primary, #3b82f6)" strokeWidth="0.5" opacity="0.3"/>
+          </svg>
+        </div>
+
+        <div className="trace-login-left-footer">
+          Investigate. Correlate. Respond.
+        </div>
+      </section>
+
+      {/* Right Column: Credentials Form */}
+      <section className="trace-login-right" aria-label="Account Login">
+        <div className="trace-login-card">
+          <div className="trace-login-card-header">
+            <h1 className="trace-login-title">Welcome back</h1>
+            <p className="trace-login-support-text">Sign in to continue to TRACE AI DFIR.</p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="trace-login-form" noValidate>
+            
+            {/* Email Field */}
+            <div className="trace-login-field">
+              <label htmlFor="trace-email-input" className="trace-login-label">
+                Email Address
+              </label>
+              <div className="trace-login-input-container">
+                <span className="trace-login-input-icon" aria-hidden="true">
+                  <FiMail />
+                </span>
+                <input
+                  id="trace-email-input"
+                  type="email"
+                  className={`trace-login-input ${errors.email ? 'error' : ''}`}
+                  placeholder="name@agency.gov"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    if (errors.email) setErrors((prev) => ({ ...prev, email: null }));
+                  }}
+                  aria-invalid={!!errors.email}
+                  aria-describedby={errors.email ? 'trace-email-error' : undefined}
+                  disabled={isLoading}
+                />
+              </div>
+              {errors.email && (
+                <span id="trace-email-error" className="trace-login-validation-error" role="alert">
+                  {errors.email}
+                </span>
+              )}
+            </div>
+
+            {/* Password Field */}
+            <div className="trace-login-field">
+              <label htmlFor="trace-password-input" className="trace-login-label">
+                Password
+              </label>
+              <div className="trace-login-input-container">
+                <span className="trace-login-input-icon" aria-hidden="true">
+                  <FiLock />
+                </span>
+                <input
+                  id="trace-password-input"
+                  type={showPassword ? 'text' : 'password'}
+                  className={`trace-login-input ${errors.password ? 'error' : ''}`}
+                  placeholder="••••••••"
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (errors.password) setErrors((prev) => ({ ...prev, password: null }));
+                  }}
+                  aria-invalid={!!errors.password}
+                  aria-describedby={errors.password ? 'trace-password-error' : undefined}
+                  disabled={isLoading}
+                />
+                <button
+                  type="button"
+                  className="trace-login-password-toggle"
+                  onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  disabled={isLoading}
+                >
+                  {showPassword ? <FiEyeOff /> : <FiEye />}
+                </button>
+              </div>
+              {errors.password && (
+                <span id="trace-password-error" className="trace-login-validation-error" role="alert">
+                  {errors.password}
+                </span>
+              )}
+            </div>
+
+            {/* Options Row: Remember & Forgot Password */}
+            <div className="trace-login-options-row">
+              <label className="trace-login-remember">
+                <input
+                  type="checkbox"
+                  className="trace-login-checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  disabled={isLoading}
+                />
+                <span>Remember me</span>
+              </label>
+              <a
+                href="#forgot-password"
+                className="trace-login-forgot-link"
+                onClick={(e) => {
+                  e.preventDefault();
+                }}
+              >
+                Forgot password?
+              </a>
+            </div>
+
+            {/* Submit Button */}
+            <button
+              type="submit"
+              className="trace-login-submit-btn"
+              disabled={isLoading}
+            >
+              {isLoading && <span className="trace-login-btn-spinner" aria-hidden="true" />}
+              <span>{isLoading ? 'Signing in...' : 'Sign In'}</span>
+            </button>
+          </form>
+
+          {/* Create Account Navigation Link */}
+          <div className="trace-login-card-footer">
+            Don't have an account?
+            <Link to="/register" className="trace-login-register-link">
+              Create account
+            </Link>
+          </div>
+        </div>
+      </section>
+    </main>
   );
 }

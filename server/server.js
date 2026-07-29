@@ -82,9 +82,95 @@ app.get('/api/dashboard/alerts', (req, res) => {
   try {
     const alerts = [...dashboardAlerts].sort((left, right) => new Date(right.timestamp) - new Date(left.timestamp));
 
-    res.json(alerts);
+  res.json(alerts);
   } catch (error) {
     res.status(500).json({ error: 'Failed to load dashboard alerts' });
+  }
+});
+
+// Mock Cases store
+const dashboardCases = [
+  {
+    caseId: 'CASE-1042',
+    title: 'Ransomware Investigation',
+    status: 'Containment',
+    severity: 'CRITICAL',
+    assignedAnalyst: 'A. Patel',
+    targetHost: 'SERVER-FIN-01',
+    description: 'LockBit variant activity detected on core finance domain controller.',
+    lastUpdated: '8m ago',
+    timestamp: new Date(Date.now() - 8 * 60 * 1000).toISOString(),
+  },
+  {
+    caseId: 'CASE-1037',
+    title: 'Suspicious Login Activity',
+    status: 'Triage',
+    severity: 'HIGH',
+    assignedAnalyst: 'S. Rivera',
+    targetHost: 'VPN-GW-04',
+    description: 'Impossible travel anomaly logged from geographically disparate IPs within 5 minutes.',
+    lastUpdated: '21m ago',
+    timestamp: new Date(Date.now() - 21 * 60 * 1000).toISOString(),
+  },
+  {
+    caseId: 'CASE-1029',
+    title: 'Data Exfiltration Investigation',
+    status: 'Analysis',
+    severity: 'HIGH',
+    assignedAnalyst: 'M. Chen',
+    targetHost: 'STORAGE-S3-BLOB',
+    description: 'Unusual egress spike of 45GB over encrypted TLS channel.',
+    lastUpdated: '1h ago',
+    timestamp: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+  },
+  {
+    caseId: 'CASE-1021',
+    title: 'Malware Analysis',
+    status: 'Queued',
+    severity: 'MEDIUM',
+    assignedAnalyst: 'J. Okafor',
+    targetHost: 'WS-EDR-209',
+    description: 'Trojan downloader artifact isolated in temp folder during scheduled scan.',
+    lastUpdated: '3h ago',
+    timestamp: new Date(Date.now() - 180 * 60 * 1000).toISOString(),
+  },
+];
+
+let caseCounter = 1043;
+
+app.get('/api/dashboard/cases', (req, res) => {
+  try {
+    const cases = [...dashboardCases].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    res.json(cases);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to load dashboard cases' });
+  }
+});
+
+app.post('/api/dashboard/cases', (req, res) => {
+  try {
+    const { title, status = 'Triage', severity = 'HIGH', assignedAnalyst = 'Analyst', targetHost = 'N/A', description = '' } = req.body;
+
+    if (!title || title.trim().length === 0) {
+      return res.status(400).json({ error: 'Title is required for a new incident case.' });
+    }
+
+    const newCase = {
+      caseId: `CASE-${caseCounter++}`,
+      title: title.trim(),
+      status,
+      severity,
+      assignedAnalyst: assignedAnalyst.trim(),
+      targetHost: targetHost.trim(),
+      description: description.trim(),
+      lastUpdated: 'Just now',
+      timestamp: new Date().toISOString(),
+    };
+
+    dashboardCases.unshift(newCase);
+    res.status(201).json(newCase);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to create new incident case' });
   }
 });
 // Define port
