@@ -12,9 +12,8 @@ import {
   FiFileText 
 } from 'react-icons/fi';
 
-import Sidebar from '../../components/layout/Sidebar';
-import Header from '../../components/layout/Header';
 import StatusBadge from '../../components/common/StatusBadge';
+import CommonGraphsShowcase from './CommonGraphsShowcase';
 
 // Mock Data for Threat Activity (last 7 days of alerts/incidents)
 const THREAT_ACTIVITY_DATA = [
@@ -107,27 +106,7 @@ export default function Dashboard() {
     navigate('/login', { replace: true });
   };
 
-  // SVG Chart calculation parameters
-  const svgWidth = 600;
-  const svgHeight = 160;
-  const paddingLeft = 40;
-  const paddingRight = 20;
-  const paddingTop = 20;
-  const paddingBottom = 30;
 
-  const chartWidth = svgWidth - paddingLeft - paddingRight;
-  const chartHeight = svgHeight - paddingTop - paddingBottom;
-  const maxValue = 30;
-
-  // Map 7-day values to exact grid points
-  const points = THREAT_ACTIVITY_DATA.map((d, i) => {
-    const x = paddingLeft + (i * chartWidth) / (THREAT_ACTIVITY_DATA.length - 1);
-    const y = svgHeight - paddingBottom - (d.value / maxValue) * chartHeight;
-    return { x, y, ...d };
-  });
-
-  const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ');
-  const areaPath = `${linePath} L ${points[points.length - 1].x.toFixed(1)} ${(svgHeight - paddingBottom).toFixed(1)} L ${points[0].x.toFixed(1)} ${(svgHeight - paddingBottom).toFixed(1)} Z`;
 
   return (
     <div className="trace-dashboard-layout">
@@ -379,13 +358,80 @@ export default function Dashboard() {
           .trace-chart-node {
             fill: var(--bg-surface, #0e1626);
             stroke: var(--color-secondary, #06b6d4);
-            stroke-width: 2;
+            stroke-width: 2.25;
             cursor: pointer;
-            transition: r var(--transition-speed, 200ms) ease;
+            transition: all var(--transition-speed, 200ms) ease;
           }
 
-          .trace-chart-node:hover {
-            r: 5;
+          .trace-chart-node:hover,
+          .trace-chart-node.active {
+            r: 6.5;
+            fill: var(--color-secondary, #06b6d4);
+            stroke: #ffffff;
+            stroke-width: 1.5;
+          }
+
+          /* Chart title and header styling */
+          .trace-dashboard-chart-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+            user-select: none;
+          }
+
+          .trace-dashboard-chart-header .trace-dashboard-section-title {
+            margin: 0;
+          }
+
+          .trace-dashboard-chart-subtitle {
+            font-size: 0.75rem;
+            color: var(--text-muted, #64748b);
+            font-weight: 500;
+          }
+
+          /* Rotated Y-Axis context label */
+          .trace-chart-axis-context-y {
+            fill: var(--text-muted, #64748b);
+            font-size: 8px;
+            font-weight: 600;
+            text-anchor: middle;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+          }
+
+          /* HTML Custom Tooltip Container */
+          .trace-chart-tooltip {
+            background-color: #0c1322;
+            border: 1px solid var(--color-primary, #3b82f6);
+            border-radius: var(--radius-sm, 4px);
+            padding: 6px 10px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+            white-space: nowrap;
+            pointer-events: none;
+            z-index: 10;
+            transition: opacity 150ms ease;
+          }
+
+          .trace-chart-tooltip-content {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            font-size: 0.75rem;
+            font-family: 'Inter', -apple-system, sans-serif;
+          }
+
+          .trace-chart-tooltip-content .tooltip-day {
+            color: var(--text-muted, #64748b);
+            text-transform: uppercase;
+            font-size: 0.65rem;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+          }
+
+          .trace-chart-tooltip-content .tooltip-value {
+            color: var(--text-primary, #f8fafc);
+            font-weight: 700;
           }
 
           /* Main Two Column Layout Details */
@@ -561,17 +607,8 @@ export default function Dashboard() {
         `
       }} />
 
-      {/* Main Persistent Sidebar */}
-      <Sidebar onLogout={handleLogout} />
-
       {/* Right Column Layout wrapper */}
       <div className="trace-dashboard-main">
-        {/* Top persistent header */}
-        <Header 
-          title="Dashboard" 
-          userName="Security Analyst" 
-          userRole="Investigator" 
-        />
 
         {/* Scrollable Dashboard view areas */}
         <main className="trace-dashboard-content">
@@ -624,7 +661,7 @@ export default function Dashboard() {
 
             {/* Card 3: Evidence Analysed */}
             <div className="trace-dashboard-stat-card">
-              <div className="trace-dashboard-stat-icon-wrap" aria-hidden="true">
+              <div className="trace-dashboard-stat-icon-wrap status-cyan" aria-hidden="true">
                 <FiDatabase />
               </div>
               <div className="trace-dashboard-stat-info">
@@ -649,87 +686,7 @@ export default function Dashboard() {
           </div>
 
           {/* Threat Activity Section */}
-          <div className="trace-dashboard-chart-card" role="region" aria-label="Incident volume graph">
-            <h3 className="trace-dashboard-section-title">
-              <FiActivity aria-hidden="true" style={{ color: 'var(--color-primary)' }} />
-              Threat Activity
-            </h3>
-            <div className="trace-dashboard-chart-container">
-              <svg 
-                className="trace-dashboard-svg-chart" 
-                viewBox={`0 0 ${svgWidth} ${svgHeight}`}
-                preserveAspectRatio="none"
-              >
-                <defs>
-                  {/* Linear gradient overlay for area chart */}
-                  <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="var(--color-primary, #3b82f6)" />
-                    <stop offset="100%" stopColor="var(--color-primary, #3b82f6)" stopOpacity="0" />
-                  </linearGradient>
-                </defs>
-
-                {/* Y-Axis Grid Lines */}
-                {[0, 10, 20, 30].map((val) => {
-                  const yVal = svgHeight - paddingBottom - (val / maxValue) * chartHeight;
-                  return (
-                    <g key={val}>
-                      <line 
-                        x1={paddingLeft} 
-                        y1={yVal} 
-                        x2={svgWidth - paddingRight} 
-                        y2={yVal} 
-                        className="trace-chart-grid-line"
-                      />
-                      <text x={paddingLeft - 8} y={yVal + 3} className="trace-chart-axis-text-y">
-                        {val}
-                      </text>
-                    </g>
-                  );
-                })}
-
-                {/* X-Axis Labels */}
-                {points.map((p) => (
-                  <text key={p.day} x={p.x} y={svgHeight - 10} className="trace-chart-axis-text">
-                    {p.day}
-                  </text>
-                ))}
-
-                {/* X and Y Axis Borders */}
-                <line 
-                  x1={paddingLeft} 
-                  y1={svgHeight - paddingBottom} 
-                  x2={svgWidth - paddingRight} 
-                  y2={svgHeight - paddingBottom} 
-                  className="trace-chart-axis-line" 
-                />
-                <line 
-                  x1={paddingLeft} 
-                  y1={paddingTop} 
-                  x2={paddingLeft} 
-                  y2={svgHeight - paddingBottom} 
-                  className="trace-chart-axis-line" 
-                />
-
-                {/* Area Fill */}
-                <path d={areaPath} className="trace-chart-series-area" />
-
-                {/* Line Path */}
-                <path d={linePath} className="trace-chart-series-line" fill="none" />
-
-                {/* Interactive Node Circles */}
-                {points.map((p) => (
-                  <circle
-                    key={p.day}
-                    cx={p.x}
-                    cy={p.y}
-                    r="4.5"
-                    className="trace-chart-node"
-                    title={`Day: ${p.day}, Incidents: ${p.value}`}
-                  />
-                ))}
-              </svg>
-            </div>
-          </div>
+          <CommonGraphsShowcase />
 
           {/* Bottom Grid: Recent Cases & Recent Activity */}
           <div className="trace-dashboard-main-grid">

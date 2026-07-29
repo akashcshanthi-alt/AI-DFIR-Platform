@@ -10,6 +10,7 @@ import CreateCase from './pages/Cases/CreateCase';
 import CaseDetails from './pages/Cases/CaseDetails';
 import AuditLogs from './pages/AuditLogs/AuditLogs';
 import Settings from './pages/Settings/Settings';
+import ForgotPassword from './pages/ForgotPassword/ForgotPassword';
 
 // Import layout components
 import Sidebar from './components/layout/Sidebar';
@@ -97,25 +98,6 @@ function MainLayout() {
             box-sizing: border-box;
           }
 
-          /* Hide duplicate sidebars inside individual child pages */
-          .trace-dashboard-layout > .trace-sidebar,
-          .trace-cases-layout > .trace-sidebar,
-          .trace-create-layout > .trace-sidebar,
-          .trace-details-layout > .trace-sidebar,
-          .trace-audit-layout > .trace-sidebar,
-          .trace-settings-layout > .trace-sidebar {
-            display: none !important;
-          }
-
-          /* Hide duplicate headers inside individual child pages */
-          .trace-dashboard-main > .trace-header,
-          .trace-cases-main > .trace-header,
-          .trace-create-main > .trace-header,
-          .trace-details-main > .trace-header,
-          .trace-audit-main > .trace-header,
-          .trace-settings-main > .trace-header {
-            display: none !important;
-          }
 
           /* Reset layouts of child page wrappers to flex naturally under App.jsx container */
           .trace-dashboard-layout,
@@ -200,6 +182,7 @@ export default function App() {
         {/* Standalone Authentication Routes */}
         <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
         <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
+        <Route path="/forgot-password" element={<PublicRoute><ForgotPassword /></PublicRoute>} />
 
         {/* Protected Authenticated Routing Layout */}
         <Route path="/*" element={<ProtectedRoute><MainLayout /></ProtectedRoute>} />

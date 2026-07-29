@@ -4,6 +4,38 @@
   /* Colors - Enterprise cybersecurity SOC appearance */
   --bg-main: #060913;                 /* Near-black dark navy background */
   --bg-secondary: #0a0f1d;            /* Slightly lighter dark navy for page headers / section dividers */
+  
+  /* Typography Hierarchy Sizes & Weights */
+  --font-size-page-title: 28px;
+  --font-weight-page-title: 700;
+  --letter-spacing-page-title: -0.02em;
+  
+  --font-size-section-title: 20px;
+  --font-weight-section-title: 650;
+  
+  --font-size-card-title: 15px;
+  --font-weight-card-title: 600;
+  
+  --font-size-body: 14px;
+  --font-weight-body: 450;
+  --line-height-body: 1.6;
+  
+  --font-size-secondary: 12.5px;
+  
+  --font-size-label: 12px;
+  --font-weight-label: 600;
+  --letter-spacing-label: 0.05em;
+  
+  --font-size-table-header: 11.5px;
+  --font-weight-table-header: 600;
+  --letter-spacing-table-header: 0.05em;
+  
+  --font-size-metric: 30px;
+  --font-weight-metric: 700;
+  
+  --font-size-badge: 11px;
+  --font-weight-badge: 650;
+  --letter-spacing-badge: 0.04em;
   --bg-sidebar: #04070e;              /* Deep dark navy for structural elements like sidebar */
   --bg-surface: #0e1626;              /* Main card and surface background */
   --bg-surface-elevated: #162035;     /* Hovered or elevated cards / surfaces */
@@ -178,3 +210,361 @@ textarea:focus-visible {
   scrollbar-width: thin;
   scrollbar-color: var(--bg-surface-elevated) var(--bg-main);
 }
+
+/* ==========================================================================
+   TRACE AI DESIGN SYSTEM - ENHANCED UNIFORM STYLING
+   ========================================================================== */
+
+/* 1. Global Typography Core Enforcements */
+
+/* Page Titles */
+.trace-dashboard-title,
+.trace-cases-title,
+.trace-create-title,
+.trace-details-title,
+.trace-audit-title,
+.trace-settings-title,
+.trace-header-title,
+.trace-report-title,
+.trace-login-hero-title,
+.page-title {
+  font-size: var(--font-size-page-title) !important;
+  font-weight: var(--font-weight-page-title) !important;
+  letter-spacing: var(--letter-spacing-page-title) !important;
+  color: var(--text-primary) !important;
+  line-height: 1.25 !important;
+}
+
+/* Section/Sub-Section Titles */
+.trace-dashboard-section-title,
+.trace-cases-section-title,
+.trace-create-section-title,
+.trace-details-section-title,
+.trace-audit-section-title,
+.trace-settings-section-title,
+.trace-sidebar-brand-name,
+.section-title {
+  font-size: var(--font-size-section-title) !important;
+  font-weight: var(--font-weight-section-title) !important;
+  color: var(--text-primary) !important;
+  line-height: 1.3 !important;
+}
+
+/* Card/Panel Titles */
+.trace-login-title,
+.trace-register-title,
+.trace-forgot-title,
+.graphs-panel-name,
+.card-title {
+  font-size: var(--font-size-card-title) !important;
+  font-weight: var(--font-weight-card-title) !important;
+  color: var(--text-primary) !important;
+  line-height: 1.4 !important;
+}
+
+/* Body Text */
+body,
+.trace-dashboard-table-row,
+.trace-cases-table-row,
+.trace-audit-table-row,
+p,
+.body-text {
+  font-size: var(--font-size-body) !important;
+  font-weight: var(--font-weight-body) !important;
+  line-height: var(--line-height-body) !important;
+  color: var(--text-secondary) !important;
+}
+
+/* Secondary / Subtext */
+.trace-dashboard-subtitle,
+.trace-cases-subtitle,
+.trace-create-subtitle,
+.trace-details-subtitle,
+.trace-audit-subtitle,
+.trace-settings-subtitle,
+.trace-dashboard-stat-subtext,
+.trace-header-subtitle,
+.trace-sidebar-brand-subtitle,
+.secondary-text {
+  font-size: var(--font-size-secondary) !important;
+  color: var(--text-muted) !important;
+  line-height: 1.4 !important;
+}
+
+/* Form Labels */
+.trace-dashboard-stat-label,
+.trace-login-label,
+.trace-register-label,
+.trace-forgot-label,
+.trace-settings-label,
+.trace-create-label,
+label,
+.form-label {
+  font-size: var(--font-size-label) !important;
+  font-weight: var(--font-weight-label) !important;
+  letter-spacing: var(--letter-spacing-label) !important;
+  text-transform: uppercase !important;
+  color: var(--text-secondary) !important;
+}
+
+/* Table Headers */
+.trace-dashboard-table th,
+.trace-cases-table th,
+.trace-audit-table th,
+.trace-details-table th,
+th,
+.table-header {
+  font-size: var(--font-size-table-header) !important;
+  font-weight: var(--font-weight-table-header) !important;
+  letter-spacing: var(--letter-spacing-table-header) !important;
+  text-transform: uppercase !important;
+  color: var(--text-muted) !important;
+}
+
+/* Metric / Stat values */
+.trace-dashboard-stat-value,
+.trace-details-stat-value,
+.metric-value {
+  font-size: var(--font-size-metric) !important;
+  font-weight: var(--font-weight-metric) !important;
+  color: var(--text-primary) !important;
+  line-height: 1.1 !important;
+}
+
+/* Badges Text */
+.badge-text,
+.trace-status-badge,
+.status-badge {
+  font-size: var(--font-size-badge) !important;
+  font-weight: var(--font-weight-badge) !important;
+  letter-spacing: var(--letter-spacing-badge) !important;
+}
+
+/* 2. Global Button Design Pass */
+.btn-primary,
+.trace-dashboard-action-btn,
+.trace-login-btn,
+.trace-register-btn,
+.trace-forgot-btn,
+.trace-create-submit-btn,
+.trace-settings-submit-btn {
+  background-color: var(--color-primary) !important;
+  color: #ffffff !important;
+  font-size: 13.5px !important;
+  font-weight: 600 !important;
+  border-radius: var(--radius-sm, 4px) !important;
+  border: 1px solid transparent !important;
+  padding: 8px 16px !important;
+  cursor: pointer !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  transition: all var(--transition-speed, 200ms) ease !important;
+  height: 38px !important;
+  box-sizing: border-box !important;
+}
+
+.btn-primary:hover,
+.trace-dashboard-action-btn:hover,
+.trace-login-btn:hover,
+.trace-register-btn:hover,
+.trace-forgot-btn:hover,
+.trace-create-submit-btn:hover,
+.trace-settings-submit-btn:hover {
+  background-color: var(--color-primary-hover, #2563eb) !important;
+}
+
+.btn-secondary,
+.trace-create-cancel-btn,
+.trace-settings-cancel-btn {
+  background-color: var(--bg-surface, #0e1626) !important;
+  border: 1px solid var(--border-color, rgba(255,255,255,0.08)) !important;
+  border-radius: var(--radius-sm, 4px) !important;
+  color: var(--text-primary, #f8fafc) !important;
+  font-size: 13.5px !important;
+  font-weight: 600 !important;
+  padding: 8px 16px !important;
+  cursor: pointer !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  transition: all var(--transition-speed, 200ms) ease !important;
+  height: 38px !important;
+  box-sizing: border-box !important;
+}
+
+.btn-secondary:hover,
+.trace-create-cancel-btn:hover,
+.trace-settings-cancel-btn:hover {
+  background-color: var(--bg-surface-elevated, #162035) !important;
+  border-color: var(--border-color-hover, rgba(255,255,255,0.15)) !important;
+}
+
+/* 3. Global Form Input Uniformity */
+.trace-login-input,
+.trace-register-input,
+.trace-forgot-input,
+.trace-create-input,
+.trace-create-select,
+.trace-create-textarea,
+.trace-settings-input,
+.trace-settings-select,
+.trace-settings-textarea,
+.trace-header-search-input {
+  background-color: var(--bg-secondary, #0a0f1d) !important;
+  border: 1px solid var(--border-color, rgba(255,255,255,0.08)) !important;
+  border-radius: var(--radius-sm, 4px) !important;
+  color: var(--text-primary, #f8fafc) !important;
+  padding: 8px 12px !important;
+  font-size: 14px !important;
+  transition: all var(--transition-speed, 200ms) ease !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+.trace-login-input:focus,
+.trace-register-input:focus,
+.trace-forgot-input:focus,
+.trace-create-input:focus,
+.trace-create-select:focus,
+.trace-create-textarea:focus,
+.trace-settings-input:focus,
+.trace-settings-select:focus,
+.trace-settings-textarea:focus,
+.trace-header-search-input:focus {
+  border-color: var(--color-primary, #3b82f6) !important;
+  outline: none !important;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2) !important;
+}
+
+/* Input error state mapping */
+.trace-login-input.error,
+.trace-register-input.error,
+.trace-forgot-input.error,
+.trace-create-input.error,
+.trace-create-select.error,
+.trace-create-textarea.error {
+  border-color: var(--status-critical, #ef4444) !important;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2) !important;
+}
+
+/* 4. Layout Structural Polish overrides (Sidebar & Header) */
+.trace-sidebar-brand {
+  border-bottom: none !important;
+}
+
+.trace-sidebar-link {
+  color: var(--text-secondary, #cbd5e1) !important;
+}
+
+.trace-sidebar-link:hover {
+  background-color: var(--bg-surface-elevated, #162035) !important;
+  color: var(--text-primary, #f8fafc) !important;
+}
+
+.trace-sidebar-link--active {
+  background-color: var(--color-primary-light, rgba(59, 130, 246, 0.12)) !important;
+  color: var(--color-primary, #3b82f6) !important;
+  border-left: 3px solid var(--color-primary, #3b82f6) !important;
+}
+
+.trace-header-search-input::placeholder {
+  color: var(--text-muted, #64748b) !important;
+  opacity: 0.8 !important;
+}
+
+/* 5. Dashboard Cards Consistency */
+.trace-dashboard-stat-card,
+.trace-dashboard-main-card,
+.trace-cases-card,
+.trace-create-card,
+.trace-details-card,
+.trace-settings-card,
+.trace-audit-card {
+  background-color: var(--bg-surface, #0e1626) !important;
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08)) !important;
+  border-radius: var(--radius-md, 8px) !important;
+  box-shadow: var(--shadow-sm) !important;
+}
+
+.trace-dashboard-stat-card:hover,
+.trace-dashboard-main-card:hover {
+  border-color: var(--border-color-hover, rgba(255, 255, 255, 0.15)) !important;
+}
+
+/* 6. Standard Table layout style override */
+.trace-dashboard-table,
+.trace-cases-table,
+.trace-audit-table,
+.trace-details-table {
+  width: 100% !important;
+  border-collapse: collapse !important;
+  text-align: left !important;
+}
+
+.trace-dashboard-table th,
+.trace-cases-table th,
+.trace-audit-table th,
+.trace-details-table th {
+  padding: 12px 16px !important;
+  border-bottom: 1.5px solid var(--border-color, rgba(255,255,255,0.08)) !important;
+  background-color: var(--bg-secondary, #0a0f1d) !important;
+  color: var(--text-muted, #64748b) !important;
+}
+
+.trace-dashboard-table td,
+.trace-cases-table td,
+.trace-audit-table td,
+.trace-details-table td {
+  padding: 12px 16px !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03) !important;
+  color: var(--text-secondary, #cbd5e1) !important;
+}
+
+.trace-dashboard-table tbody tr:hover,
+.trace-cases-table tbody tr:hover,
+.trace-audit-table tbody tr:hover,
+.trace-details-table tbody tr:hover {
+  background-color: rgba(255, 255, 255, 0.02) !important;
+}
+
+/* 7. Tabs Layout Style Overrides */
+.trace-details-tab-list {
+  display: flex !important;
+  gap: 8px !important;
+  border-bottom: 1px solid var(--border-color, rgba(255,255,255,0.08)) !important;
+  padding-bottom: 1px !important;
+}
+
+.trace-details-tab-btn {
+  padding: 8px 16px !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  color: var(--text-secondary, #cbd5e1) !important;
+  background: transparent !important;
+  border: none !important;
+  cursor: pointer !important;
+  position: relative !important;
+  transition: all var(--transition-speed, 200ms) ease !important;
+}
+
+.trace-details-tab-btn:hover {
+  color: var(--text-primary, #f8fafc) !important;
+  background-color: rgba(255,255,255,0.02) !important;
+}
+
+.trace-details-tab-btn.active {
+  color: var(--color-primary, #3b82f6) !important;
+}
+
+.trace-details-tab-btn.active::after {
+  content: '' !important;
+  position: absolute !important;
+  bottom: -1px !important;
+  left: 0 !important;
+  right: 0 !important;
+  height: 2px !important;
+  background-color: var(--color-primary, #3b82f6) !important;
+  border-radius: 2px !important;
+}
+

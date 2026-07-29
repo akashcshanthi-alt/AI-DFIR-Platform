@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 
-import Sidebar from '../../components/layout/Sidebar';
-import Header from '../../components/layout/Header';
+
 
 // Visual options list for severity selector
 const SEVERITY_OPTIONS = [
@@ -540,17 +539,8 @@ export default function CreateCase() {
         `
       }} />
 
-      {/* Main Persistent Sidebar */}
-      <Sidebar onLogout={handleLogout} />
-
       {/* Main content wrapper */}
       <div className="trace-create-main">
-        {/* Top persistent header */}
-        <Header 
-          title="Create New Case" 
-          userName="Security Analyst" 
-          userRole="Investigator" 
-        />
 
         {/* Scrollable Form areas */}
         <main className="trace-create-content">

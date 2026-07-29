@@ -8,8 +8,6 @@ import {
   FiAlertCircle 
 } from 'react-icons/fi';
 
-import Sidebar from '../../components/layout/Sidebar';
-import Header from '../../components/layout/Header';
 import StatusBadge from '../../components/common/StatusBadge';
 
 // Coherent initial mock audit log timeline data
@@ -562,17 +560,8 @@ export default function AuditLogs() {
         `
       }} />
 
-      {/* Main Persistent Sidebar */}
-      <Sidebar />
-
       {/* Main Workspace Frame */}
       <div className="trace-audit-main">
-        {/* Persistent top header */}
-        <Header 
-          title="Audit Logs" 
-          userName="Security Analyst" 
-          userRole="Investigator" 
-        />
 
         {/* Scrollable logs contents */}
         <main className="trace-audit-content">

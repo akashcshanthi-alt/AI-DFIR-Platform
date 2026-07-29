@@ -11,8 +11,6 @@ import {
   FiBookmark 
 } from 'react-icons/fi';
 
-import Sidebar from '../../components/layout/Sidebar';
-import Header from '../../components/layout/Header';
 import StatusBadge from '../../components/common/StatusBadge';
 import EvidenceTab from '../../features/investigation/EvidenceTab';
 import AIAnalysisTab from '../../features/investigation/AIAnalysisTab';
@@ -576,17 +574,8 @@ export default function CaseDetails() {
         `
       }} />
 
-      {/* Main Persistent Sidebar */}
-      <Sidebar onLogout={handleLogout} />
-
       {/* Main Command Workspace Shell */}
       <div className="trace-details-main">
-        {/* Top persistent header */}
-        <Header 
-          title="Case Details" 
-          userName="Security Analyst" 
-          userRole="Investigator" 
-        />
 
         {/* Scrollable Details workspace */}
         <main className="trace-details-content">

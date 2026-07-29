@@ -2,8 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FiUser, FiLock, FiLogOut } from 'react-icons/fi';
 
-import Sidebar from '../../components/layout/Sidebar';
-import Header from '../../components/layout/Header';
 import StatusBadge from '../../components/common/StatusBadge';
 
 /**
@@ -458,17 +456,8 @@ export default function Settings() {
         `
       }} />
 
-      {/* Main Persistent Sidebar */}
-      <Sidebar />
-
       {/* Main Command Workspace Frame */}
       <div className="trace-settings-main">
-        {/* Persistent top header */}
-        <Header 
-          title="Settings" 
-          userName="Security Analyst" 
-          userRole="Investigator" 
-        />
 
         {/* Scrollable Settings contents */}
         <main className="trace-settings-content">

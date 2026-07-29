@@ -2,8 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FiPlus, FiSearch, FiFolder, FiFolderMinus } from 'react-icons/fi';
 
-import Sidebar from '../../components/layout/Sidebar';
-import Header from '../../components/layout/Header';
 import StatusBadge from '../../components/common/StatusBadge';
 
 // Hardcoded mock cases representing realistic digital forensics data
@@ -514,17 +512,8 @@ export default function Cases() {
         `
       }} />
 
-      {/* Main Persistent Sidebar */}
-      <Sidebar onLogout={handleLogout} />
-
       {/* Content wrapper */}
       <div className="trace-cases-main">
-        {/* Top persistent header */}
-        <Header 
-          title="Cases" 
-          userName="Security Analyst" 
-          userRole="Investigator" 
-        />
 
         {/* Scrollable Cases view areas */}
         <main className="trace-cases-content">

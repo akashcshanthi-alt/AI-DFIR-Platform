@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { FiSearch, FiBell, FiChevronDown } from 'react-icons/fi';
+import React, { useState, useEffect } from 'react';
+import { FiSearch, FiBell, FiChevronDown, FiSun, FiMoon } from 'react-icons/fi';
 
 /**
  * Header Component
@@ -19,6 +19,20 @@ export default function Header({
   className = '' 
 }) {
   const [searchQuery, setSearchQuery] = useState('');
+
+  const [theme, setTheme] = useState(() => {
+    const saved = localStorage.getItem('trace-theme');
+    return saved || 'dark';
+  });
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('trace-theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prev => prev === 'dark' ? 'light' : 'dark');
+  };
 
   // Dynamically calculate user initials (e.g., "Security Analyst" -> "SA")
   const getUserInitials = (name) => {
