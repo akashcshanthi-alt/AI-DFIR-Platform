@@ -13,7 +13,7 @@ export default function Settings() {
   const navigate = useNavigate();
 
   // Auth Guard check
-  const hasSession = sessionStorage.getItem('arclight-dev-session') === 'active';
+  const hasSession = localStorage.getItem('isAuthenticated') === 'true';
 
   useEffect(() => {
     if (!hasSession) {
@@ -112,7 +112,7 @@ export default function Settings() {
 
   // Logout session trigger
   const handleLogout = () => {
-    sessionStorage.removeItem('arclight-dev-session');
+    localStorage.removeItem('isAuthenticated');
     navigate('/login', { replace: true });
   };
 

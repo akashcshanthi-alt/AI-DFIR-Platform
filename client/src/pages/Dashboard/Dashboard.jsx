@@ -1,97 +1,23 @@
-import React, { useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  FiPlus, 
-  FiFolder, 
-  FiAlertOctagon, 
-  FiDatabase, 
-  FiActivity, 
-  FiUpload, 
-  FiCpu, 
-  FiPlusCircle, 
-  FiFileText 
-} from 'react-icons/fi';
+import { RefreshCw, Plus } from 'lucide-react';
+import './Dashboard.css';
 
-import StatusBadge from '../../components/common/StatusBadge';
-import CommonGraphsShowcase from './CommonGraphsShowcase';
+// Import bento components
+import KPICards from './components/KPICards';
+import ThreatMap from './components/ThreatMap';
+import AIThreatPanel from './components/AIThreatPanel';
+import InvestigationsTable from './components/InvestigationsTable';
+import EventVelocityChart from './components/EventVelocityChart';
+import LiveSystemActivity from './components/LiveSystemActivity';
+import RecentAlerts from './components/RecentAlerts';
+import AIRecommendations from './components/AIRecommendations';
 
-// Mock Data for Threat Activity (last 7 days of alerts/incidents)
-const THREAT_ACTIVITY_DATA = [
-  { day: 'Mon', value: 12 },
-  { day: 'Tue', value: 18 },
-  { day: 'Wed', value: 14 },
-  { day: 'Thu', value: 27 },
-  { day: 'Fri', value: 21 },
-  { day: 'Sat', value: 16 },
-  { day: 'Sun', value: 23 },
-];
-
-// Mock Data for Recent Cases (representative enterprise security cases)
-const RECENT_CASES = [
-  {
-    caseId: 'TRC-2026-0042',
-    title: 'Suspicious Account Activity',
-    severity: 'High',
-    status: 'Investigating',
-  },
-  {
-    caseId: 'TRC-2026-0041',
-    title: 'Unauthorized PowerShell Execution',
-    severity: 'Critical',
-    status: 'Open',
-  },
-  {
-    caseId: 'TRC-2026-0040',
-    title: 'External Network Connection',
-    severity: 'Medium',
-    status: 'Investigating',
-  },
-  {
-    caseId: 'TRC-2026-0039',
-    title: 'Authentication Anomaly',
-    severity: 'Low',
-    status: 'Closed',
-  },
-];
-
-// Mock Data for Recent Activity Log Feed
-const RECENT_ACTIVITIES = [
-  {
-    id: 1,
-    time: '09:42',
-    icon: FiUpload,
-    description: <>Evidence uploaded to <span className="highlight">TRC-2026-0042</span></>,
-  },
-  {
-    id: 2,
-    time: '09:31',
-    icon: FiCpu,
-    description: <>AI analysis completed for <span className="highlight">TRC-2026-0041</span></>,
-  },
-  {
-    id: 3,
-    time: '09:18',
-    icon: FiPlusCircle,
-    description: <>New investigation <span className="highlight">TRC-2026-0040</span> created</>,
-  },
-  {
-    id: 4,
-    time: '08:54',
-    icon: FiFileText,
-    description: <>Report generated for <span className="highlight">TRC-2026-0039</span></>,
-  },
-];
-
-/**
- * Dashboard Component
- * Serves as the system-wide overview command center for the TRACE AI DFIR platform.
- * Integrates layout structure with stats grid, activity line graphs, cases, and logs.
- */
 export default function Dashboard() {
   const navigate = useNavigate();
 
-  // Auth Guard: check developer session active token
-  const hasSession = sessionStorage.getItem('arclight-dev-session') === 'active';
+  // Guard verification checks
+  const hasSession = localStorage.getItem('isAuthenticated') === 'true';
 
   useEffect(() => {
     if (!hasSession) {
@@ -99,667 +25,200 @@ export default function Dashboard() {
     }
   }, [hasSession, navigate]);
 
-  if (!hasSession) return null;
+  // Dashboard Data Hooks
+  const [cases, setCases] = useState([]);
+  const [alerts, setAlerts] = useState([]);
+  const [telemetry, setTelemetry] = useState({
+    activeAlerts: 14,
+    mttd: '1.2m',
+    mttr: '14.8m',
+    aiResolutions: '89%'
+  });
+  const [isFetching, setIsFetching] = useState(true);
 
-  const handleLogout = () => {
-    sessionStorage.removeItem('arclight-dev-session');
-    navigate('/login', { replace: true });
+  // Live Activity Logs Feed list
+  const [activities, setActivities] = useState([
+    { id: 1, time: '14:02:11', text: 'Agent deployed to node-14-west', type: 'info' },
+    { id: 2, time: '14:01:45', text: 'AUTH_FAILURE on portal.admin', type: 'error' },
+    { id: 3, time: '14:00:02', text: 'Regular health scan complete', type: 'success' },
+    { id: 4, time: '13:58:12', text: 'New artifact indexed: trace.exe', type: 'info' },
+    { id: 5, time: '13:55:00', text: 'Backup sync successful (US-EAST)', type: 'success' }
+  ]);
+
+  // Recharts Event Velocity data (1 hour window)
+  const velocityData = [
+    { time: '13:00', events: 120 },
+    { time: '13:10', events: 145 },
+    { time: '13:20', events: 110 },
+    { time: '13:30', events: 210 },
+    { time: '13:40', events: 290 },
+    { time: '13:50', events: 340 },
+    { time: '14:00', events: 180 }
+  ];
+
+  // Fetch Cases, Alerts, Telemetry from backend API endpoints
+  const fetchDashboardStats = async () => {
+    try {
+      setIsFetching(true);
+      
+      const casesRes = await fetch('http://localhost:5000/api/dashboard/cases');
+      const casesData = await casesRes.json();
+      
+      const alertsRes = await fetch('http://localhost:5000/api/dashboard/alerts');
+      const alertsData = await alertsRes.json();
+
+      const telemetryRes = await fetch('http://localhost:5000/api/dashboard/telemetry');
+      const telemetryData = await telemetryRes.json();
+
+      setCases(casesData.slice(0, 4));
+      setAlerts(alertsData.slice(0, 4));
+      setTelemetry({
+        activeAlerts: casesData.length,
+        mttd: '1.2m',
+        mttr: '14.8m',
+        aiResolutions: `${telemetryData.integrityIndex ?? 89}%`
+      });
+      setIsFetching(false);
+    } catch (err) {
+      console.warn('API endpoints offline, utilizing fallback mock security database.');
+      setCases([
+        { caseId: 'CASE-1042', title: 'Brute-Force Attack: SSH-Gate-04', severity: 'Critical', assignedAnalyst: 'V. Petrov', confidence: '98.2%' },
+        { caseId: 'CASE-1037', title: 'Exfiltration attempt detected in S3', severity: 'High', assignedAnalyst: 'K. Sato', confidence: '84.5%' },
+        { caseId: 'CASE-1029', title: 'Privilege Escalation: Root-A', severity: 'Medium', assignedAnalyst: 'Autonomous', confidence: '91.0%' },
+        { caseId: 'CASE-1021', title: 'Cryptomining pattern on K8s cluster', severity: 'Medium', assignedAnalyst: 'L. Chen', confidence: '76.8%' }
+      ]);
+
+      setAlerts([
+        { id: 'ALRT-4921', severity: 'CRITICAL', title: 'Suspicious PowerShell Execution', description: 'Encoded PowerShell launched from Domain Controller CORP-AD-DC-01.', timestamp: '2026-07-31T09:42:10Z' },
+        { id: 'ALRT-4918', severity: 'HIGH', title: 'Admin Token Escalation Privilege', description: 'Local administrator token usage outside approval window.', timestamp: '2026-07-31T09:28:45Z' },
+        { id: 'ALRT-4912', severity: 'MEDIUM', title: 'Malicious External Outbound IP', description: 'Beaconing pattern matches low-confidence command server.', timestamp: '2026-07-31T08:56:33Z' },
+        { id: 'ALRT-4907', severity: 'LOW', title: 'Evidence Hash Check Verification', description: 'Disk image hashes match the expected case baseline hashes.', timestamp: '2026-07-31T08:12:04Z' }
+      ]);
+      
+      setTelemetry({
+        activeAlerts: 14,
+        mttd: '1.2m',
+        mttr: '14.8m',
+        aiResolutions: '89%'
+      });
+      setIsFetching(false);
+    }
   };
 
+  useEffect(() => {
+    if (!hasSession) return;
+    fetchDashboardStats();
 
+    const intervalId = setInterval(fetchDashboardStats, 12000);
+    return () => clearInterval(intervalId);
+  }, [hasSession]);
+
+  // Prepend simulated system activity logs dynamically every 5 seconds
+  useEffect(() => {
+    if (!hasSession) return;
+    const logPool = [
+      { text: 'Encrypted link established with EU-SO-1', type: 'info' },
+      { text: 'Firewall rule #902 updated: Block 192.168.1.0', type: 'error' },
+      { text: 'Kernel audit log rotation started', type: 'success' },
+      { text: 'Credential verification scan initiated', type: 'info' },
+      { text: 'New EDR quarantine node isolated: EDGE-LAN-04', type: 'error' }
+    ];
+
+    const intervalId = setInterval(() => {
+      const entry = logPool[Math.floor(Math.random() * logPool.length)];
+      const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+      setActivities((prev) => [
+        {
+          id: Date.now(),
+          time,
+          text: entry.text,
+          type: entry.type
+        },
+        ...prev.slice(0, 19)
+      ]);
+    }, 5000);
+
+    return () => clearInterval(intervalId);
+  }, [hasSession]);
+
+  const formatCaseId = (id) => {
+    if (id.startsWith('CASE-')) {
+      return `#TR-${id.split('-')[1]}`;
+    }
+    if (!id.startsWith('#')) {
+      return `#${id}`;
+    }
+    return id;
+  };
+
+  const getSeverityBadgeClass = (severity) => {
+    const s = severity.toUpperCase();
+    if (s === 'CRITICAL') return 'bg-[#ffb4ab]/10 text-[#ffb4ab] border border-[#ffb4ab]/20';
+    if (s === 'HIGH') return 'bg-orange-500/10 text-orange-400 border border-orange-500/20';
+    return 'bg-[#aec6ff]/10 text-[#aec6ff] border border-[#aec6ff]/20';
+  };
+
+  const getOperatorInitial = (analyst) => {
+    if (!analyst || analyst === 'Autonomous') return 'AI';
+    const parts = analyst.split('.');
+    if (parts.length > 1) {
+      return parts[1].trim()[0].toUpperCase();
+    }
+    return analyst[0].toUpperCase();
+  };
+
+  if (!hasSession) return null;
 
   return (
     <div className="trace-dashboard-layout">
-      {/* Self-contained styling module block */}
-      <style dangerouslySetInnerHTML={{
-        __html: `
-          .trace-dashboard-layout {
-            display: flex;
-            min-height: 100vh;
-            background-color: var(--bg-main, #060913);
-            color: var(--text-primary, #f8fafc);
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            width: 100%;
-            box-sizing: border-box;
-          }
+      <div className="w-full bg-[#050814] text-[#dfe2f3] min-h-screen p-6 grid-bg box-border flex flex-col gap-6">
 
-          .trace-dashboard-main {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            min-width: 0;
-            height: 100vh;
-            overflow: hidden;
-            box-sizing: border-box;
-          }
-
-          .trace-dashboard-content {
-            flex: 1;
-            padding: 24px;
-            overflow-y: auto;
-            display: flex;
-            flex-direction: column;
-            gap: 24px;
-            box-sizing: border-box;
-          }
-
-          /* Content Header Panel */
-          .trace-dashboard-header-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 16px;
-            box-sizing: border-box;
-          }
-
-          .trace-dashboard-welcome {
-            display: flex;
-            flex-direction: column;
-          }
-
-          .trace-dashboard-title {
-            font-size: 1.5rem;
-            font-weight: 700;
-            color: var(--text-primary, #f8fafc);
-            margin: 0;
-            line-height: 1.2;
-          }
-
-          .trace-dashboard-subtitle {
-            font-size: 0.875rem;
-            color: var(--text-secondary, #cbd5e1);
-            margin: 4px 0 0 0;
-            line-height: 1.4;
-          }
-
-          .trace-dashboard-action-btn {
-            background-color: var(--color-primary, #3b82f6);
-            color: #ffffff;
-            border: none;
-            border-radius: var(--radius-sm, 4px);
-            padding: 8px 16px;
-            font-size: 0.875rem;
-            font-weight: 600;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            cursor: pointer;
-            transition: background-color var(--transition-speed, 200ms) ease;
-            outline: none;
-            height: 38px;
-            box-sizing: border-box;
-            user-select: none;
-          }
-
-          .trace-dashboard-action-btn:hover {
-            background-color: var(--color-primary-hover, #2563eb);
-          }
-
-          .trace-dashboard-action-btn:focus-visible {
-            outline: 2px solid var(--color-secondary, #06b6d4);
-            outline-offset: 2px;
-          }
-
-          /* Statistics Summary Row Grid */
-          .trace-dashboard-stats-grid {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 16px;
-            box-sizing: border-box;
-          }
-
-          .trace-dashboard-stat-card {
-            background-color: var(--bg-surface, #0e1626);
-            border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
-            border-radius: var(--radius-md, 8px);
-            padding: 16px;
-            display: flex;
-            align-items: flex-start;
-            gap: 14px;
-            box-shadow: var(--shadow-sm);
-            transition: all var(--transition-speed, 200ms) ease;
-            box-sizing: border-box;
-          }
-
-          .trace-dashboard-stat-card:hover {
-            border-color: var(--border-color-hover, rgba(255, 255, 255, 0.15));
-            transform: translateY(-1px);
-          }
-
-          .trace-dashboard-stat-icon-wrap {
-            width: 40px;
-            height: 40px;
-            border-radius: var(--radius-sm, 4px);
-            background-color: var(--bg-surface-elevated, #162035);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.2rem;
-            color: var(--color-primary, #3b82f6);
-            flex-shrink: 0;
-          }
-
-          .trace-dashboard-stat-icon-wrap.alert-critical {
-            color: var(--status-critical, #ef4444);
-            background-color: var(--status-critical-bg, rgba(239, 68, 68, 0.1));
-          }
-
-          .trace-dashboard-stat-icon-wrap.status-green {
-            color: var(--status-low, #22c55e);
-            background-color: var(--status-low-bg, rgba(34, 197, 94, 0.1));
-          }
-
-          .trace-dashboard-stat-info {
-            display: flex;
-            flex-direction: column;
-            min-width: 0;
-          }
-
-          .trace-dashboard-stat-label {
-            font-size: 0.725rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.06em;
-            color: var(--text-muted, #64748b);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-          }
-
-          .trace-dashboard-stat-value {
-            font-size: 1.45rem;
-            font-weight: 700;
-            color: var(--text-primary, #f8fafc);
-            line-height: 1.25;
-            margin: 3px 0;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-          }
-
-          .trace-dashboard-stat-subtext {
-            font-size: 0.75rem;
-            color: var(--text-secondary, #cbd5e1);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-          }
-
-          /* 7-Day Threat Activity Visualization */
-          .trace-dashboard-chart-card {
-            background-color: var(--bg-surface, #0e1626);
-            border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
-            border-radius: var(--radius-md, 8px);
-            padding: 20px;
-            box-shadow: var(--shadow-sm);
-            box-sizing: border-box;
-          }
-
-          .trace-dashboard-section-title {
-            font-size: 0.95rem;
-            font-weight: 600;
-            color: var(--text-primary, #f8fafc);
-            margin: 0 0 16px 0;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            user-select: none;
-          }
-
-          .trace-dashboard-chart-container {
-            position: relative;
-            width: 100%;
-            height: 160px;
-          }
-
-          .trace-dashboard-svg-chart {
-            width: 100%;
-            height: 100%;
-            display: block;
-          }
-
-          /* SVG Chart styling classes */
-          .trace-chart-grid-line {
-            stroke: rgba(255, 255, 255, 0.04);
-            stroke-width: 1;
-          }
-
-          .trace-chart-axis-line {
-            stroke: rgba(255, 255, 255, 0.08);
-            stroke-width: 1;
-          }
-
-          .trace-chart-axis-text {
-            fill: var(--text-muted, #64748b);
-            font-size: 10px;
-            font-family: monospace;
-            text-anchor: middle;
-          }
-
-          .trace-chart-axis-text-y {
-            fill: var(--text-muted, #64748b);
-            font-size: 10px;
-            font-family: monospace;
-            text-anchor: end;
-          }
-
-          .trace-chart-series-line {
-            stroke: var(--color-primary, #3b82f6);
-            stroke-width: 2.25;
-            stroke-linecap: round;
-            stroke-linejoin: round;
-          }
-
-          .trace-chart-series-area {
-            fill: url(#chartGrad);
-            opacity: 0.12;
-          }
-
-          .trace-chart-node {
-            fill: var(--bg-surface, #0e1626);
-            stroke: var(--color-secondary, #06b6d4);
-            stroke-width: 2.25;
-            cursor: pointer;
-            transition: all var(--transition-speed, 200ms) ease;
-          }
-
-          .trace-chart-node:hover,
-          .trace-chart-node.active {
-            r: 6.5;
-            fill: var(--color-secondary, #06b6d4);
-            stroke: #ffffff;
-            stroke-width: 1.5;
-          }
-
-          /* Chart title and header styling */
-          .trace-dashboard-chart-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 16px;
-            user-select: none;
-          }
-
-          .trace-dashboard-chart-header .trace-dashboard-section-title {
-            margin: 0;
-          }
-
-          .trace-dashboard-chart-subtitle {
-            font-size: 0.75rem;
-            color: var(--text-muted, #64748b);
-            font-weight: 500;
-          }
-
-          /* Rotated Y-Axis context label */
-          .trace-chart-axis-context-y {
-            fill: var(--text-muted, #64748b);
-            font-size: 8px;
-            font-weight: 600;
-            text-anchor: middle;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-          }
-
-          /* HTML Custom Tooltip Container */
-          .trace-chart-tooltip {
-            background-color: #0c1322;
-            border: 1px solid var(--color-primary, #3b82f6);
-            border-radius: var(--radius-sm, 4px);
-            padding: 6px 10px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
-            white-space: nowrap;
-            pointer-events: none;
-            z-index: 10;
-            transition: opacity 150ms ease;
-          }
-
-          .trace-chart-tooltip-content {
-            display: flex;
-            flex-direction: column;
-            gap: 2px;
-            font-size: 0.75rem;
-            font-family: 'Inter', -apple-system, sans-serif;
-          }
-
-          .trace-chart-tooltip-content .tooltip-day {
-            color: var(--text-muted, #64748b);
-            text-transform: uppercase;
-            font-size: 0.65rem;
-            font-weight: 700;
-            letter-spacing: 0.05em;
-          }
-
-          .trace-chart-tooltip-content .tooltip-value {
-            color: var(--text-primary, #f8fafc);
-            font-weight: 700;
-          }
-
-          /* Main Two Column Layout Details */
-          .trace-dashboard-main-grid {
-            display: grid;
-            grid-template-columns: 2fr 1fr;
-            gap: 16px;
-            box-sizing: border-box;
-          }
-
-          .trace-dashboard-main-card {
-            background-color: var(--bg-surface, #0e1626);
-            border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
-            border-radius: var(--radius-md, 8px);
-            padding: 20px;
-            box-shadow: var(--shadow-sm);
-            box-sizing: border-box;
-            display: flex;
-            flex-direction: column;
-            min-width: 0;
-          }
-
-          /* Cases Table Styling */
-          .trace-dashboard-table-container {
-            width: 100%;
-            overflow-x: auto;
-          }
-
-          .trace-dashboard-table {
-            width: 100%;
-            border-collapse: collapse;
-            text-align: left;
-            min-width: 500px;
-          }
-
-          .trace-dashboard-table th {
-            padding: 10px 12px;
-            font-size: 0.725rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            color: var(--text-muted, #64748b);
-            border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
-          }
-
-          .trace-dashboard-table-row {
-            cursor: pointer;
-            transition: background-color var(--transition-speed, 200ms) ease;
-            outline: none;
-          }
-
-          .trace-dashboard-table-row:hover {
-            background-color: rgba(255, 255, 255, 0.015);
-          }
-
-          .trace-dashboard-table-row:focus-visible {
-            background-color: rgba(255, 255, 255, 0.03);
-            outline: 2px solid var(--color-primary, #3b82f6);
-            outline-offset: -2px;
-          }
-
-          .trace-dashboard-table td {
-            padding: 11px 12px;
-            font-size: 0.875rem;
-            color: var(--text-secondary, #cbd5e1);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.02);
-            vertical-align: middle;
-          }
-
-          .trace-dashboard-case-id {
-            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
-            font-weight: 600;
-            color: var(--color-secondary, #06b6d4);
-            font-size: 0.8125rem;
-          }
-
-          .trace-dashboard-case-title {
-            font-weight: 500;
-            color: var(--text-primary, #f8fafc);
-            max-width: 250px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-          }
-
-          /* Activities Ticker Stream */
-          .trace-dashboard-activity-list {
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-            box-sizing: border-box;
-          }
-
-          .trace-dashboard-activity-item {
-            display: flex;
-            align-items: flex-start;
-            gap: 12px;
-            box-sizing: border-box;
-          }
-
-          .trace-dashboard-activity-time {
-            font-family: 'SFMono-Regular', Consolas, monospace;
-            font-size: 0.75rem;
-            font-weight: 600;
-            color: var(--text-muted, #64748b);
-            padding-top: 3px;
-            width: 40px;
-            flex-shrink: 0;
-          }
-
-          .trace-dashboard-activity-icon-wrap {
-            width: 24px;
-            height: 24px;
-            border-radius: 50%;
-            background-color: var(--bg-surface-elevated, #162035);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 0.8rem;
-            color: var(--color-secondary, #06b6d4);
-            flex-shrink: 0;
-            border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
-          }
-
-          .trace-dashboard-activity-desc {
-            font-size: 0.8125rem;
-            color: var(--text-secondary, #cbd5e1);
-            line-height: 1.4;
-            min-width: 0;
-            word-wrap: break-word;
-          }
-
-          .trace-dashboard-activity-desc .highlight {
-            font-family: monospace;
-            font-weight: 600;
-            color: var(--text-primary, #f8fafc);
-            background: rgba(255, 255, 255, 0.04);
-            padding: 1px 4px;
-            border-radius: 3px;
-          }
-
-          /* Responsive Layout Breakpoints */
-          @media (max-width: 1024px) {
-            .trace-dashboard-stats-grid {
-              grid-template-columns: repeat(2, 1fr);
-            }
-          }
-
-          @media (max-width: 768px) {
-            .trace-dashboard-main-grid {
-              grid-template-columns: 1fr;
-            }
-            .trace-dashboard-content {
-              padding: 16px;
-              gap: 16px;
-            }
-          }
-
-          @media (max-width: 576px) {
-            .trace-dashboard-stats-grid {
-              grid-template-columns: 1fr;
-            }
-            .trace-dashboard-header-row {
-              flex-direction: column;
-              align-items: flex-start;
-              gap: 12px;
-            }
-            .trace-dashboard-action-btn {
-              width: 100%;
-              justify-content: center;
-            }
-          }
-        `
-      }} />
-
-      {/* Right Column Layout wrapper */}
-      <div className="trace-dashboard-main">
-
-        {/* Scrollable Dashboard view areas */}
-        <main className="trace-dashboard-content">
+        {/* Header Info Panel */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 select-none">
+          <div className="flex flex-col">
+            <h1 className="text-2xl font-bold text-white tracking-tight">Security Operations Center</h1>
+            <p className="text-sm text-[#cbd5e1]/60 mt-1">Real-time threat analytics and dynamic incident forensics monitoring.</p>
+          </div>
           
-          {/* Header Panel */}
-          <div className="trace-dashboard-header-row">
-            <div className="trace-dashboard-welcome">
-              <h2 className="trace-dashboard-title">Dashboard</h2>
-              <p className="trace-dashboard-subtitle">
-                Security operations overview and investigation status.
-              </p>
-            </div>
-            <button
-              type="button"
-              className="trace-dashboard-action-btn"
-              onClick={() => navigate('/cases/new')}
-              title="Create a new case workspace"
+          <div className="flex items-center gap-3">
+            <button 
+              type="button" 
+              className="flex items-center gap-2 px-3 py-1.5 bg-[#0f1423]/80 border border-white/10 hover:bg-[#161d33] text-[#cbd5e1] text-[12.5px] font-semibold rounded-lg transition-colors duration-200"
+              onClick={fetchDashboardStats}
+              disabled={isFetching}
             >
-              <FiPlus aria-hidden="true" />
-              <span>New Case</span>
+              <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? 'animate-spin text-[#47faf3]' : ''}`} />
+              <span>Sync Assets</span>
+            </button>
+            
+            <button 
+              type="button" 
+              className="flex items-center gap-2 px-4 py-1.5 bg-[#3b82f6] hover:bg-[#2563eb] text-white text-[13px] font-semibold rounded-lg shadow-sm transition-colors duration-200"
+              onClick={() => navigate('/cases/new')}
+            >
+              <Plus className="w-4 h-4" />
+              <span>New Incident</span>
             </button>
           </div>
+        </div>
 
-          {/* Stats Summary Cards Row */}
-          <div className="trace-dashboard-stats-grid" role="region" aria-label="Key telemetry stats">
-            
-            {/* Card 1: Active Cases */}
-            <div className="trace-dashboard-stat-card">
-              <div className="trace-dashboard-stat-icon-wrap" aria-hidden="true">
-                <FiFolder />
-              </div>
-              <div className="trace-dashboard-stat-info">
-                <span className="trace-dashboard-stat-label">Active Cases</span>
-                <span className="trace-dashboard-stat-value">12</span>
-                <span className="trace-dashboard-stat-subtext">3 updated today</span>
-              </div>
-            </div>
+        {/* 12-Column CSS Grid Bento Layout */}
+        <div className="grid grid-cols-12 gap-6 w-full auto-rows-min">
+          <KPICards activeCount={telemetry.activeAlerts} telemetry={telemetry} />
+          <ThreatMap />
+          <AIThreatPanel />
+          <InvestigationsTable 
+            cases={cases} 
+            formatCaseId={formatCaseId} 
+            getSeverityBadgeClass={getSeverityBadgeClass} 
+            getOperatorInitial={getOperatorInitial} 
+          />
+          <EventVelocityChart velocityData={velocityData} />
+          <LiveSystemActivity activities={activities} />
+          <RecentAlerts alerts={alerts} />
+          <AIRecommendations />
+        </div>
 
-            {/* Card 2: Critical Alerts */}
-            <div className="trace-dashboard-stat-card">
-              <div className="trace-dashboard-stat-icon-wrap alert-critical" aria-hidden="true">
-                <FiAlertOctagon />
-              </div>
-              <div className="trace-dashboard-stat-info">
-                <span className="trace-dashboard-stat-label">Critical Alerts</span>
-                <span className="trace-dashboard-stat-value">4</span>
-                <span className="trace-dashboard-stat-subtext">Requires attention</span>
-              </div>
-            </div>
-
-            {/* Card 3: Evidence Analysed */}
-            <div className="trace-dashboard-stat-card">
-              <div className="trace-dashboard-stat-icon-wrap status-cyan" aria-hidden="true">
-                <FiDatabase />
-              </div>
-              <div className="trace-dashboard-stat-info">
-                <span className="trace-dashboard-stat-label">Evidence Analysed</span>
-                <span className="trace-dashboard-stat-value">147</span>
-                <span className="trace-dashboard-stat-subtext">24 in last 24h</span>
-              </div>
-            </div>
-
-            {/* Card 4: System Status */}
-            <div className="trace-dashboard-stat-card">
-              <div className="trace-dashboard-stat-icon-wrap status-green" aria-hidden="true">
-                <FiActivity />
-              </div>
-              <div className="trace-dashboard-stat-info">
-                <span className="trace-dashboard-stat-label">System Status</span>
-                <span className="trace-dashboard-stat-value">Operational</span>
-                <span className="trace-dashboard-stat-subtext">All services healthy</span>
-              </div>
-            </div>
-
-          </div>
-
-          {/* Threat Activity Section */}
-          <CommonGraphsShowcase />
-
-          {/* Bottom Grid: Recent Cases & Recent Activity */}
-          <div className="trace-dashboard-main-grid">
-            
-            {/* Recent Cases */}
-            <div className="trace-dashboard-main-card" role="region" aria-label="Recent incident cases table">
-              <h3 className="trace-dashboard-section-title">Recent Cases</h3>
-              <div className="trace-dashboard-table-container">
-                <table className="trace-dashboard-table">
-                  <thead>
-                    <tr>
-                      <th scope="col">Case ID</th>
-                      <th scope="col">Title</th>
-                      <th scope="col">Severity</th>
-                      <th scope="col">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {RECENT_CASES.map((item) => (
-                      <tr 
-                        key={item.caseId} 
-                        className="trace-dashboard-table-row"
-                        onClick={() => navigate(`/cases/${item.caseId}`)}
-                        tabIndex={0}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            navigate(`/cases/${item.caseId}`);
-                          }
-                        }}
-                        aria-label={`Open case details for ${item.caseId}: ${item.title}`}
-                      >
-                        <td className="trace-dashboard-case-id">{item.caseId}</td>
-                        <td className="trace-dashboard-case-title" title={item.title}>
-                          {item.title}
-                        </td>
-                        <td>
-                          <StatusBadge status={item.severity} />
-                        </td>
-                        <td>
-                          <StatusBadge status={item.status} />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* Recent Activity Ticker */}
-            <div className="trace-dashboard-main-card" role="region" aria-label="Recent activity log stream">
-              <h3 className="trace-dashboard-section-title">Recent Activity</h3>
-              <div className="trace-dashboard-activity-list">
-                {RECENT_ACTIVITIES.map((activity) => {
-                  const Icon = activity.icon;
-                  return (
-                    <div key={activity.id} className="trace-dashboard-activity-item">
-                      <span className="trace-dashboard-activity-time">{activity.time}</span>
-                      <div className="trace-dashboard-activity-icon-wrap" aria-hidden="true">
-                        <Icon />
-                      </div>
-                      <span className="trace-dashboard-activity-desc">
-                        {activity.description}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-          </div>
-
-        </main>
       </div>
     </div>
   );

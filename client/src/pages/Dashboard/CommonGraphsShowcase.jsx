@@ -1,5 +1,22 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { FiChevronLeft, FiChevronRight, FiActivity } from 'react-icons/fi';
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  AreaChart,
+  Area,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  PieChart,
+  Pie,
+  Cell
+} from 'recharts';
 
 const ALL_GRAPHS = [
   // 1. THREAT TRENDS
@@ -83,6 +100,154 @@ export default function CommonGraphsShowcase() {
       <line x1="50" y1="240" x2="550" y2="240" stroke="rgba(255, 255, 255, 0.15)" strokeWidth="1.5" />
     </g>
   );
+
+  const isRechartsGraph = (type) => {
+    return ['trend-line', 'trend-area', 'trend-bar', 'trend-donut'].includes(type);
+  };
+
+  const renderRechartsContent = () => {
+    const CustomTooltip = ({ active, payload, label }) => {
+      if (active && payload && payload.length) {
+        return (
+          <div style={{
+            backgroundColor: '#0c1322',
+            border: '1px solid var(--color-primary, #3b82f6)',
+            borderRadius: '4px',
+            padding: '8px 12px',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.6)',
+            fontSize: '0.75rem',
+            fontFamily: 'Inter, sans-serif'
+          }}>
+            <p style={{ margin: 0, fontWeight: '700', color: 'var(--text-muted, #64748b)' }}>{label}</p>
+            {payload.map((pld, index) => (
+              <p key={index} style={{ margin: '3px 0 0 0', fontWeight: '600', color: pld.color || pld.fill }}>
+                {`${pld.name}: ${pld.value}`}
+              </p>
+            ))}
+          </div>
+        );
+      }
+      return null;
+    };
+
+    switch (activeGraph.type) {
+      case 'trend-line': {
+        const lineData = [
+          { name: 'Mon', Active: 12, Resolved: 8 },
+          { name: 'Tue', Active: 18, Resolved: 12 },
+          { name: 'Wed', Active: 15, Resolved: 11 },
+          { name: 'Thu', Active: 27, Resolved: 20 },
+          { name: 'Fri', Active: 21, Resolved: 16 },
+          { name: 'Sat', Active: 24, Resolved: 18 },
+          { name: 'Sun', Active: 19, Resolved: 15 }
+        ];
+        return (
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={lineData} margin={{ top: 15, right: 20, left: -20, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255, 255, 255, 0.04)" />
+              <XAxis dataKey="name" stroke="var(--text-muted, #64748b)" fontSize={10} tickLine={false} />
+              <YAxis stroke="var(--text-muted, #64748b)" fontSize={10} tickLine={false} />
+              <Tooltip content={<CustomTooltip />} />
+              <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '11px' }} />
+              <Line type="monotone" dataKey="Active" stroke="#3b82f6" strokeWidth={2.5} activeDot={{ r: 6 }} dot={{ stroke: '#06b6d4', strokeWidth: 2, r: 4 }} />
+              <Line type="monotone" dataKey="Resolved" stroke="#22c55e" strokeWidth={2.5} activeDot={{ r: 6 }} dot={{ stroke: '#10b981', strokeWidth: 2, r: 4 }} />
+            </LineChart>
+          </ResponsiveContainer>
+        );
+      }
+      case 'trend-area': {
+        const areaData = [
+          { name: '00:00', IncidentVolume: 4 },
+          { name: '04:00', IncidentVolume: 8 },
+          { name: '08:00', IncidentVolume: 18 },
+          { name: '12:00', IncidentVolume: 12 },
+          { name: '16:00', IncidentVolume: 22 },
+          { name: '20:00', IncidentVolume: 14 }
+        ];
+        return (
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={areaData} margin={{ top: 15, right: 20, left: -20, bottom: 5 }}>
+              <defs>
+                <linearGradient id="colorVolume" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.4}/>
+                  <stop offset="95%" stopColor="#06b6d4" stopOpacity={0.01}/>
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255, 255, 255, 0.04)" />
+              <XAxis dataKey="name" stroke="var(--text-muted, #64748b)" fontSize={10} tickLine={false} />
+              <YAxis stroke="var(--text-muted, #64748b)" fontSize={10} tickLine={false} />
+              <Tooltip content={<CustomTooltip />} />
+              <Area type="monotone" dataKey="IncidentVolume" name="Incident Volume" stroke="#06b6d4" fillOpacity={1} fill="url(#colorVolume)" strokeWidth={2.5} />
+            </AreaChart>
+          </ResponsiveContainer>
+        );
+      }
+      case 'trend-bar': {
+        const barData = [
+          { name: 'Malware', Events: 85, fill: '#EF4444' },
+          { name: 'Phishing', Events: 45, fill: '#F97316' },
+          { name: 'BruteForce', Events: 65, fill: '#EAB308' },
+          { name: 'Exfil', Events: 25, fill: '#8B5CF6' },
+          { name: 'DOS', Events: 55, fill: '#3B82F6' }
+        ];
+        return (
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={barData} margin={{ top: 15, right: 20, left: -20, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255, 255, 255, 0.04)" />
+              <XAxis dataKey="name" stroke="var(--text-muted, #64748b)" fontSize={10} tickLine={false} />
+              <YAxis stroke="var(--text-muted, #64748b)" fontSize={10} tickLine={false} />
+              <Tooltip content={<CustomTooltip />} />
+              <Bar dataKey="Events" radius={[4, 4, 0, 0]}>
+                {barData.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={entry.fill} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        );
+      }
+      case 'trend-donut': {
+        const donutData = [
+          { name: 'Critical', value: 15, fill: '#EF4444' },
+          { name: 'High', value: 30, fill: '#F97316' },
+          { name: 'Medium', value: 40, fill: '#EAB308' },
+          { name: 'Low', value: 15, fill: '#3B82F6' }
+        ];
+        return (
+          <div style={{ display: 'flex', width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box' }}>
+            <ResponsiveContainer width="55%" height="100%">
+              <PieChart>
+                <Pie
+                  data={donutData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={45}
+                  outerRadius={68}
+                  paddingAngle={3}
+                  dataKey="value"
+                >
+                  {donutData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.fill} />
+                  ))}
+                </Pie>
+                <Tooltip content={<CustomTooltip />} />
+              </PieChart>
+            </ResponsiveContainer>
+            <div style={{ width: '45%', display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '11px', color: 'var(--text-secondary)' }}>
+              {donutData.map((item, idx) => (
+                <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: item.fill }} />
+                  <span style={{ fontWeight: '600' }}>{`${item.name} (${item.value}%)`}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      }
+      default:
+        return null;
+    }
+  };
 
   // Switch to render corresponding threat visualization inside the 600x300 SVG stage
   const renderGraphSVGContent = () => {
@@ -1424,13 +1589,17 @@ export default function CommonGraphsShowcase() {
           </div>
 
           <div className="graphs-viewport">
-            <svg
-              key={activeGraph.type}
-              className="graphs-svg"
-              viewBox="0 0 600 300"
-            >
-              {renderGraphSVGContent()}
-            </svg>
+            {isRechartsGraph(activeGraph.type) ? (
+              renderRechartsContent()
+            ) : (
+              <svg
+                key={activeGraph.type}
+                className="graphs-svg"
+                viewBox="0 0 600 300"
+              >
+                {renderGraphSVGContent()}
+              </svg>
+            )}
           </div>
         </div>
       </div>

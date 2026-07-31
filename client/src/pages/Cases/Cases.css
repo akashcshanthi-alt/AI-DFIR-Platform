@@ -1,0 +1,47 @@
+.glass-card {
+  background: rgba(27, 31, 44, 0.4);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-top-color: rgba(255, 255, 255, 0.15);
+}
+.cyber-grid {
+  background-image: radial-gradient(rgba(0, 221, 214, 0.05) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+.glow-critical { box-shadow: 0 0 20px rgba(221, 52, 56, 0.2); }
+.glow-primary { box-shadow: 0 0 15px rgba(0, 112, 243, 0.3); }
+.glow-text-cyan { text-shadow: 0 0 8px rgba(71, 250, 243, 0.5); }
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+
+.table-row-hover:hover {
+  background: rgba(255, 255, 255, 0.04);
+  transform: scale(1.002);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  z-index: 10;
+}
+.sticky-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: rgba(38, 42, 55, 0.95);
+  backdrop-filter: blur(8px);
+}
+
+/* Circular progress conic indicator */
+.risk-circle {
+  --percentage: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, #1b1f2c 80%, transparent 0 100%),
+              conic-gradient(var(--risk-color) calc(var(--percentage) * 1%), #313442 0);
+}
+
+.insight-sidebar {
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.insight-sidebar.collapsed {
+  width: 0px;
+  border-left-width: 0px;
+  overflow: hidden;
+}

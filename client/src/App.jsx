@@ -11,13 +11,14 @@ import CaseDetails from './pages/Cases/CaseDetails';
 import AuditLogs from './pages/AuditLogs/AuditLogs';
 import Settings from './pages/Settings/Settings';
 import ForgotPassword from './pages/ForgotPassword/ForgotPassword';
+import AIInvestigation from './pages/AIInvestigation/AIInvestigation';
 
 // Import layout components
 import Sidebar from './components/layout/Sidebar';
 import Header from './components/layout/Header';
 
-// Prototype development guard — check if active session key exists
-const isAuthenticated = () => sessionStorage.getItem('arclight-dev-session') === 'active';
+// Local development auth guard — checks if user is authenticated in localStorage
+const isAuthenticated = () => localStorage.getItem('isAuthenticated') === 'true';
 
 /**
  * ProtectedRoute Wrapper
@@ -47,9 +48,9 @@ function MainLayout() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Terminate developer session token and redirect to Login
+  // Terminate developer session and redirect to Login
   const handleLogout = () => {
-    sessionStorage.removeItem('arclight-dev-session');
+    localStorage.removeItem('isAuthenticated');
     navigate('/login', { replace: true });
   };
 
@@ -60,6 +61,7 @@ function MainLayout() {
     if (path === '/cases') return 'Cases';
     if (path === '/cases/new') return 'Create New Case';
     if (path.startsWith('/cases/')) return 'Case Investigation';
+    if (path === '/ai-investigation') return 'AI Investigation';
     if (path === '/audit-logs') return 'Audit Logs';
     if (path === '/settings') return 'Settings';
     return 'Dashboard';
@@ -162,8 +164,7 @@ function MainLayout() {
             <Route path="/audit-logs" element={<AuditLogs />} />
             <Route path="/settings" element={<Settings />} />
             
-            {/* Redirect sidebar modules straight to target prototype investigation case tabs */}
-            <Route path="/ai-investigation" element={<Navigate to="/cases/TRC-2026-0042" replace />} />
+            <Route path="/ai-investigation" element={<AIInvestigation />} />
             <Route path="/reports" element={<Navigate to="/cases/TRC-2026-0042" replace />} />
             
             {/* Fallback handler for unknown authenticated paths */}

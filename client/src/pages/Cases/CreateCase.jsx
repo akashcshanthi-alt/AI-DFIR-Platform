@@ -1,27 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { ArrowLeft, ChevronLeft, ChevronRight, Rocket, Loader2 } from 'lucide-react';
+import './CreateCase.css';
 
+// Import modular wizard steps
+import StepBasicInfo from './components/StepBasicInfo';
+import StepIncidentScope from './components/StepIncidentScope';
+import StepEvidenceIntake from './components/StepEvidenceIntake';
+import StepTeamAssign from './components/StepTeamAssign';
+import StepAugmentation from './components/StepAugmentation';
+import StepReviewSubmit from './components/StepReviewSubmit';
 
-
-// Visual options list for severity selector
-const SEVERITY_OPTIONS = [
-  { value: 'Critical', colorClass: 'critical', label: 'Critical' },
-  { value: 'High', colorClass: 'high', label: 'High' },
-  { value: 'Medium', colorClass: 'medium', label: 'Medium' },
-  { value: 'Low', colorClass: 'low', label: 'Low' },
-];
-
-/**
- * CreateCase Component
- * Provides the creation workflow dashboard for starting new forensics cases.
- * Features inline input constraints, character telemetry trackers, accessibility markup,
- * and simulated prototype redirection.
- */
 export default function CreateCase() {
   const navigate = useNavigate();
 
-  // Auth Guard
-  const hasSession = sessionStorage.getItem('arclight-dev-session') === 'active';
+  // Auth Guard check
+  const hasSession = localStorage.getItem('isAuthenticated') === 'true';
 
   useEffect(() => {
     if (!hasSession) {
@@ -29,737 +23,269 @@ export default function CreateCase() {
     }
   }, [hasSession, navigate]);
 
-  // Form Field States
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [incidentType, setIncidentType] = useState('');
-  const [severity, setSeverity] = useState('');
-  const [assignedInvestigator, setAssignedInvestigator] = useState('');
+  // Unified Wizard State
+  const [currentStep, setCurrentStep] = useState(1);
+  const totalSteps = 6;
 
-  // Status flags
-  const [errors, setErrors] = useState({});
+  // Form Field States
+  const [caseTitle, setCaseTitle] = useState('');
+  const [incidentType, setIncidentType] = useState('Malware Outbreak');
+  const [severity, setSeverity] = useState('HIGH');
+  const [department, setDepartment] = useState('Network Security Ops');
+  const [priority, setPriority] = useState(50);
+  
+  const [description, setDescription] = useState('');
+  const [timelineStart, setTimelineStart] = useState('');
+  const [mitreId, setMitreId] = useState('');
+  const [assets, setAssets] = useState('');
+  const [iocs, setIocs] = useState('');
+  
+  const [leadInvestigator, setLeadInvestigator] = useState('Dr. Elena Kozlov (Senior Lead)');
+  const [deadline, setDeadline] = useState('');
+  const [collaborators, setCollaborators] = useState(['Liam Hughes', 'Marcus Thorne']);
+  
+  const [aiOptions, setAiOptions] = useState({
+    malware: true,
+    ioc: true,
+    timeline: true,
+    risk: false,
+    report: true
+  });
+
+  // Action Button States
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showSuccess, setShowSuccess] = useState(false);
 
   if (!hasSession) return null;
 
-  const handleLogout = () => {
-    sessionStorage.removeItem('arclight-dev-session');
-    navigate('/login', { replace: true });
+  // Navigation handlers
+  const handleNext = () => {
+    if (currentStep < totalSteps) {
+      setCurrentStep(currentStep + 1);
+    }
   };
 
-  // Form input validation checks
-  const validateForm = () => {
-    const tempErrors = {};
-
-    if (!title.trim()) {
-      tempErrors.title = 'Case title is required';
+  const handlePrev = () => {
+    if (currentStep > 1) {
+      setCurrentStep(currentStep - 1);
     }
-
-    if (!description.trim()) {
-      tempErrors.description = 'Description is required';
-    } else if (description.length > 1000) {
-      tempErrors.description = 'Description must not exceed 1000 characters';
-    }
-
-    if (!incidentType) {
-      tempErrors.incidentType = 'Please select an incident type';
-    }
-
-    if (!severity) {
-      tempErrors.severity = 'Please select a severity level';
-    }
-
-    if (!assignedInvestigator) {
-      tempErrors.assignedInvestigator = 'Please assign an investigator';
-    }
-
-    setErrors(tempErrors);
-    return Object.keys(tempErrors).length === 0;
   };
 
-  // Submit flow
-  const handleSubmit = (e) => {
-    e.preventDefault();
+  const handleGoToStep = (step) => {
+    setCurrentStep(step);
+  };
+
+  const handleSubmit = () => {
     if (isSubmitting) return;
-
-    if (validateForm()) {
-      setIsSubmitting(true);
-      setErrors({});
-
-      // Simulate prototype case creation delay before navigating
-      setTimeout(() => {
-        setShowSuccess(true);
-        
-        setTimeout(() => {
-          setIsSubmitting(false);
-          setShowSuccess(false);
-          // Route back to the newly generated case details screen (prototype endpoint)
-          navigate('/cases/TRC-2026-0043');
-        }, 1200);
-      }, 1000);
-    }
+    setIsSubmitting(true);
+    
+    setTimeout(() => {
+      alert('Investigation Case Successfully Initiated. Redirecting to SOC Command Center...');
+      setIsSubmitting(false);
+      navigate('/cases');
+    }, 2000);
   };
+
+  // Progress line percent width
+  const progressPercent = ((currentStep - 1) / (totalSteps - 1)) * 100;
 
   return (
-    <div className="trace-create-layout">
-      {/* Scope component styling block */}
-      <style dangerouslySetInnerHTML={{
-        __html: `
-          .trace-create-layout {
-            display: flex;
-            min-height: 100vh;
-            background-color: var(--bg-main, #060913);
-            color: var(--text-primary, #f8fafc);
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            width: 100%;
-            box-sizing: border-box;
-          }
+    <div className="trace-create-layout flex flex-col min-h-screen w-full select-none create-case-grid-bg box-border p-6 md:p-8">
+      <div className="max-w-7xl mx-auto w-full flex-grow flex flex-col justify-between">
+        
+        {/* Back Link & Header */}
+        <div className="mb-8 text-left">
+          <Link to="/cases" className="inline-flex items-center gap-2 text-secondary font-label-caps text-xs mb-3 hover:brightness-110 transition-all">
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Back to Case Management</span>
+          </Link>
+          <h1 className="font-headline-lg text-headline-lg text-white font-bold leading-none">Initiate Forensic Investigation</h1>
+          <p className="text-on-surface-variant mt-2 text-sm">Configure parameters for a new AI-augmented threat analysis workflow.</p>
+        </div>
 
-          .trace-create-main {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            min-width: 0;
-            height: 100vh;
-            overflow: hidden;
-            box-sizing: border-box;
-          }
+        {/* Wizard Progress Track */}
+        <div className="mb-10 relative select-none">
+          <div className="flex justify-between items-center relative z-10">
+            {[
+              { step: 1, label: 'Basic Info' },
+              { step: 2, label: 'Incidents' },
+              { step: 3, label: 'Evidence' },
+              { step: 4, label: 'Team' },
+              { step: 5, label: 'AI Options' },
+              { step: 6, label: 'Review' }
+            ].map((s) => {
+              const isCompleted = s.step < currentStep;
+              const isActive = s.step === currentStep;
+              return (
+                <div 
+                  key={s.step} 
+                  className="flex flex-col items-center group cursor-pointer" 
+                  onClick={() => handleGoToStep(s.step)}
+                >
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all duration-300 font-bold ${
+                    isCompleted 
+                      ? 'border-primary bg-primary text-on-primary shadow-[0_0_15px_rgba(174,198,255,0.4)]' 
+                      : isActive 
+                        ? 'border-primary bg-primary text-on-primary shadow-[0_0_15px_rgba(174,198,255,0.4)]' 
+                        : 'border-outline bg-surface text-outline'
+                  }`}>
+                    {isCompleted ? '✓' : s.step}
+                  </div>
+                  <span className={`mt-2 text-[10px] font-label-caps font-bold transition-colors ${
+                    isActive || isCompleted ? 'text-primary' : 'text-outline'
+                  }`}>
+                    {s.label}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+          {/* Connecting Track Background Line */}
+          <div className="absolute top-5 left-0 w-full h-[2px] bg-outline-variant/30 -z-10"></div>
+          {/* Active Track Progress Line */}
+          <div 
+            className="absolute top-5 left-0 h-[2px] bg-primary shadow-[0_0_10px_rgba(174,198,255,0.5)] transition-all duration-500 -z-10" 
+            style={{ width: `${progressPercent}%` }}
+          />
+        </div>
 
-          .trace-create-content {
-            flex: 1;
-            padding: 24px;
-            overflow-y: auto;
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-            box-sizing: border-box;
-          }
-
-          /* Header area styling */
-          .trace-create-back-btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            color: var(--text-muted, #64748b);
-            text-decoration: none;
-            font-size: 0.875rem;
-            font-weight: 500;
-            cursor: pointer;
-            transition: color var(--transition-speed, 200ms) ease;
-            width: fit-content;
-            border: none;
-            background: transparent;
-            outline: none;
-            margin-bottom: 4px;
-          }
-
-          .trace-create-back-btn:hover {
-            color: var(--color-primary, #3b82f6);
-          }
-
-          .trace-create-back-btn:focus-visible {
-            outline: 2px solid var(--color-primary, #3b82f6);
-            outline-offset: 2px;
-            border-radius: var(--radius-xs, 2px);
-          }
-
-          .trace-create-header-row {
-            display: flex;
-            flex-direction: column;
-            margin-bottom: 8px;
-          }
-
-          .trace-create-title {
-            font-size: 1.5rem;
-            font-weight: 700;
-            color: var(--text-primary, #f8fafc);
-            margin: 0;
-            line-height: 1.2;
-          }
-
-          .trace-create-subtitle {
-            font-size: 0.875rem;
-            color: var(--text-secondary, #cbd5e1);
-            margin: 4px 0 0 0;
-            line-height: 1.4;
-          }
-
-          /* Form Card Panel */
-          .trace-create-form-workspace {
-            display: flex;
-            justify-content: center;
-            width: 100%;
-          }
-
-          .trace-create-card {
-            width: 100%;
-            max-width: 700px;
-            background-color: var(--bg-surface, #0e1626);
-            border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
-            border-radius: var(--radius-md, 8px);
-            padding: 32px;
-            box-shadow: var(--shadow-md);
-            box-sizing: border-box;
-          }
-
-          .trace-create-form {
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-          }
-
-          .trace-create-form-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 16px;
-          }
-
-          .trace-create-field {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-            width: 100%;
-          }
-
-          .trace-create-field.full-width {
-            grid-column: span 2;
-          }
-
-          .trace-create-label {
-            font-size: 0.8125rem;
-            font-weight: 600;
-            color: var(--text-secondary, #cbd5e1);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-          }
-
-          .trace-create-input {
-            width: 100%;
-            background-color: var(--bg-secondary, #0a0f1d);
-            border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
-            border-radius: var(--radius-sm, 4px);
-            padding: 10px 12px;
-            color: var(--text-primary, #f8fafc);
-            font-size: 0.875rem;
-            outline: none;
-            transition: border-color var(--transition-speed, 200ms) ease;
-            height: 40px;
-            box-sizing: border-box;
-          }
-
-          .trace-create-input:focus {
-            border-color: var(--color-primary, #3b82f6);
-            box-shadow: 0 0 0 1px var(--color-primary-light, rgba(59, 130, 246, 0.1));
-          }
-
-          .trace-create-input.error {
-            border-color: var(--status-critical, #ef4444);
-            box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.15);
-          }
-
-          .trace-create-textarea {
-            width: 100%;
-            background-color: var(--bg-secondary, #0a0f1d);
-            border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
-            border-radius: var(--radius-sm, 4px);
-            padding: 10px 12px;
-            color: var(--text-primary, #f8fafc);
-            font-size: 0.875rem;
-            outline: none;
-            transition: border-color var(--transition-speed, 200ms) ease;
-            height: 110px;
-            box-sizing: border-box;
-            resize: vertical;
-            font-family: inherit;
-            line-height: 1.4;
-          }
-
-          .trace-create-textarea:focus {
-            border-color: var(--color-primary, #3b82f6);
-            box-shadow: 0 0 0 1px var(--color-primary-light, rgba(59, 130, 246, 0.1));
-          }
-
-          .trace-create-textarea.error {
-            border-color: var(--status-critical, #ef4444);
-            box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.15);
-          }
-
-          .trace-create-select {
-            width: 100%;
-            background-color: var(--bg-secondary, #0a0f1d);
-            border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
-            border-radius: var(--radius-sm, 4px);
-            color: var(--text-primary, #f8fafc);
-            font-size: 0.875rem;
-            padding: 10px 24px 10px 12px;
-            height: 40px;
-            outline: none;
-            cursor: pointer;
-            appearance: none;
-            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'></polyline></svg>");
-            background-repeat: no-repeat;
-            background-position: right 12px center;
-            background-size: 14px;
-            box-sizing: border-box;
-          }
-
-          .trace-create-select:focus {
-            border-color: var(--color-primary, #3b82f6);
-            box-shadow: 0 0 0 1px var(--color-primary-light, rgba(59, 130, 246, 0.1));
-          }
-
-          .trace-create-select.error {
-            border-color: var(--status-critical, #ef4444);
-            box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.15);
-          }
-
-          /* Severity Selector Pills */
-          .trace-create-severity-wrapper {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 10px;
-            width: 100%;
-            box-sizing: border-box;
-          }
-
-          .trace-create-severity-btn {
-            background-color: var(--bg-secondary, #0a0f1d);
-            border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
-            border-radius: var(--radius-sm, 4px);
-            color: var(--text-secondary, #cbd5e1);
-            padding: 8px 12px;
-            font-size: 0.8125rem;
-            font-weight: 600;
-            text-align: center;
-            cursor: pointer;
-            transition: all var(--transition-speed, 200ms) ease;
-            outline: none;
-            user-select: none;
-            height: 40px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-sizing: border-box;
-          }
-
-          .trace-create-severity-btn:hover {
-            background-color: rgba(255, 255, 255, 0.02);
-            border-color: var(--border-color-hover, rgba(255, 255, 255, 0.15));
-          }
-
-          .trace-create-severity-btn:focus-visible {
-            outline: 2px solid var(--color-primary, #3b82f6);
-            outline-offset: 1px;
-          }
-
-          .trace-create-severity-btn.selected {
-            color: #ffffff;
-            font-weight: 700;
-          }
-
-          .trace-create-severity-btn.selected.critical {
-            border-color: var(--status-critical, #ef4444);
-            background-color: var(--status-critical-bg, rgba(239, 68, 68, 0.15));
-            color: var(--status-critical, #ef4444);
-          }
-
-          .trace-create-severity-btn.selected.high {
-            border-color: var(--status-high, #f97316);
-            background-color: var(--status-high-bg, rgba(249, 115, 22, 0.15));
-            color: var(--status-high, #f97316);
-          }
-
-          .trace-create-severity-btn.selected.medium {
-            border-color: var(--status-medium, #eab308);
-            background-color: var(--status-medium-bg, rgba(234, 179, 8, 0.15));
-            color: var(--status-medium, #eab308);
-          }
-
-          .trace-create-severity-btn.selected.low {
-            border-color: var(--status-low, #22c55e);
-            background-color: var(--status-low-bg, rgba(34, 197, 94, 0.15));
-            color: var(--status-low, #22c55e);
-          }
-
-          .trace-create-char-counter {
-            font-size: 0.75rem;
-            color: var(--text-muted, #64748b);
-            font-weight: 500;
-          }
-
-          .trace-create-validation-error {
-            font-size: 0.75rem;
-            color: var(--status-critical, #ef4444);
-            font-weight: 500;
-            margin-top: 3px;
-          }
-
-          /* Alert Banner */
-          .trace-create-alert-banner {
-            background-color: rgba(34, 197, 94, 0.1);
-            border: 1px solid rgba(34, 197, 94, 0.2);
-            color: var(--status-low, #22c55e);
-            border-radius: var(--radius-sm, 4px);
-            padding: 8px 12px;
-            font-size: 0.8125rem;
-            font-weight: 600;
-            margin-bottom: 16px;
-            text-align: center;
-          }
-
-          /* Form Actions Row */
-          .trace-create-actions {
-            display: flex;
-            align-items: center;
-            justify-content: flex-end;
-            gap: 12px;
-            margin-top: 12px;
-            border-top: 1px solid rgba(255, 255, 255, 0.03);
-            padding-top: 20px;
-          }
-
-          .trace-create-cancel-btn {
-            background-color: transparent;
-            color: var(--text-secondary, #cbd5e1);
-            border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
-            border-radius: var(--radius-sm, 4px);
-            padding: 8px 18px;
-            font-size: 0.875rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all var(--transition-speed, 200ms) ease;
-            outline: none;
-            height: 38px;
-            display: flex;
-            align-items: center;
-            text-decoration: none;
-            box-sizing: border-box;
-          }
-
-          .trace-create-cancel-btn:hover {
-            background-color: rgba(255, 255, 255, 0.02);
-            color: var(--text-primary, #f8fafc);
-            border-color: var(--border-color-hover, rgba(255, 255, 255, 0.15));
-          }
-
-          .trace-create-cancel-btn:focus-visible {
-            outline: 2px solid var(--color-primary, #3b82f6);
-            outline-offset: 1px;
-          }
-
-          .trace-create-submit-btn {
-            background-color: var(--color-primary, #3b82f6);
-            color: #ffffff;
-            border: 1px solid transparent;
-            border-radius: var(--radius-sm, 4px);
-            padding: 8px 20px;
-            font-size: 0.875rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all var(--transition-speed, 200ms) ease;
-            outline: none;
-            height: 38px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            box-sizing: border-box;
-          }
-
-          .trace-create-submit-btn:hover:not(:disabled) {
-            background-color: var(--color-primary-hover, #2563eb);
-          }
-
-          .trace-create-submit-btn:disabled {
-            opacity: 0.65;
-            cursor: not-allowed;
-            background-color: var(--bg-surface-elevated, #162035);
-            color: var(--text-muted, #64748b);
-            border-color: var(--border-color, rgba(255, 255, 255, 0.08));
-          }
-
-          .trace-create-submit-btn:focus-visible {
-            outline: 2px solid var(--color-secondary, #06b6d4);
-            outline-offset: 2px;
-          }
-
-          .trace-create-btn-spinner {
-            width: 14px;
-            height: 14px;
-            border-radius: 50%;
-            border: 2px solid rgba(255, 255, 255, 0.15);
-            border-top-color: #ffffff;
-            animation: trace-btn-spin 0.75s linear infinite;
-            flex-shrink: 0;
-          }
-
-          @keyframes trace-btn-spin {
-            to { transform: rotate(360deg); }
-          }
-
-          /* Responsive Layout */
-          @media (max-width: 768px) {
-            .trace-create-card {
-              padding: 24px 16px;
-              border: none;
-              background: transparent;
-              box-shadow: none;
-            }
-            .trace-create-form-grid {
-              grid-template-columns: 1fr;
-            }
-            .trace-create-field.full-width {
-              grid-column: span 1;
-            }
-            .trace-create-severity-wrapper {
-              grid-template-columns: repeat(2, 1fr);
-              gap: 8px;
-            }
-            .trace-create-content {
-              padding: 16px;
-              gap: 16px;
-            }
-          }
-
-          @media (max-width: 480px) {
-            .trace-create-severity-wrapper {
-              grid-template-columns: 1fr;
-            }
-            .trace-create-actions {
-              flex-direction: column-reverse;
-              align-items: stretch;
-            }
-            .trace-create-cancel-btn,
-            .trace-create-submit-btn {
-              width: 100%;
-              justify-content: center;
-            }
-          }
-        `
-      }} />
-
-      {/* Main content wrapper */}
-      <div className="trace-create-main">
-
-        {/* Scrollable Form areas */}
-        <main className="trace-create-content">
+        {/* Wizard Main Card Container */}
+        <div className="glass-card rounded-xl overflow-hidden shadow-2xl flex-grow flex flex-col justify-between min-h-[500px]">
           
-          {/* Header Panel with back navigation link */}
-          <div className="trace-create-header-row">
-            <Link to="/cases" className="trace-create-back-btn" aria-label="Go back to cases page">
-              &larr; Back to Cases
-            </Link>
-            <h2 className="trace-create-title">Create New Case</h2>
-            <p className="trace-create-subtitle">
-              Start a new digital forensic investigation.
-            </p>
+          {/* Step Form Viewport */}
+          <div className="p-8 md:p-10 flex-grow">
+            {currentStep === 1 && (
+              <StepBasicInfo 
+                title={caseTitle} setTitle={setCaseTitle}
+                incidentType={incidentType} setIncidentType={setIncidentType}
+                severity={severity} setSeverity={setSeverity}
+                department={department} setDepartment={setDepartment}
+                priority={priority} setPriority={setPriority}
+              />
+            )}
+            
+            {currentStep === 2 && (
+              <StepIncidentScope 
+                description={description} setDescription={setDescription}
+                timelineStart={timelineStart} setTimelineStart={setTimelineStart}
+                mitreId={mitreId} setMitreId={setMitreId}
+                assets={assets} setAssets={setAssets}
+                iocs={iocs} setIocs={setIocs}
+              />
+            )}
+
+            {currentStep === 3 && (
+              <StepEvidenceIntake />
+            )}
+
+            {currentStep === 4 && (
+              <StepTeamAssign 
+                leadInvestigator={leadInvestigator} setLeadInvestigator={setLeadInvestigator}
+                deadline={deadline} setDeadline={setDeadline}
+                collaborators={collaborators} setCollaborators={setCollaborators}
+              />
+            )}
+
+            {currentStep === 5 && (
+              <StepAugmentation 
+                aiOptions={aiOptions} setAiOptions={setAiOptions}
+              />
+            )}
+
+            {currentStep === 6 && (
+              <StepReviewSubmit 
+                title={caseTitle}
+                incidentType={incidentType}
+                severity={severity}
+                leadInvestigator={leadInvestigator}
+                collaborators={collaborators}
+                deadline={deadline}
+                aiOptions={aiOptions}
+              />
+            )}
           </div>
 
-          {/* Form Workspace Center */}
-          <div className="trace-create-form-workspace">
-            <div className="trace-create-card">
+          {/* Wizard Footer Nav Actions */}
+          <div className="p-6 md:px-10 border-t border-white/10 flex justify-between items-center bg-surface-container-low/50 shrink-0">
+            <button 
+              type="button"
+              className={`flex items-center gap-2 px-6 py-2.5 rounded-lg border border-outline-variant text-on-surface-variant hover:bg-white/5 transition-all outline-none cursor-pointer ${
+                currentStep === 1 ? 'opacity-0 pointer-events-none' : 'opacity-100'
+              }`}
+              onClick={handlePrev}
+            >
+              <ChevronLeft className="w-4 h-4" />
+              Previous
+            </button>
+            
+            <div className="flex gap-4">
+              <button 
+                type="button" 
+                className="px-6 py-2.5 rounded-lg text-on-surface-variant hover:text-white transition-colors outline-none cursor-pointer text-xs font-semibold"
+                onClick={() => navigate('/cases')}
+              >
+                Save as Draft
+              </button>
               
-              {/* Optional Local Success Banner */}
-              {showSuccess && (
-                <div className="trace-create-alert-banner" role="alert">
-                  Case created successfully. Redirecting...
-                </div>
+              {currentStep < totalSteps ? (
+                <button 
+                  type="button"
+                  className="flex items-center gap-2 px-8 py-2.5 rounded-lg bg-primary-container text-white font-bold hover:brightness-110 active:scale-95 transition-all shadow-lg outline-none cursor-pointer text-xs"
+                  onClick={handleNext}
+                >
+                  Next Step
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              ) : (
+                <button 
+                  type="button"
+                  className="flex items-center gap-2 px-10 py-2.5 rounded-lg bg-secondary-container text-on-secondary-container font-black tracking-widest glow-cyan hover:brightness-110 active:scale-95 transition-all outline-none cursor-pointer text-xs"
+                  onClick={handleSubmit}
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      INITIATING...
+                    </>
+                  ) : (
+                    <>
+                      SUBMIT INVESTIGATION
+                      <Rocket className="w-4 h-4" />
+                    </>
+                  )}
+                </button>
               )}
-
-              <form onSubmit={handleSubmit} className="trace-create-form" noValidate>
-                
-                {/* Form fields layout grid */}
-                <div className="trace-create-form-grid">
-                  
-                  {/* Case Title Field */}
-                  <div className="trace-create-field full-width">
-                    <label htmlFor="case-title-input" className="trace-create-label">
-                      Case Title
-                    </label>
-                    <input
-                      id="case-title-input"
-                      type="text"
-                      className={`trace-create-input ${errors.title ? 'error' : ''}`}
-                      placeholder="Enter investigation title"
-                      value={title}
-                      onChange={(e) => {
-                        setTitle(e.target.value);
-                        if (errors.title) setErrors((prev) => ({ ...prev, title: null }));
-                      }}
-                      disabled={isSubmitting}
-                      aria-invalid={!!errors.title}
-                      aria-describedby={errors.title ? 'case-title-error' : undefined}
-                      required
-                    />
-                    {errors.title && (
-                      <span id="case-title-error" className="trace-create-validation-error" role="alert">
-                        {errors.title}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Description Field */}
-                  <div className="trace-create-field full-width">
-                    <div className="trace-create-label">
-                      <label htmlFor="case-desc-textarea">Description</label>
-                      <span className="trace-create-char-counter" aria-live="polite">
-                        {description.length} / 1000
-                      </span>
-                    </div>
-                    <textarea
-                      id="case-desc-textarea"
-                      className={`trace-create-textarea ${errors.description ? 'error' : ''}`}
-                      placeholder="Describe the incident and initial findings..."
-                      maxLength={1000}
-                      value={description}
-                      onChange={(e) => {
-                        setDescription(e.target.value);
-                        if (errors.description) setErrors((prev) => ({ ...prev, description: null }));
-                      }}
-                      disabled={isSubmitting}
-                      aria-invalid={!!errors.description}
-                      aria-describedby={errors.description ? 'case-desc-error' : undefined}
-                      required
-                    />
-                    {errors.description && (
-                      <span id="case-desc-error" className="trace-create-validation-error" role="alert">
-                        {errors.description}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Incident Type Select Field */}
-                  <div className="trace-create-field">
-                    <label htmlFor="case-type-select" className="trace-create-label">
-                      Incident Type
-                    </label>
-                    <select
-                      id="case-type-select"
-                      className={`trace-create-select ${errors.incidentType ? 'error' : ''}`}
-                      value={incidentType}
-                      onChange={(e) => {
-                        setIncidentType(e.target.value);
-                        if (errors.incidentType) setErrors((prev) => ({ ...prev, incidentType: null }));
-                      }}
-                      disabled={isSubmitting}
-                      aria-invalid={!!errors.incidentType}
-                      aria-describedby={errors.incidentType ? 'case-type-error' : undefined}
-                      required
-                    >
-                      <option value="">Select incident type</option>
-                      <option value="Account Compromise">Account Compromise</option>
-                      <option value="Malware Activity">Malware Activity</option>
-                      <option value="Network Intrusion">Network Intrusion</option>
-                      <option value="Unauthorized Access">Unauthorized Access</option>
-                      <option value="Phishing">Phishing</option>
-                      <option value="Data Exfiltration">Data Exfiltration</option>
-                      <option value="Suspicious Activity">Suspicious Activity</option>
-                      <option value="Other">Other</option>
-                    </select>
-                    {errors.incidentType && (
-                      <span id="case-type-error" className="trace-create-validation-error" role="alert">
-                        {errors.incidentType}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Assigned Investigator Field */}
-                  <div className="trace-create-field">
-                    <label htmlFor="case-investigator-select" className="trace-create-label">
-                      Assigned Investigator
-                    </label>
-                    <select
-                      id="case-investigator-select"
-                      className={`trace-create-select ${errors.assignedInvestigator ? 'error' : ''}`}
-                      value={assignedInvestigator}
-                      onChange={(e) => {
-                        setAssignedInvestigator(e.target.value);
-                        if (errors.assignedInvestigator) setErrors((prev) => ({ ...prev, assignedInvestigator: null }));
-                      }}
-                      disabled={isSubmitting}
-                      aria-invalid={!!errors.assignedInvestigator}
-                      aria-describedby={errors.assignedInvestigator ? 'case-investigator-error' : undefined}
-                      required
-                    >
-                      <option value="">Select investigator</option>
-                      <option value="Analyst01">Analyst01</option>
-                      <option value="Investigator02">Investigator02</option>
-                      <option value="Security Analyst">Security Analyst</option>
-                      <option value="Forensic Analyst">Forensic Analyst</option>
-                    </select>
-                    {errors.assignedInvestigator && (
-                      <span id="case-investigator-error" className="trace-create-validation-error" role="alert">
-                        {errors.assignedInvestigator}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Severity Pill Radio Group Selection */}
-                  <div className="trace-create-field full-width">
-                    <span className="trace-create-label" id="severity-group-label">
-                      Severity
-                    </span>
-                    <div 
-                      className="trace-create-severity-wrapper" 
-                      role="radiogroup" 
-                      aria-labelledby="severity-group-label"
-                    >
-                      {SEVERITY_OPTIONS.map((opt) => {
-                        const isSelected = severity === opt.value;
-                        return (
-                          <button
-                            key={opt.value}
-                            type="button"
-                            className={`trace-create-severity-btn ${isSelected ? `selected ${opt.colorClass}` : ''}`}
-                            onClick={() => {
-                              if (isSubmitting) return;
-                              setSeverity(opt.value);
-                              if (errors.severity) setErrors((prev) => ({ ...prev, severity: null }));
-                            }}
-                            role="radio"
-                            aria-checked={isSelected}
-                            disabled={isSubmitting}
-                          >
-                            {opt.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    {errors.severity && (
-                      <span className="trace-create-validation-error" role="alert">
-                        {errors.severity}
-                      </span>
-                    )}
-                  </div>
-
-                </div>
-
-                {/* Submit Actions Row */}
-                <div className="trace-create-actions">
-                  <Link
-                    to="/cases"
-                    className="trace-create-cancel-btn"
-                    style={{ pointerEvents: isSubmitting ? 'none' : 'auto' }}
-                  >
-                    Cancel
-                  </Link>
-                  <button
-                    type="submit"
-                    className="trace-create-submit-btn"
-                    disabled={isSubmitting}
-                  >
-                    {isSubmitting && <span className="trace-create-btn-spinner" aria-hidden="true" />}
-                    <span>{isSubmitting ? 'Creating Case...' : 'Create Case'}</span>
-                  </button>
-                </div>
-
-              </form>
-
             </div>
           </div>
 
-        </main>
+        </div>
+
+        {/* Decorative Analytics Preview Footer */}
+        <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6 opacity-40 hover:opacity-100 transition-all select-none">
+          <div className="glass-card p-4 rounded-lg text-left">
+            <p className="text-[10px] font-label-caps text-on-surface-variant font-bold">SYSTEM LOAD</p>
+            <div className="h-8 flex items-end gap-1 mt-2">
+              <div className="w-2 bg-primary h-[40%] rounded-t-sm"></div>
+              <div className="w-2 bg-primary h-[70%] rounded-t-sm"></div>
+              <div className="w-2 bg-primary h-[50%] rounded-t-sm"></div>
+              <div className="w-2 bg-primary h-[90%] rounded-t-sm"></div>
+              <div className="w-2 bg-primary h-[60%] rounded-t-sm"></div>
+            </div>
+          </div>
+          <div className="glass-card p-4 rounded-lg text-left">
+            <p className="text-[10px] font-label-caps text-on-surface-variant font-bold">NODE STATUS</p>
+            <p className="text-lg font-bold text-secondary mt-2">ACTIVE</p>
+          </div>
+          <div className="glass-card p-4 rounded-lg text-left">
+            <p className="text-[10px] font-label-caps text-on-surface-variant font-bold">THREAT FEED</p>
+            <p className="text-lg font-bold text-error mt-2">STABLE</p>
+          </div>
+          <div className="glass-card p-4 rounded-lg text-left">
+            <p className="text-[10px] font-label-caps text-on-surface-variant font-bold">UPLINK SPEED</p>
+            <p className="text-lg font-bold text-on-surface mt-2 font-mono">10 GBPS</p>
+          </div>
+        </div>
+
       </div>
     </div>
   );
