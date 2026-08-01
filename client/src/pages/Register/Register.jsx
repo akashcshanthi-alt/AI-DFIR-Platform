@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Shield, User, Mail, Globe, Lock, Eye, EyeOff, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
-import { createUserWithEmailAndPassword, updateProfile, sendEmailVerification } from 'firebase/auth';
+import { createUserWithEmailAndPassword, updateProfile, sendEmailVerification, signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../../services/firebase';
 
 const mapFirebaseError = (error) => {
@@ -126,15 +126,37 @@ export default function Register() {
         await sendEmailVerification(userCredential.user);
         console.log('[Register] sendEmailVerification Success');
 
-        setSuccessMessage('Verification email has been sent. Please verify your email before logging in.');
+        setSuccessMessage('Verification email has been sent. Redirecting to Verification Center...');
         
         setTimeout(() => {
           setIsSubmitting(false);
-          navigate('/login');
-        }, 6000);
+          navigate('/verify');
+        }, 1500);
       } catch (error) {
         console.error('[Register] Error occurred:', error);
-        console.error('[Register] Error code:', error.code, 'Error message:', error.message);
+        if (error.code === 'auth/email-already-in-use') {
+          try {
+            console.log('[Register] Email already in use. Checking credentials verification sign-in...');
+            const loginResult = await signInWithEmailAndPassword(auth, email.trim(), password);
+            
+            if (loginResult.user.emailVerified) {
+              console.log('[Register] Existing user is verified. Logging in...');
+              localStorage.setItem('isAuthenticated', 'true');
+              localStorage.setItem('operatorName', loginResult.user.displayName || 'Operator');
+              localStorage.setItem('operatorEmail', loginResult.user.email || '');
+              localStorage.setItem('operatorAvatar', loginResult.user.photoURL || '');
+              navigate('/dashboard', { replace: true });
+            } else {
+              console.log('[Register] Existing user is not verified. Redirecting to Verification Center...');
+              navigate('/verify', { state: { existsUnverified: true } });
+            }
+            setIsSubmitting(false);
+            return;
+          } catch (loginErr) {
+            console.error('[Register] Existing credentials verification sign-in failed:', loginErr);
+            // Fall through to show the duplicate email error
+          }
+        }
         setIsSubmitting(false);
         const userFriendlyMessage = mapFirebaseError(error);
         setErrors({ auth: `${userFriendlyMessage} (Debug Code: ${error.code || 'unknown'})` });

@@ -14,6 +14,7 @@ import ForgotPassword from './pages/ForgotPassword/ForgotPassword';
 import AIInvestigation from './pages/AIInvestigation/AIInvestigation';
 import ReportsCenter from './pages/Reports/ReportsCenter';
 import Profile from './pages/Profile/Profile';
+import VerificationCenter from './pages/VerificationCenter/VerificationCenter';
 
 // Import layout components
 import Sidebar from './components/layout/Sidebar';
@@ -189,6 +190,7 @@ export default function App() {
         <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
         <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
         <Route path="/forgot-password" element={<PublicRoute><ForgotPassword /></PublicRoute>} />
+        <Route path="/verify" element={<PublicRoute><VerificationCenter /></PublicRoute>} />
 
         {/* Protected Authenticated Routing Layout */}
         <Route element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>

@@ -111,11 +111,11 @@ export default function Login() {
       try {
         const result = await signInWithEmailAndPassword(auth, email.trim(), password);
         
-        // Prevent login if email is not verified
+        // Redirect to Verification Center if email is not verified
         if (!result.user.emailVerified) {
-          await signOut(auth);
-          setErrors({ auth: 'Please verify your email before logging in. A verification link was sent to your email.' });
+          console.log('[Login] User email not verified. Redirecting to Verification Center...');
           setIsLoading(false);
+          navigate('/verify');
           return;
         }
 
