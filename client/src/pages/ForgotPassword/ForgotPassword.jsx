@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { FiShield, FiMail, FiArrowLeft } from 'react-icons/fi';
+import { Shield, Mail, ArrowLeft, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { sendPasswordResetEmail } from 'firebase/auth';
+import { auth } from '../../services/firebase';
 
 /**
  * ForgotPassword Component
@@ -29,32 +31,57 @@ export default function ForgotPassword() {
     return Object.keys(tempErrors).length === 0;
   };
 
-  // Simulated email trigger submit handler
-  const handleSubmit = (e) => {
+  const mapFirebaseError = (error) => {
+    switch (error.code) {
+      case 'auth/user-not-found':
+        return 'No operator record found with this email address.';
+      case 'auth/invalid-email':
+        return 'Please enter a valid operator email address.';
+      case 'auth/too-many-requests':
+        return 'Access blocked due to excessive attempts. Please try again later.';
+      default:
+        return error.message || 'An unexpected error occurred. Please try again.';
+    }
+  };
+
+  // Firebase sendPasswordResetEmail submit handler
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (isLoading || isSent) return;
 
     if (validateForm()) {
       setIsLoading(true);
+      setErrors({});
 
-      // Simulate network request delay
-      setTimeout(() => {
+      try {
+        console.log('[ForgotPassword] Starting sendPasswordResetEmail for email:', email.trim());
+        await sendPasswordResetEmail(auth, email.trim());
+        console.log('[ForgotPassword] sendPasswordResetEmail Success');
         setIsLoading(false);
         setIsSent(true);
-      }, 1500);
+      } catch (error) {
+        console.error('[ForgotPassword] Error occurred:', error);
+        console.error('[ForgotPassword] Error code:', error.code, 'Error message:', error.message);
+        setIsLoading(false);
+        const userFriendlyMessage = mapFirebaseError(error);
+        setErrors({ auth: `${userFriendlyMessage} (Debug Code: ${error.code || 'unknown'})` });
+      }
     }
   };
 
+  // Real-time email validation checking for inline feedback
+  const isEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+
   return (
     <main className="trace-forgot-page">
-      {/* Self-contained styling matching Login.jsx */}
+      {/* Self-contained styling block for premium enterprise design system */}
       <style dangerouslySetInnerHTML={{
         __html: `
           .trace-forgot-page {
             display: flex;
             min-height: 100vh;
-            background-color: var(--bg-main, #060913);
-            color: var(--text-primary, #f8fafc);
+            background-color: #050814;
+            color: #F8FAFC;
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             overflow-x: hidden;
             width: 100%;
@@ -68,7 +95,7 @@ export default function ForgotPassword() {
             flex-direction: column;
             justify-content: space-between;
             background: radial-gradient(circle at 30% 30%, #0c152b 0%, #04070e 100%);
-            border-right: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+            border-right: 1px solid rgba(255, 255, 255, 0.08);
             padding: 48px;
             position: relative;
             overflow: hidden;
@@ -107,7 +134,7 @@ export default function ForgotPassword() {
 
           .trace-forgot-brand-icon {
             font-size: 2.2rem;
-            color: var(--color-primary, #3b82f6);
+            color: #47FAF3;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -123,13 +150,13 @@ export default function ForgotPassword() {
             font-weight: 800;
             letter-spacing: 0.1em;
             line-height: 1.1;
-            color: var(--text-primary, #f8fafc);
+            color: #F8FAFC;
           }
 
           .trace-forgot-brand-subtitle {
             font-size: 0.75rem;
             font-weight: 700;
-            color: var(--color-secondary, #06b6d4);
+            color: #3B82F6;
             letter-spacing: 0.12em;
             text-transform: uppercase;
             margin-top: 2px;
@@ -145,25 +172,25 @@ export default function ForgotPassword() {
             font-size: 2.25rem;
             font-weight: 700;
             line-height: 1.25;
-            color: var(--text-primary, #f8fafc);
+            color: #F8FAFC;
             margin-bottom: 20px;
           }
 
           .trace-forgot-hero-title span {
-            color: var(--color-primary, #3b82f6);
+            color: #47FAF3;
           }
 
           .trace-forgot-hero-desc {
             font-size: 0.95rem;
             line-height: 1.6;
-            color: var(--text-secondary, #cbd5e1);
+            color: #94A3B8;
           }
 
           .trace-forgot-left-footer {
             font-size: 0.8125rem;
             font-weight: 600;
             letter-spacing: 0.1em;
-            color: var(--color-secondary, #06b6d4);
+            color: #3B82F6;
             text-transform: uppercase;
             z-index: 2;
             user-select: none;
@@ -189,21 +216,27 @@ export default function ForgotPassword() {
             justify-content: center;
             padding: 48px;
             box-sizing: border-box;
-            background-color: var(--bg-main, #060913);
+            background-color: #050814;
           }
 
           .trace-forgot-card {
             width: 100%;
-            max-width: 400px;
-            background-color: var(--bg-surface, #0e1626);
-            border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
-            border-radius: var(--radius-lg, 12px);
+            max-width: 440px;
+            background-color: #101827;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 16px;
             padding: 40px 32px;
-            box-shadow: var(--shadow-lg);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
             box-sizing: border-box;
             display: flex;
             flex-direction: column;
             gap: 24px;
+            transition: border-color 250ms ease, box-shadow 250ms ease;
+          }
+
+          .trace-forgot-card:hover {
+            border-color: rgba(71, 250, 243, 0.15);
+            box-shadow: 0 10px 30px rgba(71, 250, 243, 0.03);
           }
 
           .trace-forgot-card-header {
@@ -213,15 +246,15 @@ export default function ForgotPassword() {
           }
 
           .trace-forgot-title {
-            font-size: 1.35rem;
-            font-weight: 600;
+            font-size: 1.5rem;
+            font-weight: 700;
             margin: 0;
-            color: var(--text-primary, #f8fafc);
+            color: #F8FAFC;
           }
 
           .trace-forgot-support-text {
             font-size: 0.875rem;
-            color: var(--text-muted, #64748b);
+            color: #94A3B8;
             line-height: 1.45;
             margin: 0;
           }
@@ -229,19 +262,21 @@ export default function ForgotPassword() {
           .trace-forgot-form {
             display: flex;
             flex-direction: column;
-            gap: 18px;
+            gap: 20px;
           }
 
           .trace-forgot-field {
             display: flex;
             flex-direction: column;
-            gap: 6px;
+            gap: 8px;
           }
 
           .trace-forgot-label {
-            font-size: 0.8125rem;
+            font-size: 12px;
             font-weight: 600;
-            color: var(--text-secondary, #cbd5e1);
+            color: #cbd5e1;
+            text-transform: uppercase;
+            letter-spacing: 0.10em;
           }
 
           .trace-forgot-input-container {
@@ -249,132 +284,133 @@ export default function ForgotPassword() {
             display: flex;
             align-items: center;
             width: 100%;
+            background-color: #0F172A;
+            border: 1px solid rgba(255,255,255,.08);
+            border-radius: 14px;
+            height: 54px;
+            box-sizing: border-box;
+            transition: border-color 250ms ease, box-shadow 250ms ease;
+          }
+
+          .trace-forgot-input-container:focus-within {
+            border-color: #47FAF3;
+            box-shadow: 0 0 20px rgba(71,250,243,.25);
+          }
+
+          .trace-forgot-input-container.error-state {
+            border-color: #EF4444;
           }
 
           .trace-forgot-input-icon {
             position: absolute;
-            left: 12px;
-            color: var(--text-muted, #64748b);
-            font-size: 1rem;
+            left: 18px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 18px;
+            height: 18px;
+            color: #94A3B8;
             pointer-events: none;
             display: flex;
             align-items: center;
             justify-content: center;
+            z-index: 10;
           }
 
           .trace-forgot-input {
             width: 100%;
-            background-color: var(--bg-secondary, #0a0f1d);
-            border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
-            border-radius: var(--radius-sm, 4px);
-            padding: 10px 12px 10px 36px;
-            color: var(--text-primary, #f8fafc);
-            font-size: 0.875rem;
+            background: transparent;
+            border: none;
+            padding-left: 52px !important;
+            padding-right: 18px;
+            padding-top: 0;
+            padding-bottom: 0;
+            color: #F8FAFC;
+            font-size: 14px;
             outline: none;
-            transition: all var(--transition-speed, 200ms) ease;
-            height: 40px;
+            height: 100%;
             box-sizing: border-box;
           }
 
-          .trace-forgot-input:focus {
-            border-color: var(--color-primary, #3b82f6);
-            box-shadow: 0 0 0 1px var(--color-primary-light, rgba(59, 130, 246, 0.15));
+          .trace-forgot-input::placeholder {
+            color: #94A3B8;
           }
 
-          .trace-forgot-input.error {
-            border-color: var(--status-critical, #ef4444);
-            box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.15);
-          }
-
-          .trace-forgot-validation-error {
-            font-size: 0.75rem;
-            color: var(--status-critical, #ef4444);
+          .trace-forgot-validation-feedback {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
             font-weight: 500;
-            margin-top: 3px;
+            margin-top: 4px;
+          }
+
+          .trace-forgot-validation-feedback.success {
+            color: #10B981;
+          }
+
+          .trace-forgot-validation-feedback.error {
+            color: #EF4444;
           }
 
           .trace-forgot-submit-btn {
-            background-color: var(--color-primary, #3b82f6);
+            background: linear-gradient(90deg, #22D3EE, #06B6D4);
             color: #ffffff;
-            border: 1px solid transparent;
-            border-radius: var(--radius-sm, 4px);
-            padding: 10px 16px;
-            font-size: 0.875rem;
+            border: none;
+            border-radius: 14px;
+            padding: 0 24px;
+            font-size: 15px;
             font-weight: 600;
             cursor: pointer;
-            transition: all var(--transition-speed, 200ms) ease;
+            transition: all 250ms ease;
             display: flex;
             align-items: center;
             justify-content: center;
             gap: 8px;
             width: 100%;
-            height: 40px;
+            height: 54px;
             box-sizing: border-box;
-            outline: none;
-            margin-top: 6px;
-            user-select: none;
+            box-shadow: 0 10px 30px rgba(34,211,238,.35);
           }
 
           .trace-forgot-submit-btn:hover:not(:disabled) {
-            background-color: var(--color-primary-hover, #2563eb);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(34,211,238,.45);
+          }
+
+          .trace-forgot-submit-btn:active:not(:disabled) {
+            transform: scale(.98);
           }
 
           .trace-forgot-submit-btn:disabled {
-            opacity: 0.65;
+            opacity: 0.4;
             cursor: not-allowed;
-            background-color: var(--bg-surface-elevated, #162035);
-            color: var(--text-muted, #64748b);
-            border-color: var(--border-color, rgba(255, 255, 255, 0.08));
-          }
-
-          .trace-forgot-submit-btn:focus-visible {
-            outline: 2px solid var(--color-secondary, #06b6d4);
-            outline-offset: 2px;
-          }
-
-          .trace-forgot-btn-spinner {
-            width: 14px;
-            height: 14px;
-            border-radius: 50%;
-            border: 2px solid rgba(255, 255, 255, 0.15);
-            border-top-color: #ffffff;
-            animation: trace-forgot-spin 0.75s linear infinite;
-            flex-shrink: 0;
-          }
-
-          @keyframes trace-forgot-spin {
-            to { transform: rotate(360deg); }
           }
 
           /* Card Footer Links */
           .trace-forgot-card-footer {
             margin-top: 10px;
             text-align: center;
-            font-size: 0.8125rem;
-            color: var(--text-muted, #64748b);
+            font-size: 0.875rem;
+            color: #94A3B8;
             display: flex;
             align-items: center;
             justify-content: center;
           }
 
           .trace-forgot-login-link {
-            color: var(--color-primary, #3b82f6);
+            color: #47FAF3;
             text-decoration: none;
             font-weight: 600;
             display: inline-flex;
             align-items: center;
             gap: 6px;
-            transition: color var(--transition-speed, 200ms) ease;
+            transition: color 250ms ease;
             outline: none;
           }
 
           .trace-forgot-login-link:hover {
-            color: var(--color-secondary, #06b6d4);
-          }
-
-          .trace-forgot-login-link:focus-visible {
-            outline: 2px solid var(--color-primary, #3b82f6);
-            outline-offset: 1px;
+            text-decoration: underline;
+            color: #47FAF3;
           }
 
           /* Responsive Breakpoints */
@@ -398,7 +434,7 @@ export default function ForgotPassword() {
               flex: none;
               padding: 32px 24px;
               border-right: none;
-              border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+              border-bottom: 1px solid rgba(255, 255, 255, 0.08);
               background: radial-gradient(circle at 50% 50%, #0c152b 0%, #04070e 100%);
             }
             .trace-forgot-hero {
@@ -420,7 +456,7 @@ export default function ForgotPassword() {
               align-items: flex-start;
             }
             .trace-forgot-card {
-              padding: 24px 16px;
+              padding: 32px 24px;
               border: none;
               background: transparent;
               box-shadow: none;
@@ -437,7 +473,7 @@ export default function ForgotPassword() {
         <div className="trace-forgot-left-content">
           <div className="trace-forgot-brand">
             <div className="trace-forgot-brand-icon" aria-hidden="true">
-              <FiShield />
+              <Shield className="w-9 h-9 text-[#47FAF3]" />
             </div>
             <div className="trace-forgot-brand-text">
               <span className="trace-forgot-brand-name">TRACE AI</span>
@@ -459,17 +495,17 @@ export default function ForgotPassword() {
         {/* Vector SVG node visual */}
         <div className="trace-forgot-network-visual" aria-hidden="true">
           <svg viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-            <circle cx="100" cy="100" r="80" stroke="var(--color-primary, #3b82f6)" strokeWidth="0.75" strokeDasharray="4 4" opacity="0.15"/>
-            <circle cx="100" cy="100" r="50" stroke="var(--color-secondary, #06b6d4)" strokeWidth="0.75" strokeDasharray="6 2" opacity="0.25"/>
-            <circle cx="100" cy="100" r="20" stroke="var(--color-primary, #3b82f6)" strokeWidth="1" opacity="0.35"/>
-            <circle cx="100" cy="20" r="3" fill="var(--color-secondary, #06b6d4)"/>
-            <circle cx="180" cy="100" r="3.5" fill="var(--color-primary, #3b82f6)"/>
-            <circle cx="100" cy="180" r="3" fill="var(--color-secondary, #06b6d4)"/>
-            <circle cx="20" cy="100" r="3.5" fill="var(--color-primary, #3b82f6)"/>
-            <circle cx="156" cy="44" r="4.5" fill="var(--color-primary, #3b82f6)"/>
-            <line x1="100" y1="20" x2="156" y2="44" stroke="var(--color-secondary, #06b6d4)" strokeWidth="0.5" opacity="0.4"/>
-            <line x1="156" y1="44" x2="180" y2="100" stroke="var(--color-primary, #3b82f6)" strokeWidth="0.5" opacity="0.4"/>
-            <line x1="100" y1="100" x2="156" y2="44" stroke="var(--color-primary, #3b82f6)" strokeWidth="0.5" opacity="0.3"/>
+            <circle cx="100" cy="100" r="80" stroke="#47FAF3" strokeWidth="0.75" strokeDasharray="4 4" opacity="0.15"/>
+            <circle cx="100" cy="100" r="50" stroke="#3B82F6" strokeWidth="0.75" strokeDasharray="6 2" opacity="0.25"/>
+            <circle cx="100" cy="100" r="20" stroke="#47FAF3" strokeWidth="1" opacity="0.35"/>
+            <circle cx="100" cy="20" r="3" fill="#3B82F6"/>
+            <circle cx="180" cy="100" r="3.5" fill="#47FAF3"/>
+            <circle cx="100" cy="180" r="3" fill="#3B82F6"/>
+            <circle cx="20" cy="100" r="3.5" fill="#47FAF3"/>
+            <circle cx="156" cy="44" r="4.5" fill="#47FAF3"/>
+            <line x1="100" y1="20" x2="156" y2="44" stroke="#3B82F6" strokeWidth="0.5" opacity="0.4"/>
+            <line x1="156" y1="44" x2="180" y2="100" stroke="#47FAF3" strokeWidth="0.5" opacity="0.4"/>
+            <line x1="100" y1="100" x2="156" y2="44" stroke="#47FAF3" strokeWidth="0.5" opacity="0.3"/>
           </svg>
         </div>
 
@@ -498,14 +534,14 @@ export default function ForgotPassword() {
                 <label htmlFor="trace-forgot-email" className="trace-forgot-label">
                   Email Address
                 </label>
-                <div className="trace-forgot-input-container">
+                <div className={`trace-forgot-input-container ${errors.email ? 'error-state' : ''}`}>
                   <span className="trace-forgot-input-icon" aria-hidden="true">
-                    <FiMail />
+                    <Mail className="w-[18px] h-[18px]" />
                   </span>
                   <input
                     id="trace-forgot-email"
                     type="email"
-                    className={`trace-forgot-input ${errors.email ? 'error' : ''}`}
+                    className="trace-forgot-input"
                     placeholder="analyst@trace.local"
                     autoComplete="email"
                     value={email}
@@ -519,12 +555,26 @@ export default function ForgotPassword() {
                     required
                   />
                 </div>
+                {email.trim() !== '' && isEmailValid && (
+                  <span className="trace-forgot-validation-feedback success" role="status">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>✓ Valid email</span>
+                  </span>
+                )}
                 {errors.email && (
-                  <span id="trace-forgot-email-error" className="trace-forgot-validation-error" role="alert">
-                    {errors.email}
+                  <span id="trace-forgot-email-error" className="trace-forgot-validation-feedback error" role="alert">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    <span>✕ {errors.email}</span>
                   </span>
                 )}
               </div>
+
+              {errors.auth && (
+                <div className="trace-forgot-validation-feedback error" role="alert" style={{ alignSelf: 'center', margin: '4px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  <span>✕ {errors.auth}</span>
+                </div>
+              )}
 
               {/* Submit button */}
               <button
@@ -532,15 +582,21 @@ export default function ForgotPassword() {
                 className="trace-forgot-submit-btn"
                 disabled={isLoading}
               >
-                {isLoading && <span className="trace-forgot-btn-spinner" aria-hidden="true" />}
-                <span>{isLoading ? 'Sending...' : 'Send Reset Instructions'}</span>
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+                    <span>Sending Instructions...</span>
+                  </>
+                ) : (
+                  <span>Send Reset Instructions</span>
+                )}
               </button>
             </form>
 
             {/* Back to login control */}
             <div className="trace-forgot-card-footer">
               <Link to="/login" className="trace-forgot-login-link">
-                <FiArrowLeft aria-hidden="true" />
+                <ArrowLeft className="w-4 h-4" aria-hidden="true" />
                 <span>Back to Login</span>
               </Link>
             </div>
@@ -549,17 +605,18 @@ export default function ForgotPassword() {
           /* State 2: Success state feedback */
           <div className="trace-forgot-card" role="status" aria-live="polite">
             <div className="trace-forgot-card-header">
-              <h1 className="trace-forgot-title" style={{ color: 'var(--status-low, #22c55e)' }}>
-                Reset instructions sent
+              <h1 className="trace-forgot-title" style={{ color: '#10B981', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <CheckCircle2 className="w-6 h-6" />
+                <span>Instructions sent</span>
               </h1>
               <p className="trace-forgot-support-text" style={{ marginTop: '8px' }}>
                 If an account exists for this email, password reset instructions have been sent.
               </p>
             </div>
 
-            <div className="trace-forgot-card-footer" style={{ borderTop: '1px solid rgba(255, 255, 255, 0.04)', paddingTop: '16px', marginTop: '12px' }}>
+            <div className="trace-forgot-card-footer" style={{ borderTop: '1px solid rgba(255, 255, 255, 0.08)', paddingTop: '16px', marginTop: '12px' }}>
               <Link to="/login" className="trace-forgot-login-link">
-                <FiArrowLeft aria-hidden="true" />
+                <ArrowLeft className="w-4 h-4" aria-hidden="true" />
                 <span>Back to Login</span>
               </Link>
             </div>

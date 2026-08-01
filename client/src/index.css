@@ -6,8 +6,8 @@
   font-family: Inter, "Segoe UI", Roboto, sans-serif;
   line-height: 1.5;
   font-weight: 400;
-  color: #eff5ff;
-  background: #05070d;
+  color: #F8FAFC;
+  background: #050814;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -18,7 +18,7 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  background: #05070d;
+  background: #050814;
 }
 
 #root {

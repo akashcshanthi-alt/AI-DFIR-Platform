@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>TRACE AI | Forensic Report Center</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;600&amp;family=Geist:wght@400;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-surface-variant": "#c1c6d7",
+                    "on-secondary-container": "#005d5a",
+                    "secondary-fixed-dim": "#00ddd6",
+                    "on-error": "#690005",
+                    "on-tertiary-fixed": "#410004",
+                    "tertiary": "#ffb3ae",
+                    "primary-fixed": "#d8e2ff",
+                    "outline": "#8b90a0",
+                    "on-surface": "#dfe2f3",
+                    "surface-tint": "#aec6ff",
+                    "on-background": "#dfe2f3",
+                    "tertiary-container": "#dd3438",
+                    "surface-bright": "#353946",
+                    "surface-dim": "#0f131f",
+                    "on-secondary-fixed-variant": "#00504d",
+                    "on-secondary-fixed": "#00201f",
+                    "on-tertiary-fixed-variant": "#930014",
+                    "surface-container-high": "#262a37",
+                    "inverse-primary": "#0059c5",
+                    "inverse-on-surface": "#2c303d",
+                    "surface": "#0f131f",
+                    "primary-fixed-dim": "#aec6ff",
+                    "error-container": "#93000a",
+                    "on-primary-container": "#ffffff",
+                    "background": "#0f131f",
+                    "on-tertiary-container": "#ffffff",
+                    "tertiary-fixed-dim": "#ffb3ae",
+                    "primary-container": "#0070f3",
+                    "error": "#ffb4ab",
+                    "secondary-fixed": "#47faf3",
+                    "outline-variant": "#414754",
+                    "on-primary-fixed": "#001a43",
+                    "surface-container-lowest": "#0a0e1a",
+                    "surface-container": "#1b1f2c",
+                    "surface-container-low": "#171b28",
+                    "secondary": "#47faf3",
+                    "primary": "#aec6ff",
+                    "tertiary-fixed": "#ffdad7",
+                    "on-tertiary": "#68000b",
+                    "on-primary-fixed-variant": "#004397",
+                    "on-primary": "#002e6b",
+                    "secondary-container": "#00ddd6",
+                    "surface-container-highest": "#313442",
+                    "on-secondary": "#003735",
+                    "surface-variant": "#313442",
+                    "on-error-container": "#ffdad6",
+                    "inverse-surface": "#dfe2f3"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "container-max": "1440px",
+                    "margin-mobile": "16px",
+                    "stack-sm": "8px",
+                    "stack-md": "16px",
+                    "stack-lg": "32px",
+                    "gutter": "24px",
+                    "stack-xs": "4px",
+                    "margin-desktop": "40px"
+            },
+            "fontFamily": {
+                    "code-sm": ["JetBrains Mono"],
+                    "label-caps": ["JetBrains Mono"],
+                    "display-lg": ["Geist"],
+                    "body-md": ["Inter"],
+                    "body-lg": ["Inter"],
+                    "headline-md": ["Geist"],
+                    "headline-lg": ["Geist"]
+            },
+            "fontSize": {
+                    "code-sm": ["13px", {"lineHeight": "20px", "fontWeight": "400"}],
+                    "label-caps": ["12px", {"lineHeight": "16px", "letterSpacing": "0.1em", "fontWeight": "600"}],
+                    "display-lg": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                    "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                    "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "600"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body {
+            background-color: #0a0e1a;
+            background-image: radial-gradient(circle at 2px 2px, rgba(255,255,255,0.03) 1px, transparent 0);
+            background-size: 32px 32px;
+        }
+        .glass-card {
+            background: rgba(27, 31, 44, 0.4);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-top: 1px solid rgba(255, 255, 255, 0.15);
+        }
+        .neon-glow-primary {
+            box-shadow: 0 0 15px rgba(174, 198, 255, 0.1);
+        }
+        .neon-glow-secondary {
+            box-shadow: 0 0 20px rgba(71, 250, 243, 0.15);
+        }
+        .status-pulse {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: .5; }
+        }
+        .scroll-hide::-webkit-scrollbar { display: none; }
+    </style>
+</head>
+<body class="text-on-surface font-body-md overflow-x-hidden">
+<!-- TopNavBar -->
+<header class="sticky top-0 z-50 flex items-center justify-between px-margin-desktop h-16 w-full bg-surface/80 dark:bg-surface/80 backdrop-blur-xl border-b border-white/10 shadow-[0_0_15px_rgba(174,198,255,0.1)]">
+<div class="flex items-center gap-8">
+<span class="font-headline-md text-headline-md font-bold tracking-tighter text-primary dark:text-primary">TRACE AI</span>
+<div class="hidden md:flex items-center gap-6">
+<nav class="flex gap-6">
+<a class="text-on-surface-variant dark:text-on-surface-variant hover:text-secondary dark:hover:text-secondary-fixed-dim transition-colors" href="#">Dashboard</a>
+<a class="text-on-surface-variant dark:text-on-surface-variant hover:text-secondary dark:hover:text-secondary-fixed-dim transition-colors" href="#">Incidents</a>
+<a class="text-primary dark:text-primary font-bold border-b-2 border-primary" href="#">Reports Center</a>
+<a class="text-on-surface-variant dark:text-on-surface-variant hover:text-secondary dark:hover:text-secondary-fixed-dim transition-colors" href="#">Forensics</a>
+</nav>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="relative">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-[20px]">search</span>
+<input class="bg-surface-container-low border-none rounded-full py-1.5 pl-10 pr-4 w-64 text-sm focus:ring-1 focus:ring-primary outline-none" placeholder="Search investigations..." type="text"/>
+</div>
+<div class="flex items-center gap-2">
+<button class="p-2 text-on-surface-variant hover:text-primary transition-colors active:scale-95 duration-200">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="p-2 text-on-surface-variant hover:text-primary transition-colors active:scale-95 duration-200">
+<span class="material-symbols-outlined">terminal</span>
+</button>
+<div class="w-8 h-8 rounded-full bg-primary-container flex items-center justify-center overflow-hidden border border-primary/20 ml-2">
+<img class="w-full h-full object-cover" data-alt="A professional close-up of a cybersecurity investigator's profile picture. The person is looking forward with a serious, focused expression. The background is a dimly lit futuristic server room with soft blue and teal ambient lighting, matching a high-tech corporate security aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDUrbTmKDUTlT99iiyhB9TTyhe5ZpZqyxeDeubUi8vskGkKgFMHxBAUbv6EavjnmECosc4r2a76b8EwyscJ04rwgE19dAeFLXINnYVYxXIWkkRs0pRsAAOfAQqYGWWilyi9cVIevoJHQx2biEyy3ad3LoRqEUaQ37V3XyIsksR-RUamANbJMbXXcz97m2bvIZHOVqNW6asdi-xQWfGI5IYvvPOuKQ81eHR-cYTtUlXxG7BkU1hsFyQX"/>
+</div>
+</div>
+</div>
+</header>
+<!-- SideNavBar (Hidden on Mobile) -->
+<aside class="fixed left-0 top-0 bottom-0 flex flex-col pt-20 pb-8 z-40 bg-surface-dim/90 dark:bg-surface-dim/90 backdrop-blur-2xl border-r border-white/5 shadow-2xl w-64 hidden xl:flex">
+<div class="px-4 mb-8">
+<button class="w-full py-3 px-4 bg-primary text-on-primary font-label-caps text-label-caps rounded-lg flex items-center justify-center gap-2 hover:bg-primary/90 transition-all shadow-[0_0_20px_rgba(174,198,255,0.3)]">
+<span class="material-symbols-outlined text-[18px]">add</span>
+                NEW INVESTIGATION
+            </button>
+</div>
+<nav class="flex-1 flex flex-col gap-1 px-2">
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant dark:text-on-surface-variant opacity-70 hover:bg-surface-container-highest/50 hover:opacity-100 transition-all hover:translate-x-1 duration-300" href="#">
+<span class="material-symbols-outlined">space_dashboard</span>
+<span class="font-label-caps text-label-caps">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant dark:text-on-surface-variant opacity-70 hover:bg-surface-container-highest/50 hover:opacity-100 transition-all hover:translate-x-1 duration-300" href="#">
+<span class="material-symbols-outlined">security</span>
+<span class="font-label-caps text-label-caps">Incidents</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-secondary dark:text-secondary bg-secondary-container/10 border-r-2 border-secondary shadow-[inset_-10px_0_10px_-10px_#47faf3] transition-all hover:translate-x-1 duration-300" href="#">
+<span class="material-symbols-outlined">description</span>
+<span class="font-label-caps text-label-caps">Reports Center</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant dark:text-on-surface-variant opacity-70 hover:bg-surface-container-highest/50 hover:opacity-100 transition-all hover:translate-x-1 duration-300" href="#">
+<span class="material-symbols-outlined">biotech</span>
+<span class="font-label-caps text-label-caps">Forensics</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant dark:text-on-surface-variant opacity-70 hover:bg-surface-container-highest/50 hover:opacity-100 transition-all hover:translate-x-1 duration-300" href="#">
+<span class="material-symbols-outlined">psychology</span>
+<span class="font-label-caps text-label-caps">Intelligence</span>
+</a>
+</nav>
+<div class="mt-auto px-4 space-y-2">
+<div class="flex items-center gap-2 p-3 bg-surface-container/50 rounded-lg border border-white/5">
+<div class="w-2 h-2 rounded-full bg-secondary-fixed status-pulse"></div>
+<div class="flex flex-col">
+<span class="text-[10px] text-on-surface-variant font-label-caps">SYSTEM STATUS</span>
+<span class="text-xs text-secondary">Terminal Active</span>
+</div>
+</div>
+<a class="flex items-center gap-2 text-on-surface-variant hover:text-white transition-colors text-xs px-2" href="#">
+<span class="material-symbols-outlined text-[16px]">help_center</span>
+                Support
+            </a>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="xl:ml-64 p-margin-desktop min-h-screen">
+<!-- Header Actions -->
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
+<div>
+<h1 class="font-headline-lg text-headline-lg text-on-surface mb-2">Reports Center</h1>
+<p class="text-on-surface-variant font-body-md max-w-2xl">Manage, generate, and analyze forensic evidence reports. AI-assisted synthesis is currently active for critical incident #TR-8821.</p>
+</div>
+<div class="flex items-center gap-3">
+<button class="px-5 py-2.5 bg-surface-container-high text-on-surface border border-white/10 rounded-lg font-label-caps text-label-caps flex items-center gap-2 hover:bg-surface-container-highest transition-all">
+<span class="material-symbols-outlined text-[20px]">calendar_month</span>
+                    Schedule
+                </button>
+<button class="px-5 py-2.5 bg-surface-container-high text-on-surface border border-white/10 rounded-lg font-label-caps text-label-caps flex items-center gap-2 hover:bg-surface-container-highest transition-all">
+<span class="material-symbols-outlined text-[20px]">ios_share</span>
+                    Export
+                </button>
+<button class="px-5 py-2.5 bg-primary text-on-primary rounded-lg font-label-caps text-label-caps flex items-center gap-2 hover:bg-primary/90 transition-all neon-glow-primary">
+<span class="material-symbols-outlined text-[20px]">magic_button</span>
+                    Generate Report
+                </button>
+</div>
+</div>
+<!-- KPI Bento Grid -->
+<div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-gutter mb-gutter">
+<div class="glass-card p-5 rounded-xl flex flex-col justify-between h-32 relative overflow-hidden group">
+<div class="absolute -right-4 -top-4 text-primary opacity-5 transform group-hover:scale-110 transition-transform duration-500">
+<span class="material-symbols-outlined text-[80px]">description</span>
+</div>
+<span class="text-on-surface-variant font-label-caps text-label-caps">Total Generated</span>
+<div class="flex items-baseline gap-2">
+<span class="text-3xl font-headline-md text-on-surface">1,284</span>
+<span class="text-xs text-secondary">+12%</span>
+</div>
+</div>
+<div class="glass-card p-5 rounded-xl flex flex-col justify-between h-32 relative overflow-hidden group">
+<span class="text-on-surface-variant font-label-caps text-label-caps">Scheduled</span>
+<div class="flex items-baseline gap-2">
+<span class="text-3xl font-headline-md text-on-surface">42</span>
+<span class="text-xs text-on-surface-variant">Ongoing</span>
+</div>
+<div class="w-full bg-white/5 h-1 rounded-full mt-2 overflow-hidden">
+<div class="bg-primary h-full w-[65%]"></div>
+</div>
+</div>
+<div class="glass-card p-5 rounded-xl flex flex-col justify-between h-32 relative overflow-hidden group">
+<span class="text-on-surface-variant font-label-caps text-label-caps">Investigations</span>
+<div class="flex items-baseline gap-2">
+<span class="text-3xl font-headline-md text-secondary">89</span>
+<span class="text-xs text-secondary-fixed-dim">Active</span>
+</div>
+</div>
+<div class="glass-card p-5 rounded-xl flex flex-col justify-between h-32 relative overflow-hidden group">
+<span class="text-on-surface-variant font-label-caps text-label-caps">Compliance</span>
+<div class="flex items-baseline gap-2">
+<span class="text-3xl font-headline-md text-on-surface">99.2%</span>
+<span class="text-xs text-secondary">Optimal</span>
+</div>
+</div>
+<div class="glass-card p-5 rounded-xl flex flex-col justify-between h-32 border-primary/20 bg-primary/5 relative overflow-hidden group">
+<span class="text-primary font-label-caps text-label-caps">AI Generated</span>
+<div class="flex items-baseline gap-2">
+<span class="text-3xl font-headline-md text-on-surface">412</span>
+<span class="material-symbols-outlined text-primary text-[18px]">auto_awesome</span>
+</div>
+</div>
+</div>
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-gutter">
+<!-- Left Column (Templates & Main List) -->
+<div class="lg:col-span-8 space-y-gutter">
+<!-- Report Templates Grid -->
+<section>
+<div class="flex items-center justify-between mb-4">
+<h2 class="text-on-surface font-headline-md text-[20px]">Report Templates</h2>
+<button class="text-secondary text-sm font-label-caps flex items-center gap-1 hover:underline">
+                            View All <span class="material-symbols-outlined text-[16px]">chevron_right</span>
+</button>
+</div>
+<div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+<!-- Template Card -->
+<div class="glass-card p-4 rounded-xl hover:border-secondary/40 transition-all cursor-pointer group">
+<div class="w-10 h-10 rounded-lg bg-surface-container-highest flex items-center justify-center mb-3 group-hover:bg-secondary/10 transition-colors">
+<span class="material-symbols-outlined text-secondary">monitoring</span>
+</div>
+<h3 class="font-semibold text-on-surface text-sm mb-1">Executive Summary</h3>
+<p class="text-[11px] text-on-surface-variant line-clamp-2">High-level briefing for leadership and stakeholders.</p>
+</div>
+<div class="glass-card p-4 rounded-xl hover:border-secondary/40 transition-all cursor-pointer group">
+<div class="w-10 h-10 rounded-lg bg-surface-container-highest flex items-center justify-center mb-3 group-hover:bg-secondary/10 transition-colors">
+<span class="material-symbols-outlined text-secondary">crisis_alert</span>
+</div>
+<h3 class="font-semibold text-on-surface text-sm mb-1">Incident Report</h3>
+<p class="text-[11px] text-on-surface-variant line-clamp-2">Technical analysis of breach events and remediation.</p>
+</div>
+<div class="glass-card p-4 rounded-xl hover:border-secondary/40 transition-all cursor-pointer group">
+<div class="w-10 h-10 rounded-lg bg-surface-container-highest flex items-center justify-center mb-3 group-hover:bg-secondary/10 transition-colors">
+<span class="material-symbols-outlined text-secondary">bug_report</span>
+</div>
+<h3 class="font-semibold text-on-surface text-sm mb-1">Malware Analysis</h3>
+<p class="text-[11px] text-on-surface-variant line-clamp-2">Detailed behavioral study of isolated malicious files.</p>
+</div>
+<div class="glass-card p-4 rounded-xl hover:border-secondary/40 transition-all cursor-pointer group">
+<div class="w-10 h-10 rounded-lg bg-surface-container-highest flex items-center justify-center mb-3 group-hover:bg-secondary/10 transition-colors">
+<span class="material-symbols-outlined text-secondary">gavel</span>
+</div>
+<h3 class="font-semibold text-on-surface text-sm mb-1">Evidence Report</h3>
+<p class="text-[11px] text-on-surface-variant line-clamp-2">Forensic chain of custody and artifact extraction docs.</p>
+</div>
+<div class="glass-card p-4 rounded-xl hover:border-secondary/40 transition-all cursor-pointer group">
+<div class="w-10 h-10 rounded-lg bg-surface-container-highest flex items-center justify-center mb-3 group-hover:bg-secondary/10 transition-colors">
+<span class="material-symbols-outlined text-secondary">hub</span>
+</div>
+<h3 class="font-semibold text-on-surface text-sm mb-1">IOC Report</h3>
+<p class="text-[11px] text-on-surface-variant line-clamp-2">Indicators of Compromise for fleet-wide distribution.</p>
+</div>
+<div class="glass-card p-4 rounded-xl hover:border-secondary/40 transition-all cursor-pointer group">
+<div class="w-10 h-10 rounded-lg bg-surface-container-highest flex items-center justify-center mb-3 group-hover:bg-secondary/10 transition-colors">
+<span class="material-symbols-outlined text-secondary">verified_user</span>
+</div>
+<h3 class="font-semibold text-on-surface text-sm mb-1">Compliance</h3>
+<p class="text-[11px] text-on-surface-variant line-clamp-2">GDPR/SOC2/HIPAA specific regulatory alignment.</p>
+</div>
+</div>
+</section>
+<!-- Recent Reports Table -->
+<section class="glass-card rounded-xl overflow-hidden">
+<div class="p-5 border-b border-white/5 flex items-center justify-between">
+<h2 class="text-on-surface font-headline-md text-[20px]">Recent Reports</h2>
+<div class="flex gap-2">
+<button class="p-1.5 hover:bg-white/5 rounded"><span class="material-symbols-outlined text-[20px]">filter_list</span></button>
+</div>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left">
+<thead class="bg-surface-container-low/50 text-[11px] text-on-surface-variant font-label-caps uppercase tracking-wider">
+<tr>
+<th class="px-6 py-4">Report Name</th>
+<th class="px-6 py-4">Case ID</th>
+<th class="px-6 py-4">Generated By</th>
+<th class="px-6 py-4">Date</th>
+<th class="px-6 py-4 text-right">Status</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-white/5 text-sm">
+<tr class="hover:bg-white/[0.02] transition-colors cursor-pointer group">
+<td class="px-6 py-4 font-medium text-on-surface">SOC-L3 Breach Summary</td>
+<td class="px-6 py-4 text-secondary font-code-sm">#TR-8821</td>
+<td class="px-6 py-4 flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-surface-container-highest border border-white/10"></div>
+<span>AI Sentinel v4</span>
+</td>
+<td class="px-6 py-4 text-on-surface-variant">Oct 24, 14:22</td>
+<td class="px-6 py-4 text-right">
+<span class="px-2 py-1 rounded bg-secondary/10 text-secondary text-[10px] font-bold uppercase">Complete</span>
+</td>
+</tr>
+<tr class="hover:bg-white/[0.02] transition-colors cursor-pointer">
+<td class="px-6 py-4 font-medium text-on-surface">Malware Analysis: Gootloader</td>
+<td class="px-6 py-4 text-secondary font-code-sm">#TR-8790</td>
+<td class="px-6 py-4 flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-primary-container/20 border border-primary/20"></div>
+<span>D. Sterling</span>
+</td>
+<td class="px-6 py-4 text-on-surface-variant">Oct 23, 09:15</td>
+<td class="px-6 py-4 text-right">
+<span class="px-2 py-1 rounded bg-secondary/10 text-secondary text-[10px] font-bold uppercase">Complete</span>
+</td>
+</tr>
+<tr class="hover:bg-white/[0.02] transition-colors cursor-pointer">
+<td class="px-6 py-4 font-medium text-on-surface">Compliance Audit Q3</td>
+<td class="px-6 py-4 text-secondary font-code-sm">#CMP-442</td>
+<td class="px-6 py-4 flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-surface-container-highest"></div>
+<span>System Auto</span>
+</td>
+<td class="px-6 py-4 text-on-surface-variant">Oct 22, 23:59</td>
+<td class="px-6 py-4 text-right">
+<span class="px-2 py-1 rounded bg-primary/10 text-primary text-[10px] font-bold uppercase">Processing</span>
+</td>
+</tr>
+<tr class="hover:bg-white/[0.02] transition-colors cursor-pointer">
+<td class="px-6 py-4 font-medium text-on-surface">Endpoint Forensics Node-8</td>
+<td class="px-6 py-4 text-secondary font-code-sm">#TR-8815</td>
+<td class="px-6 py-4 flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-primary-container/20 border border-primary/20"></div>
+<span>M. Chen</span>
+</td>
+<td class="px-6 py-4 text-on-surface-variant">Oct 21, 11:45</td>
+<td class="px-6 py-4 text-right">
+<span class="px-2 py-1 rounded bg-secondary/10 text-secondary text-[10px] font-bold uppercase">Complete</span>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<!-- Detailed Report Preview -->
+<section class="glass-card rounded-xl p-8 border-primary/20 relative overflow-hidden">
+<div class="absolute top-0 right-0 p-4">
+<span class="text-[10px] font-code-sm text-primary uppercase opacity-50">Draft v2.1.0</span>
+</div>
+<div class="max-w-4xl mx-auto">
+<div class="flex items-center gap-4 mb-8">
+<div class="w-12 h-16 bg-surface-container flex flex-col items-center justify-center rounded border border-white/10 shadow-lg">
+<span class="text-[10px] font-bold text-on-surface-variant">PDF</span>
+<span class="material-symbols-outlined text-primary">description</span>
+</div>
+<div>
+<h3 class="text-2xl font-headline-md text-on-surface">Incident Analysis #TR-8821</h3>
+<p class="text-on-surface-variant">Generated: Oct 24, 2023 | Classification: Top Secret</p>
+</div>
+</div>
+<div class="space-y-8">
+<div>
+<h4 class="text-secondary font-label-caps text-label-caps mb-3 flex items-center gap-2">
+<span class="w-1 h-4 bg-secondary"></span> Executive Summary
+                                </h4>
+<p class="text-on-surface-variant leading-relaxed">The incident involved a targeted credential harvesting campaign against Tier-2 administrative accounts. Rapid identification occurred at T+14 minutes, followed by an automated isolation of 3 redundant domain controllers. No data exfiltration was detected in the primary ledger.</p>
+</div>
+<div class="grid grid-cols-2 gap-8">
+<div>
+<h4 class="text-secondary font-label-caps text-label-caps mb-3 flex items-center gap-2">
+<span class="w-1 h-4 bg-secondary"></span> Evidence Summary
+                                    </h4>
+<ul class="space-y-2 text-sm text-on-surface-variant">
+<li class="flex items-center gap-2"><span class="material-symbols-outlined text-[14px] text-primary">check_circle</span> 14 Memory Dumps Analyzed</li>
+<li class="flex items-center gap-2"><span class="material-symbols-outlined text-[14px] text-primary">check_circle</span> 42 Network PCAP Files</li>
+<li class="flex items-center gap-2"><span class="material-symbols-outlined text-[14px] text-primary">check_circle</span> Registry Hive Snapshots</li>
+</ul>
+</div>
+<div>
+<h4 class="text-secondary font-label-caps text-label-caps mb-3 flex items-center gap-2">
+<span class="w-1 h-4 bg-secondary"></span> AI Findings
+                                    </h4>
+<div class="bg-surface-container/50 p-4 rounded-lg border border-primary/10">
+<p class="text-[12px] italic text-primary">"98.4% confidence match with APT-29 signature behaviors. Tactics suggest a lateral movement attempt using compromised PowerShell scripts."</p>
+</div>
+</div>
+</div>
+<div class="pt-6 border-t border-white/5">
+<h4 class="text-on-surface-variant font-label-caps text-[10px] uppercase mb-4 tracking-widest">Incident Timeline</h4>
+<div class="relative pl-6 border-l border-white/10 space-y-6">
+<div class="relative">
+<div class="absolute -left-[29px] top-1.5 w-3 h-3 rounded-full bg-secondary ring-4 ring-secondary/20"></div>
+<span class="text-[11px] font-code-sm text-secondary">02:14:22 UTC</span>
+<p class="text-sm">Initial intrusion detected via VPN Node 4</p>
+</div>
+<div class="relative">
+<div class="absolute -left-[29px] top-1.5 w-3 h-3 rounded-full bg-primary ring-4 ring-primary/20"></div>
+<span class="text-[11px] font-code-sm text-primary">02:28:10 UTC</span>
+<p class="text-sm">Automated containment triggered for affected nodes</p>
+</div>
+<div class="relative opacity-50">
+<div class="absolute -left-[29px] top-1.5 w-3 h-3 rounded-full bg-white/20"></div>
+<span class="text-[11px] font-code-sm text-on-surface-variant">03:00:00 UTC</span>
+<p class="text-sm">Root cause analysis initialized</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+</div>
+<!-- Right Column (AI Assistant & Insights) -->
+<div class="lg:col-span-4 space-y-gutter">
+<!-- AI Assistant Panel -->
+<div class="glass-card rounded-xl p-6 flex flex-col gap-6 sticky top-24">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
+</div>
+<div>
+<h3 class="font-headline-md text-[18px]">AI Assistant</h3>
+<span class="text-[10px] text-secondary uppercase font-bold tracking-widest">Reports Optimizer</span>
+</div>
+</div>
+<div class="space-y-4">
+<div class="bg-surface-container-high/50 p-4 rounded-lg">
+<p class="text-xs text-on-surface-variant mb-2">Suggested Improvements:</p>
+<ul class="space-y-2">
+<li class="flex items-start gap-2 text-[13px]">
+<span class="material-symbols-outlined text-secondary text-[16px] mt-0.5">add_task</span>
+                                    Add MITRE ATT&amp;CK mapping for Section 4.2
+                                </li>
+<li class="flex items-start gap-2 text-[13px]">
+<span class="material-symbols-outlined text-secondary text-[16px] mt-0.5">add_task</span>
+                                    Expand on root cause of credential leak
+                                </li>
+</ul>
+</div>
+<div class="flex flex-col items-center py-6 border-y border-white/5">
+<div class="relative w-32 h-32 flex items-center justify-center">
+<svg class="w-full h-full transform -rotate-90">
+<circle class="text-white/5" cx="64" cy="64" fill="transparent" r="58" stroke="currentColor" stroke-width="8"></circle>
+<circle class="text-secondary" cx="64" cy="64" fill="transparent" r="58" stroke="currentColor" stroke-dasharray="364" stroke-dashoffset="36.4" stroke-width="8"></circle>
+</svg>
+<div class="absolute flex flex-col items-center">
+<span class="text-2xl font-bold text-on-surface">90</span>
+<span class="text-[10px] text-on-surface-variant uppercase">Quality Score</span>
+</div>
+</div>
+</div>
+<div>
+<div class="flex justify-between items-center mb-2">
+<span class="text-xs font-label-caps">Compliance Status</span>
+<span class="text-xs text-secondary">92%</span>
+</div>
+<div class="w-full h-2 bg-white/5 rounded-full overflow-hidden">
+<div class="h-full bg-secondary" style="width: 92%"></div>
+</div>
+</div>
+<button class="w-full py-3 border border-primary/30 text-primary rounded-lg text-xs font-label-caps hover:bg-primary/5 transition-all">
+                            APPLY AUTO-FIXES
+                        </button>
+</div>
+<div class="space-y-4 pt-4 border-t border-white/5">
+<h4 class="text-xs font-label-caps text-on-surface-variant">Version Control</h4>
+<div class="space-y-3">
+<div class="flex items-center justify-between text-[11px]">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[14px]">history</span>
+<span>v2.1.0 (Current)</span>
+</div>
+<span class="text-on-surface-variant">10m ago</span>
+</div>
+<div class="flex items-center justify-between text-[11px] opacity-60">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[14px]">history</span>
+<span>v2.0.4 (Published)</span>
+</div>
+<span class="text-on-surface-variant">2h ago</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- History Section -->
+<section class="mt-gutter">
+<h2 class="text-on-surface font-headline-md text-[20px] mb-6">Report History &amp; Archival</h2>
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+<div class="glass-card p-4 rounded-xl flex items-center justify-between group hover:bg-white/[0.05] transition-colors cursor-pointer">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-on-surface-variant">folder_zip</span>
+<div>
+<p class="text-sm font-medium">Q2 Archive</p>
+<p class="text-[10px] text-on-surface-variant">420 Reports | 2.4 GB</p>
+</div>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant opacity-0 group-hover:opacity-100 transition-opacity">download</span>
+</div>
+<div class="glass-card p-4 rounded-xl flex items-center justify-between group hover:bg-white/[0.05] transition-colors cursor-pointer">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-on-surface-variant">inventory_2</span>
+<div>
+<p class="text-sm font-medium">Compliance-2022</p>
+<p class="text-[10px] text-on-surface-variant">88 Reports | 1.1 GB</p>
+</div>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant opacity-0 group-hover:opacity-100 transition-opacity">download</span>
+</div>
+<div class="glass-card p-4 rounded-xl flex items-center justify-between group hover:bg-white/[0.05] transition-colors cursor-pointer">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-on-surface-variant">description</span>
+<div>
+<p class="text-sm font-medium">Drafts Hub</p>
+<p class="text-[10px] text-on-surface-variant">12 Active Drafts</p>
+</div>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant opacity-0 group-hover:opacity-100 transition-opacity">arrow_forward</span>
+</div>
+<div class="glass-card p-4 rounded-xl border-dashed border-white/10 flex items-center justify-center gap-2 group hover:border-primary/50 transition-colors cursor-pointer">
+<span class="material-symbols-outlined text-on-surface-variant">add</span>
+<span class="text-sm text-on-surface-variant font-label-caps">Create Folder</span>
+</div>
+</div>
+</section>
+</main>
+<!-- Footer Status Bar -->
+<footer class="xl:ml-64 bg-surface-dim/80 backdrop-blur-xl border-t border-white/5 py-3 px-margin-desktop flex items-center justify-between">
+<div class="flex items-center gap-6 text-[10px] text-on-surface-variant font-label-caps tracking-widest">
+<span class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-secondary"></span> SECURE TUNNEL ACTIVE</span>
+<span>ENCRYPTION: AES-256-GCM</span>
+<span>WORKSTATION: NODE-X-88</span>
+</div>
+<div class="flex items-center gap-4 text-[10px] text-on-surface-variant font-label-caps">
+<span>© 2023 TRACE AI FORENSICS</span>
+<a class="hover:text-primary transition-colors" href="#">API ACCESS</a>
+</div>
+</footer>
+<script>
+        // Micro-interaction for table rows
+        document.querySelectorAll('tbody tr').forEach(row => {
+            row.addEventListener('click', () => {
+                // Subtle pulse effect on click to simulate loading
+                row.classList.add('bg-primary/5');
+                setTimeout(() => row.classList.remove('bg-primary/5'), 200);
+            });
+        });
+
+        // Simple quality score animation simulation
+        let score = 0;
+        const targetScore = 90;
+        const scoreElement = document.querySelector('.text-2xl.font-bold.text-on-surface');
+        
+        function animateScore() {
+            if (score < targetScore) {
+                score++;
+                scoreElement.innerText = score;
+                requestAnimationFrame(animateScore);
+            }
+        }
+        
+        // Trigger on load
+        window.addEventListener('load', () => {
+            setTimeout(animateScore, 500);
+        });
+    </script>
+</body></html>

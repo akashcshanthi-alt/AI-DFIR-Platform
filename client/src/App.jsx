@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate, Outlet } from 'react-router-dom';
 
 // Import pages
 import Login from './pages/Login/Login';
@@ -12,10 +12,14 @@ import AuditLogs from './pages/AuditLogs/AuditLogs';
 import Settings from './pages/Settings/Settings';
 import ForgotPassword from './pages/ForgotPassword/ForgotPassword';
 import AIInvestigation from './pages/AIInvestigation/AIInvestigation';
+import ReportsCenter from './pages/Reports/ReportsCenter';
+import Profile from './pages/Profile/Profile';
 
 // Import layout components
 import Sidebar from './components/layout/Sidebar';
 import Header from './components/layout/Header';
+import { auth } from './services/firebase';
+import { signOut } from 'firebase/auth';
 
 // Local development auth guard — checks if user is authenticated in localStorage
 const isAuthenticated = () => localStorage.getItem('isAuthenticated') === 'true';
@@ -49,9 +53,15 @@ function MainLayout() {
   const navigate = useNavigate();
 
   // Terminate developer session and redirect to Login
-  const handleLogout = () => {
-    localStorage.removeItem('isAuthenticated');
-    navigate('/login', { replace: true });
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+    } catch (err) {
+      console.error('Logout error:', err);
+    } finally {
+      localStorage.clear();
+      navigate('/login', { replace: true });
+    }
   };
 
   // Determine Title based on current route path
@@ -64,6 +74,8 @@ function MainLayout() {
     if (path === '/ai-investigation') return 'AI Investigation';
     if (path === '/audit-logs') return 'Audit Logs';
     if (path === '/settings') return 'Settings';
+    if (path === '/reports') return 'Reports Center';
+    if (path === '/profile') return 'Analyst Workspace';
     return 'Dashboard';
   };
 
@@ -107,7 +119,9 @@ function MainLayout() {
           .trace-create-layout,
           .trace-details-layout,
           .trace-audit-layout,
-          .trace-settings-layout {
+          .trace-settings-layout,
+          .trace-profile-layout,
+          .trace-reports-page {
             display: block !important;
             width: 100% !important;
             min-height: auto !important;
@@ -119,7 +133,9 @@ function MainLayout() {
           .trace-create-main,
           .trace-details-main,
           .trace-audit-main,
-          .trace-settings-main {
+          .trace-settings-main,
+          .trace-profile-main,
+          .trace-reports-main {
             display: block !important;
             width: 100% !important;
             height: auto !important;
@@ -133,7 +149,9 @@ function MainLayout() {
           .trace-create-content,
           .trace-details-content,
           .trace-audit-content,
-          .trace-settings-content {
+          .trace-settings-content,
+          .trace-profile-content,
+          .trace-reports-content {
             padding: 24px !important;
             overflow-y: visible !important;
             height: auto !important;
@@ -156,20 +174,7 @@ function MainLayout() {
 
         {/* Scrollable Page viewport Content */}
         <div className="trace-app-content">
-          <Routes>
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/cases" element={<Cases />} />
-            <Route path="/cases/new" element={<CreateCase />} />
-            <Route path="/cases/:id" element={<CaseDetails />} />
-            <Route path="/audit-logs" element={<AuditLogs />} />
-            <Route path="/settings" element={<Settings />} />
-            
-            <Route path="/ai-investigation" element={<AIInvestigation />} />
-            <Route path="/reports" element={<Navigate to="/cases/TRC-2026-0042" replace />} />
-            
-            {/* Fallback handler for unknown authenticated paths */}
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
-          </Routes>
+          <Outlet />
         </div>
       </div>
     </div>
@@ -186,7 +191,18 @@ export default function App() {
         <Route path="/forgot-password" element={<PublicRoute><ForgotPassword /></PublicRoute>} />
 
         {/* Protected Authenticated Routing Layout */}
-        <Route path="/*" element={<ProtectedRoute><MainLayout /></ProtectedRoute>} />
+        <Route element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/cases" element={<Cases />} />
+          <Route path="/cases/new" element={<CreateCase />} />
+          <Route path="/cases/:id" element={<CaseDetails />} />
+          <Route path="/audit-logs" element={<AuditLogs />} />
+          <Route path="/settings" element={<Settings />} />
+          <Route path="/ai-investigation" element={<AIInvestigation />} />
+          <Route path="/reports" element={<ReportsCenter />} />
+          <Route path="/profile" element={<Profile />} />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Route>
       </Routes>
     </BrowserRouter>
   );

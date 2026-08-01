@@ -1,6 +1,29 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { FiShield, FiUser, FiMail, FiGlobe, FiLock, FiEye, FiEyeOff } from 'react-icons/fi';
+import { Shield, User, Mail, Globe, Lock, Eye, EyeOff, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { createUserWithEmailAndPassword, updateProfile, sendEmailVerification } from 'firebase/auth';
+import { auth } from '../../services/firebase';
+
+const mapFirebaseError = (error) => {
+  switch (error.code) {
+    case 'auth/email-already-in-use':
+      return 'Email already exists in the system database.';
+    case 'auth/invalid-email':
+      return 'Invalid email address formatting.';
+    case 'auth/weak-password':
+      return 'Clearance key does not meet required strength criteria.';
+    case 'auth/wrong-password':
+      return 'Invalid operator clearance key.';
+    case 'auth/user-not-found':
+      return 'No operator record found with these credentials.';
+    case 'auth/too-many-requests':
+      return 'Access blocked due to excessive attempts. Please try again later.';
+    case 'auth/operation-not-allowed':
+      return 'Email/Password provider is disabled in your Firebase console. Please go to Authentication > Sign-in method in Firebase Console to enable it.';
+    default:
+      return error.message || 'An unexpected authentication error occurred.';
+  }
+};
 
 /**
  * Register Component
@@ -25,6 +48,23 @@ export default function Register() {
   // Status flags
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+
+  // Password strength logic
+  const getPasswordStrength = (val) => {
+    if (!val) return { score: 0, text: '', color: 'bg-transparent', width: '0%' };
+    let score = 0;
+    if (val.length >= 8) score++;
+    if (/[A-Z]/.test(val)) score++;
+    if (/[0-9]/.test(val)) score++;
+    if (/[^A-Za-z0-9]/.test(val)) score++;
+
+    if (score <= 1) return { score: 1, text: 'Weak', color: 'bg-red-500', width: '33%', style: '#EF4444' };
+    if (score === 2 || score === 3) return { score: 2, text: 'Medium', color: 'bg-yellow-500', width: '66%', style: '#F59E0B' };
+    return { score: 4, text: 'Strong', color: 'bg-emerald-500', width: '100%', style: '#10B981' };
+  };
+
+  const strength = getPasswordStrength(password);
 
   // Verification checks matching standard rules
   const validateForm = () => {
@@ -61,32 +101,69 @@ export default function Register() {
     return Object.keys(tempErrors).length === 0;
   };
 
-  // Submit handler with mock account creation flow
-  const handleSubmit = (e) => {
+  // Submit handler with Firebase user registration
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (isSubmitting) return;
 
     if (validateForm()) {
       setIsSubmitting(true);
+      setErrors({});
+      setSuccessMessage('');
 
-      // Simulate registration delay before navigating to login
-      setTimeout(() => {
+      try {
+        console.log('[Register] Starting createUserWithEmailAndPassword for email:', email.trim());
+        const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
+        console.log('[Register] createUserWithEmailAndPassword Success. User UID:', userCredential.user?.uid);
+        
+        console.log('[Register] Starting updateProfile for name:', name.trim());
+        await updateProfile(userCredential.user, {
+          displayName: name.trim(),
+        });
+        console.log('[Register] updateProfile Success');
+
+        console.log('[Register] Starting sendEmailVerification');
+        await sendEmailVerification(userCredential.user);
+        console.log('[Register] sendEmailVerification Success');
+
+        setSuccessMessage('Verification email has been sent. Please verify your email before logging in.');
+        
+        setTimeout(() => {
+          setIsSubmitting(false);
+          navigate('/login');
+        }, 6000);
+      } catch (error) {
+        console.error('[Register] Error occurred:', error);
+        console.error('[Register] Error code:', error.code, 'Error message:', error.message);
         setIsSubmitting(false);
-        navigate('/login');
-      }, 1500);
+        const userFriendlyMessage = mapFirebaseError(error);
+        setErrors({ auth: `${userFriendlyMessage} (Debug Code: ${error.code || 'unknown'})` });
+      }
     }
   };
 
+  // Real-time validation indicators
+  const isNameValid = name.trim().length > 0;
+  const isEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  const isOrgValid = organization.trim().length > 0;
+  const isPasswordValid = password.length >= 8;
+  const isConfirmPasswordValid = confirmPassword.length > 0 && confirmPassword === password;
+
   return (
     <main className="trace-register-page">
-      {/* Self-contained style block to maintain strict design cohesion */}
+      {successMessage && (
+        <div className="fixed top-20 right-6 z-50 bg-[#10b981]/15 border border-[#10b981] text-[#10b981] text-xs px-4 py-2.5 rounded-lg shadow-xl font-bold">
+          ✓ {successMessage}
+        </div>
+      )}
+      {/* Self-contained style block for premium register styling matching Login.jsx */}
       <style dangerouslySetInnerHTML={{
         __html: `
           .trace-register-page {
             display: flex;
             min-height: 100vh;
-            background-color: var(--bg-main, #060913);
-            color: var(--text-primary, #f8fafc);
+            background-color: #050814;
+            color: #F8FAFC;
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             overflow-x: hidden;
             width: 100%;
@@ -100,14 +177,14 @@ export default function Register() {
             flex-direction: column;
             justify-content: space-between;
             background: radial-gradient(circle at 30% 30%, #0c152b 0%, #04070e 100%);
-            border-right: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+            border-right: 1px solid rgba(255, 255, 255, 0.08);
             padding: 48px;
             position: relative;
             overflow: hidden;
             box-sizing: border-box;
           }
 
-          /* Digital matrix grid grid overlay */
+          /* Digital matrix grid overlay */
           .trace-register-grid-overlay {
             position: absolute;
             top: 0;
@@ -139,7 +216,7 @@ export default function Register() {
 
           .trace-register-brand-icon {
             font-size: 2.2rem;
-            color: var(--color-primary, #3b82f6);
+            color: #47FAF3;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -155,13 +232,13 @@ export default function Register() {
             font-weight: 800;
             letter-spacing: 0.1em;
             line-height: 1.1;
-            color: var(--text-primary, #f8fafc);
+            color: #F8FAFC;
           }
 
           .trace-register-brand-subtitle {
             font-size: 0.75rem;
             font-weight: 700;
-            color: var(--color-secondary, #06b6d4);
+            color: #3B82F6;
             letter-spacing: 0.12em;
             text-transform: uppercase;
             margin-top: 2px;
@@ -177,25 +254,25 @@ export default function Register() {
             font-size: 2.25rem;
             font-weight: 700;
             line-height: 1.25;
-            color: var(--text-primary, #f8fafc);
+            color: #F8FAFC;
             margin-bottom: 20px;
           }
 
           .trace-register-hero-title span {
-            color: var(--color-primary, #3b82f6);
+            color: #47FAF3;
           }
 
           .trace-register-hero-desc {
             font-size: 0.95rem;
             line-height: 1.6;
-            color: var(--text-secondary, #cbd5e1);
+            color: #94A3B8;
           }
 
           .trace-register-left-footer {
             font-size: 0.8125rem;
             font-weight: 600;
             letter-spacing: 0.1em;
-            color: var(--color-secondary, #06b6d4);
+            color: #3B82F6;
             text-transform: uppercase;
             z-index: 2;
             user-select: none;
@@ -221,18 +298,24 @@ export default function Register() {
             justify-content: center;
             padding: 48px;
             box-sizing: border-box;
-            background-color: var(--bg-main, #060913);
+            background-color: #050814;
           }
 
           .trace-register-card {
             width: 100%;
-            max-width: 420px;
-            background-color: var(--bg-surface, #0e1626);
-            border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
-            border-radius: var(--radius-lg, 12px);
+            max-width: 440px;
+            background-color: #101827;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 16px;
             padding: 36px 32px;
-            box-shadow: var(--shadow-lg);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
             box-sizing: border-box;
+            transition: border-color 250ms ease, box-shadow 250ms ease;
+          }
+
+          .trace-register-card:hover {
+            border-color: rgba(71, 250, 243, 0.15);
+            box-shadow: 0 10px 30px rgba(71, 250, 243, 0.03);
           }
 
           .trace-register-card-header {
@@ -240,34 +323,36 @@ export default function Register() {
           }
 
           .trace-register-title {
-            font-size: 1.35rem;
-            font-weight: 600;
+            font-size: 1.5rem;
+            font-weight: 700;
             margin-bottom: 6px;
-            color: var(--text-primary, #f8fafc);
+            color: #F8FAFC;
           }
 
           .trace-register-support-text {
             font-size: 0.875rem;
-            color: var(--text-muted, #64748b);
+            color: #94A3B8;
           }
 
           /* Form Controls */
           .trace-register-form {
             display: flex;
             flex-direction: column;
-            gap: 14px;
+            gap: 16px;
           }
 
           .trace-register-field {
             display: flex;
             flex-direction: column;
-            gap: 5px;
+            gap: 8px;
           }
 
           .trace-register-label {
-            font-size: 0.8125rem;
+            font-size: 12px;
             font-weight: 600;
-            color: var(--text-secondary, #cbd5e1);
+            color: #cbd5e1;
+            text-transform: uppercase;
+            letter-spacing: 0.10em;
           }
 
           .trace-register-input-container {
@@ -275,154 +360,153 @@ export default function Register() {
             display: flex;
             align-items: center;
             width: 100%;
+            background-color: #0F172A;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 14px;
+            height: 54px;
+            box-sizing: border-box;
+            transition: border-color 250ms ease, box-shadow 250ms ease;
+          }
+
+          .trace-register-input-container:focus-within {
+            border-color: #47FAF3;
+            box-shadow: 0 0 20px rgba(71, 250, 243, 0.25);
+          }
+
+          .trace-register-input-container.error {
+            border-color: #EF4444;
           }
 
           .trace-register-input-icon {
             position: absolute;
-            left: 12px;
-            color: var(--text-muted, #64748b);
-            font-size: 1rem;
+            left: 18px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 18px;
+            height: 18px;
+            color: #94A3B8;
             pointer-events: none;
             display: flex;
             align-items: center;
             justify-content: center;
+            z-index: 10;
           }
 
           .trace-register-input {
             width: 100%;
-            background-color: var(--bg-secondary, #0a0f1d);
-            border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
-            border-radius: var(--radius-sm, 4px);
-            padding: 10px 40px 10px 36px;
-            color: var(--text-primary, #f8fafc);
-            font-size: 0.875rem;
+            background: transparent;
+            border: none;
+            padding-left: 52px !important;
+            padding-right: 40px;
+            padding-top: 0;
+            padding-bottom: 0;
+            color: #F8FAFC;
+            font-size: 14px;
             outline: none;
-            transition: all var(--transition-speed, 200ms) ease;
-            height: 40px;
+            height: 100%;
             box-sizing: border-box;
           }
 
-          .trace-register-input:focus {
-            border-color: var(--color-primary, #3b82f6);
-            box-shadow: 0 0 0 1px var(--color-primary-light, rgba(59, 130, 246, 0.15));
-          }
-
-          .trace-register-input.error {
-            border-color: var(--status-critical, #ef4444);
-            box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.15);
+          .trace-register-input::placeholder {
+            color: #94A3B8;
           }
 
           .trace-register-password-toggle {
             position: absolute;
-            right: 12px;
+            right: 0;
+            top: 0;
+            bottom: 0;
             background: transparent;
             border: none;
-            color: var(--text-muted, #64748b);
+            color: #94A3B8;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 1.05rem;
+            width: 48px;
+            height: 54px;
+            padding: 0 18px 0 10px;
             outline: none;
-            padding: 0;
-            height: 24px;
-            width: 24px;
-            transition: color var(--transition-speed, 200ms) ease;
+            box-sizing: border-box;
+            transition: color 250ms ease;
           }
 
           .trace-register-password-toggle:hover {
-            color: var(--text-secondary, #cbd5e1);
+            color: #47FAF3;
           }
 
-          .trace-register-password-toggle:focus-visible {
-            outline: 2px solid var(--color-primary, #3b82f6);
-            border-radius: var(--radius-sm, 4px);
-          }
-
-          .trace-register-validation-error {
-            font-size: 0.75rem;
-            color: var(--status-critical, #ef4444);
+          .trace-register-validation-feedback {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
             font-weight: 500;
-            margin-top: 3px;
+            margin-top: 4px;
+          }
+
+          .trace-register-validation-feedback.success {
+            color: #10B981;
+          }
+
+          .trace-register-validation-feedback.error {
+            color: #EF4444;
           }
 
           /* Submit Button & loading spinner */
           .trace-register-submit-btn {
-            background-color: var(--color-primary, #3b82f6);
+            background: linear-gradient(90deg, #22D3EE, #06B6D4);
             color: #ffffff;
-            border: 1px solid transparent;
-            border-radius: var(--radius-sm, 4px);
-            padding: 10px 16px;
-            font-size: 0.875rem;
+            border: none;
+            border-radius: 14px;
+            padding: 0 24px;
+            font-size: 15px;
             font-weight: 600;
             cursor: pointer;
-            transition: all var(--transition-speed, 200ms) ease;
+            transition: all 250ms ease;
             display: flex;
             align-items: center;
             justify-content: center;
             gap: 8px;
             width: 100%;
-            height: 40px;
+            height: 54px;
             box-sizing: border-box;
-            outline: none;
-            margin-top: 6px;
+            box-shadow: 0 10px 30px rgba(34, 211, 238, 0.35);
           }
 
           .trace-register-submit-btn:hover:not(:disabled) {
-            background-color: var(--color-primary-hover, #2563eb);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(34, 211, 238, 0.45);
+          }
+
+          .trace-register-submit-btn:active:not(:disabled) {
+            transform: scale(0.98);
           }
 
           .trace-register-submit-btn:disabled {
-            opacity: 0.65;
+            opacity: 0.4;
             cursor: not-allowed;
-            background-color: var(--bg-surface-elevated, #162035);
-            color: var(--text-muted, #64748b);
-            border-color: var(--border-color, rgba(255, 255, 255, 0.08));
-          }
-
-          .trace-register-submit-btn:focus-visible {
-            outline: 2px solid var(--color-secondary, #06b6d4);
-            outline-offset: 2px;
-          }
-
-          .trace-register-btn-spinner {
-            width: 14px;
-            height: 14px;
-            border-radius: 50%;
-            border: 2px solid rgba(255, 255, 255, 0.15);
-            border-top-color: #ffffff;
-            animation: trace-btn-spin 0.75s linear infinite;
-            flex-shrink: 0;
-          }
-
-          @keyframes trace-btn-spin {
-            to { transform: rotate(360deg); }
           }
 
           /* Card Footer Registration link */
           .trace-register-card-footer {
             margin-top: 20px;
             text-align: center;
-            font-size: 0.8125rem;
-            color: var(--text-muted, #64748b);
+            font-size: 0.875rem;
+            color: #94A3B8;
           }
 
           .trace-register-login-link {
-            color: var(--color-primary, #3b82f6);
+            color: #47FAF3;
             text-decoration: none;
             font-weight: 600;
             margin-left: 6px;
-            transition: color var(--transition-speed, 200ms) ease;
+            transition: color 250ms ease;
             outline: none;
           }
 
           .trace-register-login-link:hover {
-            color: var(--color-secondary, #06b6d4);
-          }
-
-          .trace-register-login-link:focus-visible {
-            outline: 2px solid var(--color-primary, #3b82f6);
-            outline-offset: 1px;
+            text-decoration: underline;
+            color: #47FAF3;
           }
 
           /* Responsive Layout */
@@ -446,7 +530,7 @@ export default function Register() {
               flex: none;
               padding: 32px 24px;
               border-right: none;
-              border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+              border-bottom: 1px solid rgba(255, 255, 255, 0.08);
               background: radial-gradient(circle at 50% 50%, #0c152b 0%, #04070e 100%);
             }
             .trace-register-hero {
@@ -468,7 +552,7 @@ export default function Register() {
               align-items: flex-start;
             }
             .trace-register-card {
-              padding: 24px 16px;
+              padding: 32px 24px;
               border: none;
               background: transparent;
               box-shadow: none;
@@ -485,7 +569,7 @@ export default function Register() {
         <div className="trace-register-left-content">
           <div className="trace-register-brand">
             <div className="trace-register-brand-icon" aria-hidden="true">
-              <FiShield />
+              <Shield className="w-9 h-9 text-[#47FAF3]" />
             </div>
             <div className="trace-register-brand-text">
               <span className="trace-register-brand-name">TRACE AI</span>
@@ -507,17 +591,17 @@ export default function Register() {
         {/* Vector SVG node visual */}
         <div className="trace-register-network-visual" aria-hidden="true">
           <svg viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-            <circle cx="100" cy="100" r="80" stroke="var(--color-primary, #3b82f6)" strokeWidth="0.75" strokeDasharray="4 4" opacity="0.15"/>
-            <circle cx="100" cy="100" r="50" stroke="var(--color-secondary, #06b6d4)" strokeWidth="0.75" strokeDasharray="6 2" opacity="0.25"/>
-            <circle cx="100" cy="100" r="20" stroke="var(--color-primary, #3b82f6)" strokeWidth="1" opacity="0.35"/>
-            <circle cx="100" cy="20" r="3" fill="var(--color-secondary, #06b6d4)"/>
-            <circle cx="180" cy="100" r="3.5" fill="var(--color-primary, #3b82f6)"/>
-            <circle cx="100" cy="180" r="3" fill="var(--color-secondary, #06b6d4)"/>
-            <circle cx="20" cy="100" r="3.5" fill="var(--color-primary, #3b82f6)"/>
-            <circle cx="156" cy="44" r="4.5" fill="var(--color-primary, #3b82f6)"/>
-            <line x1="100" y1="20" x2="156" y2="44" stroke="var(--color-secondary, #06b6d4)" strokeWidth="0.5" opacity="0.4"/>
-            <line x1="156" y1="44" x2="180" y2="100" stroke="var(--color-primary, #3b82f6)" strokeWidth="0.5" opacity="0.4"/>
-            <line x1="100" y1="100" x2="156" y2="44" stroke="var(--color-primary, #3b82f6)" strokeWidth="0.5" opacity="0.3"/>
+            <circle cx="100" cy="100" r="80" stroke="#47FAF3" strokeWidth="0.75" strokeDasharray="4 4" opacity="0.15"/>
+            <circle cx="100" cy="100" r="50" stroke="#3B82F6" strokeWidth="0.75" strokeDasharray="6 2" opacity="0.25"/>
+            <circle cx="100" cy="100" r="20" stroke="#47FAF3" strokeWidth="1" opacity="0.35"/>
+            <circle cx="100" cy="20" r="3" fill="#3B82F6"/>
+            <circle cx="180" cy="100" r="3.5" fill="#47FAF3"/>
+            <circle cx="100" cy="180" r="3" fill="#3B82F6"/>
+            <circle cx="20" cy="100" r="3.5" fill="#47FAF3"/>
+            <circle cx="156" cy="44" r="4.5" fill="#47FAF3"/>
+            <line x1="100" y1="20" x2="156" y2="44" stroke="#3B82F6" strokeWidth="0.5" opacity="0.4"/>
+            <line x1="156" y1="44" x2="180" y2="100" stroke="#47FAF3" strokeWidth="0.5" opacity="0.4"/>
+            <line x1="100" y1="100" x2="156" y2="44" stroke="#47FAF3" strokeWidth="0.5" opacity="0.3"/>
           </svg>
         </div>
 
@@ -541,15 +625,15 @@ export default function Register() {
               <label htmlFor="trace-name-input" className="trace-register-label">
                 Full Name
               </label>
-              <div className="trace-register-input-container">
+              <div className={`trace-register-input-container ${errors.name ? 'error' : ''}`}>
                 <span className="trace-register-input-icon" aria-hidden="true">
-                  <FiUser />
+                  <User className="w-[18px] h-[18px]" />
                 </span>
                 <input
                   id="trace-name-input"
                   type="text"
-                  className={`trace-register-input ${errors.name ? 'error' : ''}`}
-                  placeholder="Sarah Rivera"
+                  className="trace-register-input"
+                  placeholder="Akash C"
                   autoComplete="name"
                   value={name}
                   onChange={(e) => {
@@ -561,9 +645,16 @@ export default function Register() {
                   disabled={isSubmitting}
                 />
               </div>
+              {name.trim() !== '' && isNameValid && (
+                <span className="trace-register-validation-feedback success" role="status">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>✓ Valid name</span>
+                </span>
+              )}
               {errors.name && (
-                <span id="trace-name-error" className="trace-register-validation-error" role="alert">
-                  {errors.name}
+                <span id="trace-name-error" className="trace-register-validation-feedback error" role="alert">
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  <span>✕ {errors.name}</span>
                 </span>
               )}
             </div>
@@ -573,15 +664,15 @@ export default function Register() {
               <label htmlFor="trace-email-input" className="trace-register-label">
                 Email Address
               </label>
-              <div className="trace-register-input-container">
+              <div className={`trace-register-input-container ${errors.email ? 'error' : ''}`}>
                 <span className="trace-register-input-icon" aria-hidden="true">
-                  <FiMail />
+                  <Mail className="w-[18px] h-[18px]" />
                 </span>
                 <input
                   id="trace-email-input"
                   type="email"
-                  className={`trace-register-input ${errors.email ? 'error' : ''}`}
-                  placeholder="s.rivera@agency.gov"
+                  className="trace-register-input"
+                  placeholder="akashcshanthi@gmail.com"
                   autoComplete="email"
                   value={email}
                   onChange={(e) => {
@@ -593,9 +684,16 @@ export default function Register() {
                   disabled={isSubmitting}
                 />
               </div>
+              {email.trim() !== '' && isEmailValid && (
+                <span className="trace-register-validation-feedback success" role="status">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>✓ Valid email</span>
+                </span>
+              )}
               {errors.email && (
-                <span id="trace-email-error" className="trace-register-validation-error" role="alert">
-                  {errors.email}
+                <span id="trace-email-error" className="trace-register-validation-feedback error" role="alert">
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  <span>✕ {errors.email}</span>
                 </span>
               )}
             </div>
@@ -605,15 +703,15 @@ export default function Register() {
               <label htmlFor="trace-org-input" className="trace-register-label">
                 Organization
               </label>
-              <div className="trace-register-input-container">
+              <div className={`trace-register-input-container ${errors.organization ? 'error' : ''}`}>
                 <span className="trace-register-input-icon" aria-hidden="true">
-                  <FiGlobe />
+                  <Globe className="w-[18px] h-[18px]" />
                 </span>
                 <input
                   id="trace-org-input"
                   type="text"
-                  className={`trace-register-input ${errors.organization ? 'error' : ''}`}
-                  placeholder="Security Operations Center"
+                  className="trace-register-input"
+                  placeholder="Mazharul Uloom College (Autonomous), Ambur"
                   autoComplete="organization"
                   value={organization}
                   onChange={(e) => {
@@ -625,9 +723,16 @@ export default function Register() {
                   disabled={isSubmitting}
                 />
               </div>
+              {organization.trim() !== '' && isOrgValid && (
+                <span className="trace-register-validation-feedback success" role="status">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>✓ Valid organization</span>
+                </span>
+              )}
               {errors.organization && (
-                <span id="trace-org-error" className="trace-register-validation-error" role="alert">
-                  {errors.organization}
+                <span id="trace-org-error" className="trace-register-validation-feedback error" role="alert">
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  <span>✕ {errors.organization}</span>
                 </span>
               )}
             </div>
@@ -637,15 +742,15 @@ export default function Register() {
               <label htmlFor="trace-password-input" className="trace-register-label">
                 Password
               </label>
-              <div className="trace-register-input-container">
+              <div className={`trace-register-input-container ${errors.password ? 'error' : ''}`}>
                 <span className="trace-register-input-icon" aria-hidden="true">
-                  <FiLock />
+                  <Lock className="w-[18px] h-[18px]" />
                 </span>
                 <input
                   id="trace-password-input"
                   type={showPassword ? 'text' : 'password'}
-                  className={`trace-register-input ${errors.password ? 'error' : ''}`}
-                  placeholder="••••••••"
+                  className="trace-register-input"
+                  placeholder="Minimum 8 characters"
                   autoComplete="new-password"
                   value={password}
                   onChange={(e) => {
@@ -663,12 +768,36 @@ export default function Register() {
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
                   disabled={isSubmitting}
                 >
-                  {showPassword ? <FiEyeOff /> : <FiEye />}
+                  {showPassword ? <EyeOff className="w-[18px] h-[18px]" /> : <Eye className="w-[18px] h-[18px]" />}
                 </button>
               </div>
+              {/* Strength Meter */}
+              {password && (
+                <div style={{ marginTop: '2px' }}>
+                  <div className="flex justify-between text-[11px] font-bold uppercase tracking-wider mb-1">
+                    <span className="text-[#94A3B8]">Security Strength</span>
+                    <span style={{ color: strength.style }}>
+                      {strength.text}
+                    </span>
+                  </div>
+                  <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                    <div 
+                      className={`h-full transition-all duration-300 ${strength.color}`} 
+                      style={{ width: strength.width }}
+                    />
+                  </div>
+                </div>
+              )}
+              {password.trim() !== '' && isPasswordValid && (
+                <span className="trace-register-validation-feedback success" role="status">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>✓ Password meets criteria</span>
+                </span>
+              )}
               {errors.password && (
-                <span id="trace-password-error" className="trace-register-validation-error" role="alert">
-                  {errors.password}
+                <span id="trace-password-error" className="trace-register-validation-feedback error" role="alert">
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  <span>✕ {errors.password}</span>
                 </span>
               )}
             </div>
@@ -678,15 +807,15 @@ export default function Register() {
               <label htmlFor="trace-confirm-password-input" className="trace-register-label">
                 Confirm Password
               </label>
-              <div className="trace-register-input-container">
+              <div className={`trace-register-input-container ${errors.confirmPassword ? 'error' : ''}`}>
                 <span className="trace-register-input-icon" aria-hidden="true">
-                  <FiLock />
+                  <Lock className="w-[18px] h-[18px]" />
                 </span>
                 <input
                   id="trace-confirm-password-input"
                   type={showConfirmPassword ? 'text' : 'password'}
-                  className={`trace-register-input ${errors.confirmPassword ? 'error' : ''}`}
-                  placeholder="••••••••"
+                  className="trace-register-input"
+                  placeholder="Re-enter password"
                   autoComplete="new-password"
                   value={confirmPassword}
                   onChange={(e) => {
@@ -704,15 +833,29 @@ export default function Register() {
                   aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
                   disabled={isSubmitting}
                 >
-                  {showConfirmPassword ? <FiEyeOff /> : <FiEye />}
+                  {showConfirmPassword ? <EyeOff className="w-[18px] h-[18px]" /> : <Eye className="w-[18px] h-[18px]" />}
                 </button>
               </div>
+              {confirmPassword.trim() !== '' && isConfirmPasswordValid && (
+                <span className="trace-register-validation-feedback success" role="status">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>✓ Passwords match</span>
+                </span>
+              )}
               {errors.confirmPassword && (
-                <span id="trace-confirm-password-error" className="trace-register-validation-error" role="alert">
-                  {errors.confirmPassword}
+                <span id="trace-confirm-password-error" className="trace-register-validation-feedback error" role="alert">
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  <span>✕ {errors.confirmPassword}</span>
                 </span>
               )}
             </div>
+
+            {errors.auth && (
+              <div className="trace-register-validation-feedback error" role="alert" style={{ alignSelf: 'center', margin: '4px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <AlertCircle className="w-3.5 h-3.5" />
+                <span>✕ {errors.auth}</span>
+              </div>
+            )}
 
             {/* Submit Button */}
             <button
@@ -720,8 +863,14 @@ export default function Register() {
               className="trace-register-submit-btn"
               disabled={isSubmitting}
             >
-              {isSubmitting && <span className="trace-register-btn-spinner" aria-hidden="true" />}
-              <span>{isSubmitting ? 'Creating account...' : 'Create Account'}</span>
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+                  <span>Creating Account...</span>
+                </>
+              ) : (
+                <span>Create Account</span>
+              )}
             </button>
           </form>
 

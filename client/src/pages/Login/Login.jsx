@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { Shield, Mail, Lock, Eye, EyeOff, Bolt, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { auth, googleProvider, signInWithPopup } from '../../services/firebase';
+import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
 
 /**
  * Login Component
@@ -19,6 +22,46 @@ export default function Login() {
   // Validation and Loading states
   const [errors, setErrors] = useState({});
   const [isLoading, setIsLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [googleError, setGoogleError] = useState('');
+
+  const handleGoogleSignIn = async () => {
+    if (googleLoading) return;
+    setGoogleLoading(true);
+    setGoogleError('');
+
+    // Pre-flight environment keys check: explain exactly what is missing
+    const apiKey = import.meta.env.VITE_FIREBASE_API_KEY;
+    if (!apiKey || apiKey === 'mock-api-key-replace-this') {
+      setGoogleError('Configuration Error: VITE_FIREBASE_API_KEY is not configured or is set to mock value in client/.env. Please replace it with your Firebase Web App credentials.');
+      setGoogleLoading(false);
+      return;
+    }
+
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      if (result.user) {
+        localStorage.setItem('isAuthenticated', 'true');
+        localStorage.setItem('operatorName', result.user.displayName || 'Operator');
+        localStorage.setItem('operatorEmail', result.user.email || '');
+        localStorage.setItem('operatorAvatar', result.user.photoURL || '');
+        navigate('/dashboard', { replace: true });
+      }
+    } catch (error) {
+      if (error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
+        console.log('Google Auth popup closed by user.');
+        return;
+      }
+      if (error.code === 'auth/api-key-not-valid' || (error.message && error.message.includes('api-key-not-valid'))) {
+        setGoogleError('Invalid Firebase API Key. Please verify that the credentials inside client/.env match your Google console project.');
+      } else {
+        setGoogleError(error.message || 'Google Federated Authentication failed.');
+      }
+      setTimeout(() => setGoogleError(''), 7000);
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
 
   // Client-side validations
   const validateForm = () => {
@@ -39,22 +82,52 @@ export default function Login() {
     return Object.keys(tempErrors).length === 0;
   };
 
-  // Submit Handler with local development credentials validation
-  const handleSubmit = (e) => {
+  const mapFirebaseError = (error) => {
+    switch (error.code) {
+      case 'auth/wrong-password':
+      case 'auth/user-not-found':
+      case 'auth/invalid-credential':
+        return 'Invalid email or password.';
+      case 'auth/invalid-email':
+        return 'Please enter a valid operator email address.';
+      case 'auth/too-many-requests':
+        return 'Access blocked due to excessive attempts. Please try again later.';
+      case 'auth/operation-not-allowed':
+        return 'Email/Password provider is disabled in your Firebase console. Please go to Authentication > Sign-in method in Firebase Console to enable it.';
+      default:
+        return error.message || 'An unexpected authentication error occurred.';
+    }
+  };
+
+  // Submit Handler with Firebase Authentication
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (isLoading) return;
 
     if (validateForm()) {
-      // Check dev credentials
-      if (email.trim() === 'aa7193147@gmail.com' && password === 'Akash@2007') {
-        setIsLoading(true);
-        setTimeout(() => {
+      setIsLoading(true);
+      setErrors({});
+
+      try {
+        const result = await signInWithEmailAndPassword(auth, email.trim(), password);
+        
+        // Prevent login if email is not verified
+        if (!result.user.emailVerified) {
+          await signOut(auth);
+          setErrors({ auth: 'Please verify your email before logging in. A verification link was sent to your email.' });
           setIsLoading(false);
-          localStorage.setItem('isAuthenticated', 'true');
-          navigate('/dashboard', { replace: true });
-        }, 1500);
-      } else {
-        setErrors({ auth: 'Invalid email or password.' });
+          return;
+        }
+
+        localStorage.setItem('isAuthenticated', 'true');
+        localStorage.setItem('operatorName', result.user.displayName || 'Operator');
+        localStorage.setItem('operatorEmail', result.user.email || '');
+        localStorage.setItem('operatorAvatar', result.user.photoURL || '');
+        navigate('/dashboard', { replace: true });
+      } catch (error) {
+        setIsLoading(false);
+        const userFriendlyMessage = mapFirebaseError(error);
+        setErrors({ auth: userFriendlyMessage });
       }
     }
   };
@@ -75,106 +148,30 @@ export default function Login() {
     };
   }, []);
 
+  // Real-time checking for validation indicators
+  const isEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  const isPasswordValid = password.length > 0;
+
   return (
     <main className="trace-login-page">
+      {googleError && (
+        <div className="fixed top-20 right-6 z-50 bg-[#0f1425] border border-[#ef4444] text-[#ef4444] text-xs px-4 py-2.5 rounded-lg shadow-xl font-bold">
+          ✕ {googleError}
+        </div>
+      )}
       {/* Scoped styling block for the login screen */}
       <style dangerouslySetInnerHTML={{
         __html: `
-          @import url('https://fonts.googleapis.com/css2?family=Geist:wght@100..900&family=Inter:wght@100..900&family=JetBrains+Mono:wght@100..800&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap');
-
           .trace-login-page {
-            /* Scoped variables matching reference design */
-            --on-background: #dfe2f3;
-            --surface-bright: #353946;
-            --on-secondary: #003735;
-            --on-surface: #dfe2f3;
-            --primary-container: #0070f3;
-            --primary: #aec6ff;
-            --primary-fixed: #d8e2ff;
-            --primary-fixed-dim: #aec6ff;
-            --surface-container-high: #262a37;
-            --secondary-fixed-dim: #00ddd6;
-            --on-tertiary: #68000b;
-            --on-primary-container: #ffffff;
-            --on-surface-variant: #c1c6d7;
-            --inverse-surface: #dfe2f3;
-            --surface-container-lowest: #0a0e1a;
-            --on-primary-fixed-variant: #004397;
-            --inverse-primary: #0059c5;
-            --inverse-on-surface: #2c303d;
-            --secondary-container: #00ddd6;
-            --on-error: #690005;
-            --on-tertiary-fixed: #410004;
-            --on-primary: #002e6b;
-            --surface-tint: #aec6ff;
-            --surface-container-highest: #313442;
-            --on-tertiary-fixed-variant: #930014;
-            --on-error-container: #ffdad6;
-            --tertiary-container: #dd3438;
-            --surface-container: #1b1f2c;
-            --surface-dim: #0f131f;
-            --surface-variant: #313442;
-            --outline-variant: #414754;
-            --tertiary: #ffb3ae;
-            --on-tertiary-container: #ffffff;
-            --on-secondary-fixed-variant: #00504d;
-            --background: #0f131f;
-            --secondary: #47faf3;
-            --error: #ffb4ab;
-            --surface: #0f131f;
-            --tertiary-fixed-dim: #ffb3ae;
-            --on-primary-fixed: #001a43;
-            --on-secondary-container: #005d5a;
-            --tertiary-fixed: #ffdad7;
-            --outline: #8b90a0;
-            --secondary-fixed: #47faf3;
-            --surface-container-low: #171b28;
-            --on-secondary-fixed: #00201f;
-            --error-container: #93000a;
-
-            /* Spacing overrides for typography */
-            --font-display-lg-size: 48px;
-            --font-display-lg-lh: 56px;
-            --font-headline-lg-size: 32px;
-            --font-headline-lg-lh: 40px;
-            --font-headline-md-size: 24px;
-            --font-headline-md-lh: 32px;
-            --font-body-lg-size: 18px;
-            --font-body-lg-lh: 28px;
-            --font-body-md-size: 16px;
-            --font-body-md-lh: 24px;
-            --font-code-sm-size: 13px;
-            --font-code-sm-lh: 20px;
-            --font-label-caps-size: 12px;
-            --font-label-caps-lh: 16px;
-
             display: flex;
             min-height: 100vh;
             width: 100vw;
             position: relative;
-            background-color: var(--background);
-            color: var(--on-surface);
+            background-color: #050814;
+            color: #F8FAFC;
             font-family: 'Inter', sans-serif;
             overflow: hidden;
             box-sizing: border-box;
-          }
-
-          /* Material icons global rules */
-          .trace-login-page .material-symbols-outlined {
-            font-family: 'Material Symbols Outlined';
-            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
-            display: inline-block;
-            line-height: 1;
-            text-transform: none;
-            letter-spacing: normal;
-            word-wrap: normal;
-            white-space: nowrap;
-            direction: ltr;
-            -webkit-font-smoothing: antialiased;
-            text-rendering: optimizeLegibility;
-            -moz-osx-font-smoothing: grayscale;
-            font-feature-settings: 'liga';
-            vertical-align: middle;
           }
 
           /* Left Panel (Hero) */
@@ -184,7 +181,8 @@ export default function Login() {
             flex-direction: column;
             position: relative;
             overflow: hidden;
-            background-color: var(--surface-container-lowest);
+            background-color: #050814;
+            border-right: 1px solid rgba(255, 255, 255, 0.08);
           }
 
           @media (max-width: 1024px) {
@@ -204,14 +202,14 @@ export default function Login() {
           .trace-login-left-bg-overlay {
             position: absolute;
             inset: 0;
-            background-color: rgba(10, 14, 26, 0.7); /* bg-surface-container-lowest/70 */
+            background-color: rgba(10, 14, 26, 0.7);
             backdrop-filter: blur(2px);
           }
 
           .trace-login-left-bg-gradient {
             position: absolute;
             inset: 0;
-            background: linear-gradient(to right, transparent, var(--surface));
+            background: linear-gradient(to right, transparent, #050814);
           }
 
           .trace-login-grid-overlay {
@@ -232,7 +230,7 @@ export default function Login() {
             display: flex;
             flex-direction: column;
             justify-content: flex-end;
-            padding: 40px; /* margin-desktop */
+            padding: 48px;
             box-sizing: border-box;
           }
 
@@ -246,49 +244,42 @@ export default function Login() {
             display: inline-flex;
             align-items: center;
             gap: 8px;
-            color: var(--secondary);
+            color: #47FAF3;
             margin-bottom: 8px;
           }
 
-          .trace-login-access-badge span {
-            font-size: 18px;
-          }
-
           .trace-login-badge-text {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: var(--font-label-caps-size);
-            line-height: var(--font-label-caps-lh);
+            font-family: monospace;
+            font-size: 12px;
             letter-spacing: 0.1em;
             font-weight: 600;
           }
 
           .trace-login-hero-title {
-            font-family: 'Geist', sans-serif;
-            font-size: var(--font-display-lg-size);
-            line-height: var(--font-display-lg-lh);
+            font-size: 2.25rem;
+            line-height: 1.25;
             letter-spacing: -0.02em;
             font-weight: 700;
-            color: var(--on-surface);
+            color: #F8FAFC;
             margin-top: 8px;
             margin-bottom: 16px;
           }
 
           .trace-login-highlight {
-            color: var(--secondary);
+            color: #47FAF3;
           }
 
           .trace-login-hero-desc {
-            font-family: 'Inter', sans-serif;
-            font-size: var(--font-body-lg-size);
-            line-height: var(--font-body-lg-lh);
-            color: var(--on-surface-variant);
+            font-size: 0.95rem;
+            line-height: 1.6;
+            color: #94A3B8;
           }
 
           .trace-login-status-row {
             display: flex;
-            gap: 40px; /* gutter */
-            padding-top: 32px; /* stack-lg */
-            border-top: 1px solid rgba(65, 71, 84, 0.3); /* outline-variant/30 */
+            gap: 40px;
+            padding-top: 32px;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
             margin-top: 16px;
             box-sizing: border-box;
           }
@@ -300,20 +291,19 @@ export default function Login() {
           }
 
           .trace-login-status-label {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: var(--font-label-caps-size);
-            line-height: var(--font-label-caps-lh);
+            font-family: monospace;
+            font-size: 11px;
             letter-spacing: 0.15em;
             font-weight: 600;
-            color: var(--outline);
+            color: #cbd5e1;
             margin-bottom: 4px;
+            text-transform: uppercase;
           }
 
           .trace-login-status-value {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: var(--font-code-sm-size);
-            line-height: var(--font-code-sm-lh);
-            color: var(--secondary);
+            font-family: monospace;
+            font-size: 13px;
+            color: #47FAF3;
             display: flex;
             align-items: center;
           }
@@ -323,9 +313,9 @@ export default function Login() {
             width: 8px;
             height: 8px;
             border-radius: 50%;
-            background-color: var(--secondary);
+            background-color: #47FAF3;
             margin-right: 8px;
-            animation: pulse-glow 3s infinite ease-in-out;
+            box-shadow: 0 0 8px #47FAF3;
           }
 
           /* Right Panel (Authentication) */
@@ -336,8 +326,8 @@ export default function Login() {
             justify-content: center;
             align-items: center;
             position: relative;
-            padding: 40px; /* margin-desktop */
-            background-color: var(--surface);
+            padding: 48px;
+            background-color: #050814;
             box-sizing: border-box;
           }
 
@@ -354,7 +344,7 @@ export default function Login() {
             right: 0;
             width: 256px;
             height: 256px;
-            background-color: rgba(174, 198, 255, 0.05); /* primary/5 */
+            background-color: rgba(174, 198, 255, 0.03);
             filter: blur(120px);
             border-radius: 50%;
             pointer-events: none;
@@ -366,192 +356,192 @@ export default function Login() {
             left: 0;
             width: 384px;
             height: 384px;
-            background-color: rgba(71, 250, 243, 0.05); /* secondary/5 */
+            background-color: rgba(71, 250, 243, 0.03);
             filter: blur(120px);
             border-radius: 50%;
             pointer-events: none;
           }
 
-          /* Login Card (glass-card) */
+          /* Login Card */
           .trace-login-card {
             width: 100%;
-            max-width: 480px;
-            background: rgba(27, 31, 44, 0.4);
-            backdrop-filter: blur(24px);
-            -webkit-backdrop-filter: blur(24px);
+            max-width: 440px;
+            background-color: #101827;
             border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 12px; /* rounded-xl */
-            padding: 32px; /* stack-lg */
+            border-radius: 16px;
+            padding: 40px 32px;
             position: relative;
             z-index: 30;
-            transition: all 0.5s ease;
+            transition: border-color 250ms ease, box-shadow 250ms ease;
             box-sizing: border-box;
-          }
-
-          @media (min-width: 768px) {
-            .trace-login-card {
-              padding: 48px;
-            }
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
           }
 
           .trace-login-card:hover {
-            box-shadow: 0 8px 32px 0 rgba(71, 250, 243, 0.08);
-            border-color: rgba(255, 255, 255, 0.12);
+            border-color: rgba(71, 250, 243, 0.15);
+            box-shadow: 0 10px 30px rgba(71, 250, 243, 0.03);
           }
 
           .trace-login-card-header {
             text-align: center;
-            margin-bottom: 32px; /* stack-lg */
+            margin-bottom: 24px;
           }
 
           .trace-login-logo {
             height: 64px;
             margin-left: auto;
             margin-right: auto;
-            margin-bottom: 16px; /* stack-md */
+            margin-bottom: 16px;
           }
 
           .trace-login-card-title {
-            font-family: 'Geist', sans-serif;
-            font-size: var(--font-headline-lg-size);
-            line-height: var(--font-headline-lg-lh);
-            font-weight: 600;
-            color: var(--on-surface);
-            margin: 0 0 8px;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #F8FAFC;
+            margin: 0 0 6px;
           }
 
           .trace-login-card-subtitle {
-            font-family: 'Inter', sans-serif;
-            font-size: var(--font-body-md-size);
-            line-height: var(--font-body-md-lh);
-            color: var(--on-surface-variant);
-            margin: 8px 0 0;
+            font-size: 0.875rem;
+            color: #94A3B8;
+            margin: 6px 0 0;
           }
 
           /* Form Elements */
           .trace-login-form {
             display: flex;
             flex-direction: column;
-            gap: 16px; /* stack-md */
+            gap: 18px;
           }
 
           .trace-login-field-group {
             display: flex;
             flex-direction: column;
-            gap: 8px; /* space-y-2 */
+            gap: 8px;
             text-align: left;
           }
 
           .trace-login-field-label {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: var(--font-label-caps-size);
-            line-height: var(--font-label-caps-lh);
-            letter-spacing: 0.1em;
+            font-size: 12px;
+            line-height: 1.25;
+            letter-spacing: 0.10em;
             font-weight: 600;
-            color: var(--on-surface-variant);
-            margin-left: 4px;
+            color: #cbd5e1;
             text-transform: uppercase;
           }
 
           .trace-login-input-wrapper {
             position: relative;
-            border-radius: 8px; /* rounded-lg */
-            border: 1px solid rgba(255, 255, 255, 0.08); /* fallback border */
-            background-color: var(--surface-container-low);
-            transition: all 0.3s ease;
+            border-radius: 14px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            background-color: #0F172A;
+            transition: border-color 250ms ease, box-shadow 250ms ease;
+            height: 54px;
+            display: flex;
+            align-items: center;
+            box-sizing: border-box;
           }
 
           .trace-login-input-wrapper:focus-within {
-            transform: translateY(-2px);
-            box-shadow: 0 0 15px rgba(71, 250, 243, 0.2);
-            border-color: #47faf3;
+            border-color: #47FAF3;
+            box-shadow: 0 0 20px rgba(71, 250, 243, 0.25);
           }
 
           .trace-login-input-wrapper.error-border {
-            border-color: var(--status-critical, #ef4444);
+            border-color: #EF4444;
           }
 
           .trace-login-input-icon {
             position: absolute;
-            left: 16px;
+            left: 18px;
             top: 50%;
             transform: translateY(-50%);
-            color: var(--outline);
-            font-size: 20px !important;
+            width: 18px;
+            height: 18px;
+            color: #94A3B8;
             pointer-events: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
           }
 
           .trace-login-input-field {
             width: 100%;
             background: transparent;
             border: none;
-            color: var(--on-surface);
-            padding-top: 14px;
-            padding-bottom: 14px;
-            padding-left: 48px;
-            padding-right: 16px;
-            border-radius: 8px;
-            font-size: var(--font-body-md-size);
-            line-height: var(--font-body-md-lh);
+            color: #F8FAFC;
+            padding-left: 52px !important;
+            padding-right: 48px;
+            padding-top: 0;
+            padding-bottom: 0;
+            border-radius: 14px;
+            font-size: 14px;
             outline: none;
-            transition: all 0.3s ease;
+            height: 100%;
             box-sizing: border-box;
           }
 
           .trace-login-input-field::placeholder {
-            color: rgba(139, 144, 160, 0.5); /* outline/50 */
+            color: #94A3B8;
           }
 
           .trace-login-field-header {
             display: flex;
             justify-content: space-between;
             align-items: flex-end;
-            padding-left: 4px;
-            padding-right: 4px;
           }
 
           .trace-login-forgot-link {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: var(--font-code-sm-size);
-            line-height: var(--font-code-sm-lh);
-            color: var(--secondary);
+            font-size: 12px;
+            color: #47FAF3;
             text-decoration: none;
-            transition: color 0.2s ease;
+            transition: color 250ms ease;
+            font-weight: 600;
           }
 
           .trace-login-forgot-link:hover {
-            color: var(--primary);
+            text-decoration: underline;
           }
 
           .trace-login-password-toggle-btn {
             position: absolute;
-            right: 16px;
-            top: 50%;
-            transform: translateY(-50%);
+            right: 0;
+            top: 0;
+            bottom: 0;
             background: none;
             border: none;
-            color: var(--outline);
+            color: #94A3B8;
             cursor: pointer;
-            transition: color 0.2s ease;
+            transition: color 250ms ease;
             display: flex;
             align-items: center;
             justify-content: center;
+            width: 48px;
+            height: 54px;
+            padding: 0 18px 0 10px;
+            box-sizing: border-box;
           }
 
           .trace-login-password-toggle-btn:hover {
-            color: var(--secondary);
+            color: #47FAF3;
           }
 
-          .trace-login-password-toggle-btn span {
-            font-size: 20px !important;
-          }
-
-          .trace-login-error-message {
-            font-family: 'Inter', sans-serif;
+          .trace-login-validation-feedback {
+            display: flex;
+            align-items: center;
+            gap: 6px;
             font-size: 12px;
-            color: #ffb4ab; /* error color matching palette */
+            font-weight: 500;
             margin-top: 4px;
-            margin-left: 4px;
+          }
+
+          .trace-login-validation-feedback.success {
+            color: #10B981;
+          }
+
+          .trace-login-validation-feedback.error {
+            color: #EF4444;
           }
 
           /* Checkbox & CTA Button */
@@ -559,7 +549,6 @@ export default function Login() {
             display: flex;
             align-items: center;
             gap: 12px;
-            padding-left: 4px;
             padding-top: 4px;
           }
 
@@ -567,35 +556,31 @@ export default function Login() {
             width: 16px;
             height: 16px;
             border-radius: 4px;
-            border: 1px solid rgba(65, 71, 84, 0.5); /* outline-variant/50 */
-            background-color: var(--surface-container-high);
-            accent-color: var(--secondary);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            background-color: #0F172A;
+            accent-color: #47FAF3;
             cursor: pointer;
           }
 
           .trace-login-checkbox-label {
-            font-family: 'Inter', sans-serif;
-            font-size: var(--font-body-md-size);
-            color: var(--on-surface-variant);
+            font-size: 14px;
+            color: #cbd5e1;
             cursor: pointer;
             user-select: none;
           }
 
           .trace-login-primary-cta-btn {
             width: 100%;
-            background: linear-gradient(135deg, #0070f3 0%, #47faf3 100%); /* cyber-gradient */
-            color: var(--on-primary-container);
-            font-family: 'Geist', sans-serif;
-            font-size: var(--font-body-lg-size);
-            line-height: var(--font-body-lg-lh);
+            background: linear-gradient(90deg, #22D3EE, #06B6D4);
+            color: #ffffff;
+            font-size: 15px;
             font-weight: 600;
-            padding-top: 16px;
-            padding-bottom: 16px;
             border: none;
-            border-radius: 8px;
-            box-shadow: 0 4px 14px 0 rgba(71, 250, 243, 0.2);
+            border-radius: 14px;
+            height: 54px;
+            box-shadow: 0 10px 30px rgba(34, 211, 238, 0.35);
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: all 250ms ease;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -605,7 +590,8 @@ export default function Login() {
           }
 
           .trace-login-primary-cta-btn:hover:not(:disabled) {
-            box-shadow: 0 6px 20px 0 rgba(71, 250, 243, 0.4);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(34, 211, 238, 0.45);
           }
 
           .trace-login-primary-cta-btn:active:not(:disabled) {
@@ -613,13 +599,12 @@ export default function Login() {
           }
 
           .trace-login-primary-cta-btn:disabled {
-            opacity: 0.6;
+            opacity: 0.4;
             cursor: not-allowed;
           }
 
           .trace-login-bolt-icon {
-            font-size: 20px !important;
-            transition: transform 0.3s ease;
+            transition: transform 250ms ease;
           }
 
           .trace-login-primary-cta-btn:hover:not(:disabled) .trace-login-bolt-icon {
@@ -630,38 +615,37 @@ export default function Login() {
           .trace-login-divider {
             display: flex;
             align-items: center;
-            margin-top: 32px;
-            margin-bottom: 32px;
+            margin-top: 24px;
+            margin-bottom: 24px;
           }
 
           .trace-login-divider-line {
             flex-grow: 1;
-            border-top: 1px solid rgba(65, 71, 84, 0.3); /* outline-variant/30 */
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
           }
 
           .trace-login-divider-text {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: var(--font-label-caps-size);
-            color: var(--outline);
+            font-size: 11px;
+            color: #94A3B8;
             margin-left: 16px;
             margin-right: 16px;
             white-space: nowrap;
             text-transform: uppercase;
             letter-spacing: 0.1em;
+            font-family: monospace;
           }
 
           .trace-login-sso-btn {
             width: 100%;
-            background-color: var(--surface-container-high);
-            border: 1px solid rgba(65, 71, 84, 0.5); /* outline-variant/50 */
-            color: var(--on-surface);
-            font-family: 'Inter', sans-serif;
-            font-size: var(--font-body-md-size);
-            padding-top: 14px;
-            padding-bottom: 14px;
-            border-radius: 8px;
+            background-color: #0F172A;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            color: #F8FAFC;
+            font-size: 14px;
+            font-weight: 600;
+            height: 54px;
+            border-radius: 14px;
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: all 250ms ease;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -670,13 +654,14 @@ export default function Login() {
           }
 
           .trace-login-sso-btn:hover {
-            background-color: var(--surface-variant);
+            border-color: #47FAF3;
+            background-color: rgba(255, 255, 255, 0.02);
           }
 
           .trace-login-sso-icon {
             width: 20px;
             height: 20px;
-            transition: transform 0.3s ease;
+            transition: transform 250ms ease;
           }
 
           .trace-login-sso-btn:hover .trace-login-sso-icon {
@@ -684,68 +669,63 @@ export default function Login() {
           }
 
           .trace-login-card-footer {
-            margin-top: 32px;
+            margin-top: 24px;
             text-align: center;
           }
 
           .trace-login-footer-text {
-            font-family: 'Inter', sans-serif;
-            font-size: var(--font-body-md-size);
-            color: var(--on-surface-variant);
+            font-size: 14px;
+            color: #94A3B8;
             margin: 0;
           }
 
           .trace-login-register-link {
-            color: var(--secondary);
-            font-weight: 700;
+            color: #47FAF3;
+            font-weight: 600;
             text-decoration: none;
             margin-left: 6px;
-            transition: text-decoration 0.2s ease;
+            transition: color 250ms ease;
           }
 
           .trace-login-register-link:hover {
             text-decoration: underline;
           }
 
-          /* Footer Info */
+          /* Decorative Bottom Info */
           .trace-login-footer-info {
             position: absolute;
-            bottom: 40px; /* margin-desktop */
+            bottom: 24px;
+            left: 24px;
+            right: 24px;
             display: flex;
+            justify-content: space-between;
             align-items: center;
-            gap: 24px;
-            color: var(--outline);
-            font-family: 'JetBrains Mono', monospace;
-            font-size: var(--font-code-sm-size);
+            z-index: 20;
+            pointer-events: none;
           }
 
           @media (max-width: 1024px) {
             .trace-login-footer-info {
               position: static;
-              margin-top: 32px;
-              justify-content: center;
-              flex-wrap: wrap;
+              margin-top: 40px;
+              padding: 0 16px;
+              flex-direction: column;
+              gap: 12px;
             }
           }
 
           .trace-login-footer-status {
             display: flex;
             align-items: center;
-            gap: 8px;
-          }
-
-          .trace-login-footer-pulse-dot {
-            display: inline-block;
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
-            background-color: var(--secondary);
+            font-size: 11px;
+            font-family: monospace;
+            color: #94A3B8;
           }
 
           .trace-login-footer-divider {
-            height: 16px;
+            height: 12px;
             width: 1px;
-            background-color: rgba(139, 144, 160, 0.2); /* outline/20 */
+            background-color: rgba(255, 255, 255, 0.08);
           }
 
           @media (max-width: 1024px) {
@@ -755,97 +735,67 @@ export default function Login() {
           }
 
           .trace-login-footer-copyright {
-            color: var(--outline);
+            font-size: 11px;
+            font-family: monospace;
+            color: #94A3B8;
             margin: 0;
           }
 
-          /* Cursor Glow Effect & Animations */
           .glow-cursor {
             position: fixed;
-            width: 300px;
-            height: 300px;
-            background: radial-gradient(circle, rgba(71, 250, 243, 0.04) 0%, transparent 70%);
+            width: 384px;
+            height: 384px;
+            background: radial-gradient(circle, rgba(71, 250, 243, 0.03) 0%, transparent 70%);
+            border-radius: 50%;
             pointer-events: none;
-            z-index: 5;
             transform: translate(-50%, -50%);
-            border-radius: 50%;
-            transition: left 0.1s ease, top 0.1s ease;
-          }
-
-          @keyframes pulse-glow {
-            0%, 100% { opacity: 0.3; transform: scale(1); }
-            50% { opacity: 0.8; transform: scale(1.1); }
-          }
-
-          .trace-login-spinner {
-            width: 18px;
-            height: 18px;
-            border-radius: 50%;
-            border: 2px solid rgba(255, 255, 255, 0.2);
-            border-top-color: #ffffff;
-            animation: trace-spin 0.8s linear infinite;
-            display: inline-block;
-          }
-
-          @keyframes trace-spin {
-            to { transform: rotate(360deg); }
+            z-index: 10;
           }
         `
       }} />
 
-      {/* Left Side: Hero Visualization */}
-      <section className="trace-login-left-panel">
-        {/* Full Bleed Background Image with Dark Overlay */}
-        <div className="trace-login-left-bg" style={{ backgroundImage: "url('/illustration.png')" }}>
-          <div className="trace-login-left-bg-overlay"></div>
-          <div className="trace-login-left-bg-gradient"></div>
-        </div>
-        
-        {/* Grid Overlay */}
+      {/* Left Panel: Security branding visual */}
+      <section className="trace-login-left-panel" aria-label="Product Information">
         <div className="trace-login-grid-overlay"></div>
+        <div className="trace-login-left-bg" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=1200&q=80')" }}></div>
+        <div className="trace-login-left-bg-overlay"></div>
+        <div className="trace-login-left-bg-gradient"></div>
         
-        {/* Hero Content */}
         <div className="trace-login-left-content">
           <div className="trace-login-left-hero-space">
             <div className="trace-login-access-badge">
-              <span className="material-symbols-outlined">verified_user</span>
-              <span className="trace-login-badge-text">SECURE ACCESS GRANTED</span>
+              <Shield className="w-[18px] h-[18px]" />
+              <span className="trace-login-badge-text">SECURE TERMINAL ACCESS</span>
             </div>
             
             <h1 className="trace-login-hero-title">
-              Neural Trace <br/>
-              <span className="trace-login-highlight">Intelligence</span>
+              Autonomous Threat<br />
+              <span className="trace-login-highlight">Investigation Portal</span>
             </h1>
             
             <p className="trace-login-hero-desc">
-              Next-generation AI-driven forensics platform. Decrypt, analyze, and neutralize threats with hyper-scale computational precision.
+              Connect to client telemetry channels and orchestrate isolated endpoint recovery with cognitive AI augmentations.
             </p>
           </div>
-          
-          {/* Status Indicators */}
+
           <div className="trace-login-status-row">
             <div className="trace-login-status-col">
-              <p className="trace-login-status-label">LATENCY</p>
-              <p className="trace-login-status-value">24ms</p>
-            </div>
-            <div className="trace-login-status-col">
-              <p className="trace-login-status-label">NODE STATUS</p>
-              <p className="trace-login-status-value">
+              <span className="trace-login-status-label">Client Status</span>
+              <div className="trace-login-status-value">
                 <span className="trace-login-pulse-dot"></span>
-                ACTIVE
-              </p>
+                <span>CONNECTED</span>
+              </div>
             </div>
             <div className="trace-login-status-col">
-              <p className="trace-login-status-label">ENCRYPTION</p>
-              <p className="trace-login-status-value">RSA-4096</p>
+              <span className="trace-login-status-label">Grid Mode</span>
+              <span className="trace-login-status-value">DECRYPT ACTIVE</span>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Right Side: Authentication Panel */}
-      <section className="trace-login-right-panel">
-        {/* Atmospheric Elements */}
+      {/* Right Panel: Interactive credentials container */}
+      <section className="trace-login-right-panel" aria-label="Operator Authentication">
         <div className="trace-login-glow-top-right"></div>
         <div className="trace-login-glow-bottom-left"></div>
         
@@ -865,7 +815,7 @@ export default function Login() {
             <div className="trace-login-field-group">
               <label className="trace-login-field-label" htmlFor="email">OPERATOR EMAIL</label>
               <div className={`trace-login-input-wrapper ${errors.email ? 'error-border' : ''}`}>
-                <span className="material-symbols-outlined trace-login-input-icon">alternate_email</span>
+                <Mail className="trace-login-input-icon w-[18px] h-[18px]" />
                 <input 
                   className="trace-login-input-field" 
                   id="email" 
@@ -880,9 +830,16 @@ export default function Login() {
                   disabled={isLoading}
                 />
               </div>
+              {email.trim() !== '' && isEmailValid && (
+                <span className="trace-login-validation-feedback success" role="status">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>✓ Valid email</span>
+                </span>
+              )}
               {errors.email && (
-                <span className="trace-login-error-message" role="alert">
-                  {errors.email}
+                <span className="trace-login-validation-feedback error" role="alert">
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  <span>✕ {errors.email}</span>
                 </span>
               )}
             </div>
@@ -895,7 +852,7 @@ export default function Login() {
               </div>
               
               <div className={`trace-login-input-wrapper ${errors.password ? 'error-border' : ''}`}>
-                <span className="material-symbols-outlined trace-login-input-icon">lock</span>
+                <Lock className="trace-login-input-icon w-[18px] h-[18px]" />
                 <input 
                   className="trace-login-input-field" 
                   id="password" 
@@ -916,12 +873,19 @@ export default function Login() {
                   disabled={isLoading}
                   aria-label={showPassword ? "Hide clearance key" : "Show clearance key"}
                 >
-                  <span className="material-symbols-outlined">{showPassword ? 'visibility_off' : 'visibility'}</span>
+                  {showPassword ? <EyeOff className="w-[18px] h-[18px]" /> : <Eye className="w-[18px] h-[18px]" />}
                 </button>
               </div>
+              {password.trim() !== '' && isPasswordValid && (
+                <span className="trace-login-validation-feedback success" role="status">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>✓ Clearance key format valid</span>
+                </span>
+              )}
               {errors.password && (
-                <span className="trace-login-error-message" role="alert">
-                  {errors.password}
+                <span className="trace-login-validation-feedback error" role="alert">
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  <span>✕ {errors.password}</span>
                 </span>
               )}
             </div>
@@ -940,8 +904,9 @@ export default function Login() {
             </div>
 
             {errors.auth && (
-              <div className="trace-login-error-message" role="alert" style={{ textAlign: 'center', marginBottom: '8px', fontSize: '14px' }}>
-                {errors.auth}
+              <div className="trace-login-validation-feedback error" role="alert" style={{ alignSelf: 'center', margin: '4px 0' }}>
+                <AlertCircle className="w-3.5 h-3.5" />
+                <span>✕ {errors.auth}</span>
               </div>
             )}
 
@@ -953,13 +918,13 @@ export default function Login() {
             >
               {isLoading ? (
                 <>
-                  <span className="trace-login-spinner" aria-hidden="true" />
+                  <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
                   <span>Initiating Authentication...</span>
                 </>
               ) : (
                 <>
                   <span>Initiate Authentication</span>
-                  <span className="material-symbols-outlined trace-login-bolt-icon">bolt</span>
+                  <Bolt className="trace-login-bolt-icon w-4 h-4" />
                 </>
               )}
             </button>
@@ -973,14 +938,28 @@ export default function Login() {
           </div>
 
           {/* Secondary CTA (SSO) */}
-          <button className="trace-login-sso-btn" type="button" disabled={isLoading}>
-            <svg className="trace-login-sso-icon" viewBox="0 0 24 24">
-              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"></path>
-              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"></path>
-              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.27.81-.57z" fill="#FBBC05"></path>
-              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.66l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"></path>
-            </svg>
-            <span>Secure Federated Identity</span>
+          <button 
+            className="trace-login-sso-btn" 
+            type="button" 
+            onClick={handleGoogleSignIn}
+            disabled={isLoading || googleLoading}
+          >
+            {googleLoading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin text-[#47FAF3]" aria-hidden="true" />
+                <span>Authenticating Identity...</span>
+              </>
+            ) : (
+              <>
+                <svg className="trace-login-sso-icon" viewBox="0 0 24 24">
+                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"></path>
+                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"></path>
+                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.27.81-.57z" fill="#FBBC05"></path>
+                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.66l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"></path>
+                </svg>
+                <span>Secure Federated Identity</span>
+              </>
+            )}
           </button>
 
           {/* Footer Link */}
@@ -1008,4 +987,3 @@ export default function Login() {
     </main>
   );
 }
-

@@ -1,9 +1,21 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Brain, Lock, ArrowRight, Terminal, CheckCircle2 } from 'lucide-react';
 
 export default function AIThreatPanel() {
+  const [toastMsg, setToastMsg] = useState('');
+
+  const handleAction = (actionName) => {
+    setToastMsg(`Initiating Action: ${actionName}`);
+    setTimeout(() => setToastMsg(''), 3000);
+  };
+
   return (
-    <div className="col-span-12 lg:col-span-4">
+    <div className="col-span-12 lg:col-span-4 relative">
+      {toastMsg && (
+        <div className="absolute top-2 left-1/2 -translate-x-1/2 z-50 bg-[#0f1425] border border-[#47faf3] text-[#47faf3] text-[10px] px-3 py-1.5 rounded-lg shadow-xl font-bold whitespace-nowrap">
+          {toastMsg}
+        </div>
+      )}
       <div className="soc-card min-h-[460px] relative overflow-hidden flex flex-col justify-between">
         <div>
           <div className="flex items-center gap-2 text-[#47faf3] select-none">
@@ -34,14 +46,22 @@ export default function AIThreatPanel() {
           {/* Recommended actions list */}
           <div className="mt-5 space-y-2.5">
             <span className="text-[10px] font-bold uppercase text-[#cbd5e1]/50 tracking-wider">Actions Suggested</span>
-            <button type="button" className="w-full flex items-center justify-between p-3 rounded-lg border border-white/5 bg-white/5 hover:bg-white/10 hover:border-white/10 transition-all text-xs group text-left text-white outline-none">
+            <button 
+              type="button" 
+              onClick={() => handleAction('Revoke Access Tokens')}
+              className="w-full flex items-center justify-between p-3 rounded-lg border border-white/5 bg-white/5 hover:bg-white/10 hover:border-white/10 transition-all text-xs group text-left text-white outline-none"
+            >
               <span className="flex items-center gap-2.5">
                 <Lock className="w-3.5 h-3.5 text-[#47faf3]" />
                 Revoke Active Access Tokens
               </span>
               <ArrowRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity text-[#47faf3]" />
             </button>
-            <button type="button" className="w-full flex items-center justify-between p-3 rounded-lg border border-white/5 bg-white/5 hover:bg-white/10 hover:border-white/10 transition-all text-xs group text-left text-white outline-none">
+            <button 
+              type="button" 
+              onClick={() => handleAction('Kernel Dump Analysis')}
+              className="w-full flex items-center justify-between p-3 rounded-lg border border-white/5 bg-white/5 hover:bg-white/10 hover:border-white/10 transition-all text-xs group text-left text-white outline-none"
+            >
               <span className="flex items-center gap-2.5">
                 <Terminal className="w-3.5 h-3.5 text-[#47faf3]" />
                 Deploy Kernel Dump Analysis

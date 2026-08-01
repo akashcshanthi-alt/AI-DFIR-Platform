@@ -35,6 +35,13 @@ export default function Dashboard() {
     aiResolutions: '89%'
   });
   const [isFetching, setIsFetching] = useState(true);
+  const [toastMsg, setToastMsg] = useState('');
+
+  const handleSyncAssets = async () => {
+    await fetchDashboardStats();
+    setToastMsg('SOC telemetry database synchronized successfully.');
+    setTimeout(() => setToastMsg(''), 3000);
+  };
 
   // Live Activity Logs Feed list
   const [activities, setActivities] = useState([
@@ -170,7 +177,12 @@ export default function Dashboard() {
   if (!hasSession) return null;
 
   return (
-    <div className="trace-dashboard-layout">
+    <div className="trace-dashboard-layout relative">
+      {toastMsg && (
+        <div className="fixed top-20 right-6 z-50 bg-[#0f1425] border border-[#47faf3] text-[#47faf3] text-xs px-4 py-2.5 rounded-lg shadow-xl font-bold">
+          {toastMsg}
+        </div>
+      )}
       <div className="w-full bg-[#050814] text-[#dfe2f3] min-h-screen p-6 grid-bg box-border flex flex-col gap-6">
 
         {/* Header Info Panel */}
@@ -184,7 +196,7 @@ export default function Dashboard() {
             <button 
               type="button" 
               className="flex items-center gap-2 px-3 py-1.5 bg-[#0f1423]/80 border border-white/10 hover:bg-[#161d33] text-[#cbd5e1] text-[12.5px] font-semibold rounded-lg transition-colors duration-200"
-              onClick={fetchDashboardStats}
+              onClick={handleSyncAssets}
               disabled={isFetching}
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? 'animate-spin text-[#47faf3]' : ''}`} />

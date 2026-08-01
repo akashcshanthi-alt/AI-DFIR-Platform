@@ -26,6 +26,8 @@ export default function CreateCase() {
   // Unified Wizard State
   const [currentStep, setCurrentStep] = useState(1);
   const totalSteps = 6;
+  const [errorMsg, setErrorMsg] = useState('');
+  const [isSuccess, setIsSuccess] = useState(false);
 
   // Form Field States
   const [caseTitle, setCaseTitle] = useState('');
@@ -59,6 +61,13 @@ export default function CreateCase() {
 
   // Navigation handlers
   const handleNext = () => {
+    if (currentStep === 1) {
+      if (!caseTitle.trim()) {
+        setErrorMsg('Please specify a Case Title to proceed.');
+        return;
+      }
+    }
+    setErrorMsg('');
     if (currentStep < totalSteps) {
       setCurrentStep(currentStep + 1);
     }
@@ -77,11 +86,14 @@ export default function CreateCase() {
   const handleSubmit = () => {
     if (isSubmitting) return;
     setIsSubmitting(true);
+    setErrorMsg('');
     
     setTimeout(() => {
-      alert('Investigation Case Successfully Initiated. Redirecting to SOC Command Center...');
+      setIsSuccess(true);
       setIsSubmitting(false);
-      navigate('/cases');
+      setTimeout(() => {
+        navigate('/cases');
+      }, 2000);
     }, 2000);
   };
 
@@ -89,7 +101,12 @@ export default function CreateCase() {
   const progressPercent = ((currentStep - 1) / (totalSteps - 1)) * 100;
 
   return (
-    <div className="trace-create-layout flex flex-col min-h-screen w-full select-none create-case-grid-bg box-border p-6 md:p-8">
+    <div className="trace-create-layout flex flex-col min-h-screen w-full select-none create-case-grid-bg box-border p-6 md:p-8 relative">
+      {isSuccess && (
+        <div className="fixed top-20 right-6 z-50 bg-[#0f1425] border border-[#10b981] text-[#10b981] text-xs px-4 py-2.5 rounded-lg shadow-xl font-bold">
+          Investigation Case Successfully Initiated. Redirecting to SOC Command Center...
+        </div>
+      )}
       <div className="max-w-7xl mx-auto w-full flex-grow flex flex-col justify-between">
         
         {/* Back Link & Header */}
@@ -153,6 +170,11 @@ export default function CreateCase() {
           
           {/* Step Form Viewport */}
           <div className="p-8 md:p-10 flex-grow">
+            {errorMsg && (
+              <div className="mb-6 bg-[#ffb3ae]/10 border border-[#ffb3ae]/30 text-[#ffb3ae] text-xs px-4 py-2.5 rounded-lg">
+                {errorMsg}
+              </div>
+            )}
             {currentStep === 1 && (
               <StepBasicInfo 
                 title={caseTitle} setTitle={setCaseTitle}

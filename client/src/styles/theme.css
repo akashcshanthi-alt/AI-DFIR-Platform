@@ -2,8 +2,8 @@
 
 :root {
   /* Colors - Enterprise cybersecurity SOC appearance */
-  --bg-main: #060913;                 /* Near-black dark navy background */
-  --bg-secondary: #0a0f1d;            /* Slightly lighter dark navy for page headers / section dividers */
+  --bg-main: #050814;                 /* Dark background */
+  --bg-secondary: #0a0f1d;            /* Slightly lighter for page headers */
   
   /* Typography Hierarchy Sizes & Weights */
   --font-size-page-title: 28px;
@@ -36,41 +36,41 @@
   --font-size-badge: 11px;
   --font-weight-badge: 650;
   --letter-spacing-badge: 0.04em;
-  --bg-sidebar: #04070e;              /* Deep dark navy for structural elements like sidebar */
-  --bg-surface: #0e1626;              /* Main card and surface background */
-  --bg-surface-elevated: #162035;     /* Hovered or elevated cards / surfaces */
+  --bg-sidebar: #050814;              /* Deep dark background for sidebar */
+  --bg-surface: #101827;              /* Main card background */
+  --bg-surface-elevated: #111827;     /* Hovered or elevated cards / surfaces */
   
   --border-color: rgba(255, 255, 255, 0.08); /* Subtle border for layout structure */
-  --border-color-hover: rgba(255, 255, 255, 0.15);
+  --border-color-hover: #47FAF3;
   
   /* Primary & Accent Colors - SOC/DFIR vibe, avoiding excessive gaming neon */
-  --color-primary: #3b82f6;           /* Electric Blue - primary action accent */
-  --color-primary-hover: #2563eb;
-  --color-primary-light: rgba(59, 130, 246, 0.1);
+  --color-primary: #47FAF3;           /* Primary Accent */
+  --color-primary-hover: #32e0d9;
+  --color-primary-light: rgba(71, 250, 243, 0.1);
   
-  --color-secondary: #06b6d4;         /* Cyan Accent - secondary metrics / highlights */
-  --color-secondary-hover: #0891b2;
-  --color-secondary-light: rgba(6, 182, 212, 0.1);
+  --color-secondary: #3B82F6;         /* Blue Accent */
+  --color-secondary-hover: #2563eb;
+  --color-secondary-light: rgba(59, 130, 246, 0.1);
 
   /* Typography / Text Colors */
-  --text-primary: #f8fafc;            /* Crisp clean off-white */
-  --text-secondary: #cbd5e1;          /* Highly legible grey for details */
-  --text-muted: #64748b;              /* Darker grey for timestamps/subtext */
+  --text-primary: #F8FAFC;            /* Primary Text */
+  --text-secondary: #94A3B8;          /* Secondary Text */
+  --text-muted: #64748b;              /* Muted */
 
   /* Status Colors (Required for DFIR triage and case management) */
-  --status-critical: #ef4444;         /* Alert Red */
+  --status-critical: #EF4444;         /* Critical */
   --status-critical-bg: rgba(239, 68, 68, 0.1);
   
-  --status-high: #f97316;             /* Orange */
-  --status-high-bg: rgba(249, 115, 22, 0.1);
+  --status-high: #F59E0B;             /* Warning */
+  --status-high-bg: rgba(245, 158, 11, 0.1);
   
-  --status-medium: #eab308;           /* Yellow */
-  --status-medium-bg: rgba(234, 179, 8, 0.1);
+  --status-medium: #F59E0B;           /* Warning / Medium */
+  --status-medium-bg: rgba(245, 158, 11, 0.1);
   
-  --status-low: #22c55e;              /* Green */
-  --status-low-bg: rgba(34, 197, 94, 0.1);
+  --status-low: #10B981;              /* Success / Low */
+  --status-low-bg: rgba(16, 185, 129, 0.1);
   
-  --status-closed: #64748b;           /* Muted Grey */
+  --status-closed: #64748B;           /* Muted Grey */
   --status-closed-bg: rgba(100, 116, 139, 0.1);
 
   /* Spacing System */
@@ -81,7 +81,7 @@
   /* Border Radii */
   --radius-sm: 4px;
   --radius-md: 8px;
-  --radius-lg: 12px;
+  --radius-lg: 16px;                  /* Updated to 16px */
 
   /* Shadows (Subtle depth, professional enterprise look) */
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
@@ -92,9 +92,9 @@
   --transition-speed: 200ms;
 
   /* Glassmorphism/Transparency (Minimal/Subtle) */
-  --glass-bg: rgba(14, 22, 38, 0.7);
-  --glass-border: rgba(255, 255, 255, 0.05);
-  --glass-blur: blur(8px);
+  --glass-bg: rgba(16, 24, 39, 0.7);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-blur: blur(12px);
 }
 
 /* CSS Reset & Core Box-Sizing */

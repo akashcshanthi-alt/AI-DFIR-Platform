@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { FiSearch, FiBell, FiChevronDown, FiSun, FiMoon } from 'react-icons/fi';
 
 /**
@@ -18,6 +19,7 @@ export default function Header({
   userRole = 'Investigator', 
   className = '' 
 }) {
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
 
   const [theme, setTheme] = useState(() => {
@@ -328,6 +330,7 @@ export default function Header({
         <button 
           type="button" 
           className="trace-header-profile"
+          onClick={() => navigate('/profile')}
           aria-label={`User settings for ${userName} (${userRole})`}
           title="User Profile"
         >

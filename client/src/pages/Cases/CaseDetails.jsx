@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, Share2, Download } from 'lucide-react';
+import { ArrowLeft, Share2, Download, Folder } from 'lucide-react';
 import './CaseDetails.css';
 
 // Import sub-components
@@ -15,6 +15,17 @@ import EvidenceTab from '../../features/investigation/EvidenceTab';
 import AIAnalysisTab from '../../features/investigation/AIAnalysisTab';
 import TimelineTab from '../../features/investigation/TimelineTab';
 import ReportTab from '../../features/investigation/ReportTab';
+
+const formatCaseId = (id) => {
+  if (!id) return '';
+  if (id.startsWith('CASE-')) {
+    return `#TR-${id.split('-')[1]}`;
+  }
+  if (!id.startsWith('#')) {
+    return `#${id}`;
+  }
+  return id;
+};
 
 export default function CaseDetails() {
   const navigate = useNavigate();
@@ -219,7 +230,7 @@ export default function CaseDetails() {
         {(activeTab === 'artifacts' || activeTab === 'iocs') && (
           <div className="flex-grow p-6 flex items-center justify-center w-full">
             <div className="glass-panel rounded-xl p-8 text-center text-[#8b90a0] flex flex-col items-center justify-center gap-4 max-w-md">
-              <span className="text-4xl">📂</span>
+              <Folder className="w-12 h-12 text-[#8b90a0] mb-1" />
               <h3 className="font-semibold text-white text-base">No Data Correlated</h3>
               <p className="text-xs leading-relaxed">
                 There are no forensic artifacts or indicators of compromise extracted for {formatCaseId(activeCaseId)} yet. Run active response agent telemetry scan to populate details.
