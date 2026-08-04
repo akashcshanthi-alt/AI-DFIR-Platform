@@ -10,7 +10,9 @@ import {
   FiLogOut,
   FiShield,
   FiChevronLeft,
-  FiChevronRight
+  FiChevronRight,
+  FiUser,
+  FiUsers
 } from 'react-icons/fi';
 
 // Main Navigation Items with corresponding paths and icons
@@ -20,6 +22,7 @@ const NAV_ITEMS = [
   { id: 'ai-investigation', label: 'AI Investigation', path: '/ai-investigation', icon: FiCpu },
   { id: 'reports', label: 'Reports', path: '/reports', icon: FiFileText },
   { id: 'audit-logs', label: 'Audit Logs', path: '/audit-logs', icon: FiLayers },
+  { id: 'profile', label: 'Profile', path: '/profile', icon: FiUser },
   { id: 'settings', label: 'Settings', path: '/settings', icon: FiSettings },
 ];
 
@@ -35,11 +38,19 @@ export default function Sidebar({ onLogout }) {
   const location = useLocation();
   const [isCollapsed, setIsCollapsed] = useState(false);
 
+  const userRole = localStorage.getItem('operatorRole') || '';
+  const isPrivileged = userRole === 'Admin' || userRole === 'Super Admin';
+
+  const menuItems = [...NAV_ITEMS];
+  if (isPrivileged) {
+    // Insert Users before Settings
+    menuItems.splice(6, 0, { id: 'users', label: 'Users', path: '/users', icon: FiUsers });
+  }
+
   // Active route matching algorithm
   const isItemActive = (itemPath) => {
     const currentPath = location.pathname;
     if (itemPath === '/cases') {
-      // Keep "Cases" active for child routes like /cases/new, /cases/123
       return currentPath.startsWith('/cases');
     }
     return currentPath === itemPath;
@@ -343,14 +354,12 @@ export default function Sidebar({ onLogout }) {
 
       {/* Brand Header */}
       <div className="trace-sidebar-header">
-        <Link to="/dashboard" className="trace-sidebar-brand" title="TRACE AI DFIR">
-          <div className="trace-sidebar-brand-icon">
-            <FiShield />
-          </div>
-          <div className="trace-sidebar-brand-text">
-            <span className="trace-sidebar-brand-name">TRACE AI</span>
-            <span className="trace-sidebar-brand-subtitle">DFIR PLATFORM</span>
-          </div>
+        <Link to="/dashboard" className="trace-sidebar-brand" title="TRACE AI DFIR" style={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+          {isCollapsed ? (
+            <img src="/logo-white.svg" alt="TRACE AI" className="trace-sidebar-brand-logo-img" style={{ width: '32px', height: '32px', display: 'block', margin: '0 auto' }} />
+          ) : (
+            <img src="/logo-sidebar.svg" alt="TRACE AI" className="trace-sidebar-brand-logo-img" style={{ height: '36px', display: 'block' }} />
+          )}
         </Link>
         
         {!isCollapsed && (
@@ -380,7 +389,7 @@ export default function Sidebar({ onLogout }) {
 
       {/* Main Navigation List */}
       <nav className="trace-sidebar-nav-container" aria-label="Main Navigation">
-        {NAV_ITEMS.map((item) => {
+        {menuItems.map((item) => {
           const Icon = item.icon;
           const active = isItemActive(item.path);
           return (

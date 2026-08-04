@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   FiUpload, 
   FiFile, 
@@ -6,92 +6,86 @@ import {
   FiCheck, 
   FiCopy, 
   FiInfo, 
-  FiTrash2 
+  FiTrash2,
+  FiDownload,
+  FiClock,
+  FiTag,
+  FiEdit2,
+  FiAlertTriangle
 } from 'react-icons/fi';
-
 import StatusBadge from '../../components/common/StatusBadge';
+import { evidenceService } from '../../services/evidence.service';
 
-// Initial coherent mock evidence list
-const INITIAL_EVIDENCE = [
-  {
-    name: 'security.evtx',
-    type: 'Windows Event Log',
-    size: '18.4 MB',
-    uploaded: 'Jul 29, 2026 09:42',
-    sha256: '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08',
-    status: 'Verified',
-    description: 'System security audit logs extracted from core Active Directory Domain Controller sub-segment.',
-  },
-  {
-    name: 'memory.raw',
-    type: 'Memory Dump',
-    size: '512 MB',
-    uploaded: 'Jul 29, 2026 09:37',
-    sha256: '57ac4568853b0f55aa0a6fef5f0f0c08b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8',
-    status: 'Verified',
-    description: 'Volatile RAM dump from compromised endpoint workstation for process tracing analysis.',
-  },
-  {
-    name: 'network.pcap',
-    type: 'Network Capture',
-    size: '24.8 MB',
-    uploaded: 'Jul 29, 2026 09:35',
-    sha256: 'ec39f86d88c0a55ad081a2f0c55a015a3bf4f1b2b0b822cd15d6c15b0f00a082',
-    status: 'Verified',
-    description: 'Full packet payload capture from external egress perimeter router interfaces.',
-  },
-  {
-    name: 'auth-log.txt',
-    type: 'Document',
-    size: '1.2 MB',
-    uploaded: 'Jul 29, 2026 09:31',
-    sha256: '7a08b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8',
-    status: 'Verified',
-    description: 'Filtered authentication logs containing list of multiple failed authorization attempts.',
-  },
-];
-
-/**
- * EvidenceTab Component
- * Reusable workspace module containing forensic file uploads, integrity checklists,
- * and hash telemetry display tables.
- *
- * @param {Object} props
- * @param {string} [props.caseId] - Parent case unique identifier
- */
-export default function EvidenceTab({ caseId = 'TRC-2026-0042' }) {
+export default function EvidenceTab({ caseId = 'DF-1001' }) {
   // Local state managers
-  const [evidenceItems, setEvidenceItems] = useState(INITIAL_EVIDENCE);
-  const [selectedFile, setSelectedFile] = useState(null);
+  const [evidenceItems, setEvidenceItems] = useState([]);
+  const [selectedFiles, setSelectedFiles] = useState([]); // Array to support multiple files
   const [evidenceType, setEvidenceType] = useState('');
   const [description, setDescription] = useState('');
+  const [tagsText, setTagsText] = useState('');
 
-  // Drag over dropzone highlight state
-  const [isDragActive, setIsDragActive] = useState(false);
-
-  // Upload Progress simulation state
+  // Loading, progress, and error managers
+  const [isLoading, setIsLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStatus, setUploadStatus] = useState('');
+  const [error, setError] = useState(null);
+  const [toastMsg, setToastMsg] = useState('');
+
+  // Drag over dropzone highlight state
+  const [isDragActive, setIsDragActive] = useState(false);
 
   // UI interaction states
   const [errors, setErrors] = useState({});
   const [copiedHash, setCopiedHash] = useState(null);
   const [expandedRow, setExpandedRow] = useState(null);
 
-  // Dynamic summary values calculated locally from state
-  const totalEvidence = evidenceItems.length;
-  const verifiedCount = evidenceItems.filter((i) => i.status.toLowerCase() === 'verified').length;
-  const integrityIssues = 0; // Hardcoded default for prototype nominal metrics
+  // Inline Editing state
+  const [editingItemId, setEditingItemId] = useState(null);
+  const [editNotes, setEditNotes] = useState('');
+  const [editStatus, setEditStatus] = useState('Active');
+  const [editTags, setEditTags] = useState('');
+  const [isUpdatingMeta, setIsUpdatingMeta] = useState(false);
 
-  // Helper: Format raw file sizes during manual browsing
+  // Dynamic metrics
+  const totalEvidence = evidenceItems.length;
+  const activeCount = evidenceItems.filter((i) => i.status.toLowerCase() === 'active').length;
+  const integrityCount = evidenceItems.filter((i) => i.md5Hash && i.sha256Hash).length;
+
+  const triggerToast = (msg) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(''), 3000);
+  };
+
+  // Helper: Format raw file sizes
   const formatFileSize = (bytes) => {
-    if (bytes === 0) return '0 Bytes';
+    if (bytes === 0 || !bytes) return '0 Bytes';
     const k = 1024;
     const sizes = ['Bytes', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
+
+  // Retrieve evidence files list for this case
+  const fetchEvidence = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const res = await evidenceService.getEvidenceByCase(caseId);
+      setEvidenceItems(res || []);
+    } catch (err) {
+      console.error('[EvidenceTab] List fetch error:', err);
+      setError(err.message || 'Failed to retrieve case evidence.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (caseId) {
+      fetchEvidence();
+    }
+  }, [caseId]);
 
   // Drag and drop event handlers
   const handleDrag = (e) => {
@@ -112,12 +106,14 @@ export default function EvidenceTab({ caseId = 'TRC-2026-0042' }) {
     if (isUploading) return;
 
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      const file = e.dataTransfer.files[0];
-      setSelectedFile({
+      const files = Array.from(e.dataTransfer.files).map(file => ({
         name: file.name,
-        size: formatFileSize(file.size),
+        size: file.size,
+        formattedSize: formatFileSize(file.size),
         rawType: file.type,
-      });
+        file: file
+      }));
+      setSelectedFiles(prev => [...prev, ...files]);
       if (errors.file) setErrors((prev) => ({ ...prev, file: null }));
     }
   };
@@ -125,14 +121,20 @@ export default function EvidenceTab({ caseId = 'TRC-2026-0042' }) {
   // Manual browser input handler
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files.length > 0) {
-      const file = e.target.files[0];
-      setSelectedFile({
+      const files = Array.from(e.target.files).map(file => ({
         name: file.name,
-        size: formatFileSize(file.size),
+        size: file.size,
+        formattedSize: formatFileSize(file.size),
         rawType: file.type,
-      });
+        file: file
+      }));
+      setSelectedFiles(prev => [...prev, ...files]);
       if (errors.file) setErrors((prev) => ({ ...prev, file: null }));
     }
+  };
+
+  const handleRemoveQueuedFile = (index) => {
+    setSelectedFiles(prev => prev.filter((_, idx) => idx !== index));
   };
 
   // Copy Hash action with browser API fallback
@@ -146,17 +148,23 @@ export default function EvidenceTab({ caseId = 'TRC-2026-0042' }) {
   };
 
   // Row expand toggle
-  const toggleRowDetails = (sha256) => {
-    setExpandedRow((prev) => (prev === sha256 ? null : sha256));
+  const toggleRowDetails = (itemId, item) => {
+    setExpandedRow((prev) => (prev === itemId ? null : itemId));
+    setEditingItemId(null); // Cancel editing on toggle
+    if (item) {
+      setEditNotes(item.notes || '');
+      setEditStatus(item.status || 'Active');
+      setEditTags(item.tags ? item.tags.join(', ') : '');
+    }
   };
 
-  // Submission handler with ticks progress bar simulation
-  const handleUploadSubmit = (e) => {
+  // Submission handler with XHR progress callback
+  const handleUploadSubmit = async (e) => {
     e.preventDefault();
     if (isUploading) return;
 
     const tempErrors = {};
-    if (!selectedFile) tempErrors.file = 'A file must be selected for upload';
+    if (selectedFiles.length === 0) tempErrors.file = 'Please queue at least one file for upload';
     if (!evidenceType) tempErrors.evidenceType = 'Please specify evidence classification type';
 
     if (Object.keys(tempErrors).length > 0) {
@@ -167,69 +175,105 @@ export default function EvidenceTab({ caseId = 'TRC-2026-0042' }) {
     setErrors({});
     setIsUploading(true);
     setUploadProgress(0);
-    setUploadStatus('Preparing evidence...');
+    setUploadStatus('Compressing and initializing upload stream...');
 
-    let progressVal = 0;
-    const interval = setInterval(() => {
-      progressVal += 10;
-      if (progressVal <= 70) {
-        setUploadProgress(progressVal);
-        setUploadStatus('Uploading...');
-      } else if (progressVal === 80) {
-        setUploadProgress(progressVal);
-        setUploadStatus('Verifying integrity...');
-      } else if (progressVal === 90) {
-        setUploadProgress(progressVal);
-        setUploadStatus('Rebuilding case hashes...');
-      } else if (progressVal >= 100) {
-        setUploadProgress(100);
-        setUploadStatus('Evidence verified');
-        clearInterval(interval);
-
-        // Generate mock SHA-256 hex string
-        const mockHash = Array.from({ length: 64 }, () => 
-          Math.floor(Math.random() * 16).toString(16)
-        ).join('');
-
-        // Date format string
-        const now = new Date();
-        const formattedDate = now.toLocaleDateString('en-US', {
-          month: 'short',
-          day: '2-digit',
-          year: 'numeric'
-        }) + ' ' + now.toLocaleTimeString('en-US', {
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: false
-        });
-
-        // Construct new item structure
-        const newItem = {
-          name: selectedFile.name,
-          type: evidenceType,
-          size: selectedFile.size,
-          uploaded: formattedDate,
-          sha256: mockHash,
-          status: 'Verified',
-          description: description.trim() || 'No description provided.',
-        };
-
-        // Complete transition delay
-        setTimeout(() => {
-          setEvidenceItems((prev) => [newItem, ...prev]);
-          setIsUploading(false);
-          setUploadProgress(0);
-          setUploadStatus('');
-          setSelectedFile(null);
-          setEvidenceType('');
-          setDescription('');
-        }, 600);
+    try {
+      const formData = new FormData();
+      formData.append('caseId', caseId);
+      formData.append('fileType', evidenceType);
+      formData.append('notes', description);
+      
+      if (tagsText) {
+        const tagsArr = tagsText.split(',').map(t => t.trim()).filter(Boolean);
+        formData.append('tags', JSON.stringify(tagsArr));
       }
-    }, 150); // total transition time ~1.5s
+
+      // Append all queued files
+      selectedFiles.forEach(sf => {
+        formData.append('files', sf.file);
+      });
+
+      await evidenceService.uploadEvidence(formData, (percent) => {
+        setUploadProgress(percent);
+        if (percent < 100) {
+          setUploadStatus(`Uploading: ${percent}%`);
+        } else {
+          setUploadStatus('Synthesizing cryptographic SHA-256/SHA-1/MD5 checksum digests...');
+        }
+      });
+
+      triggerToast(`${selectedFiles.length} evidence payload(s) ingested successfully!`);
+      setSelectedFiles([]);
+      setEvidenceType('');
+      setDescription('');
+      setTagsText('');
+      fetchEvidence();
+    } catch (err) {
+      console.error('[EvidenceTab] Ingestion failure:', err);
+      triggerToast(`Ingestion error: ${err.message}`);
+    } finally {
+      setIsUploading(false);
+      setUploadProgress(0);
+      setUploadStatus('');
+    }
+  };
+
+  const handleDownload = async (item) => {
+    try {
+      const id = item.evidenceId || item._id;
+      triggerToast(`Downloading ${item.originalName}...`);
+      await evidenceService.downloadEvidence(id, item.originalName);
+    } catch (err) {
+      console.error('[EvidenceTab] Download failure:', err);
+      triggerToast(`Download failed: ${err.message}`);
+    }
+  };
+
+  const handleDelete = async (item) => {
+    if (!window.confirm(`Are you sure you want to permanently delete evidence ${item.evidenceId}?`)) {
+      return;
+    }
+    try {
+      const id = item.evidenceId || item._id;
+      await evidenceService.deleteEvidence(id);
+      triggerToast(`Evidence ${item.evidenceId} deleted successfully.`);
+      fetchEvidence();
+    } catch (err) {
+      console.error('[EvidenceTab] Delete failure:', err);
+      triggerToast(`Delete failed: ${err.message}`);
+    }
+  };
+
+  const handleUpdateMetadataSubmit = async (e, item) => {
+    e.preventDefault();
+    setIsUpdatingMeta(true);
+    try {
+      const id = item.evidenceId || item._id;
+      const updated = await evidenceService.updateEvidence(id, {
+        notes: editNotes,
+        status: editStatus,
+        tags: editTags.split(',').map(t => t.trim()).filter(Boolean),
+        chainAction: 'Metadata Updated'
+      });
+      triggerToast(`Metadata updated for ${item.evidenceId}`);
+      setEditingItemId(null);
+      fetchEvidence();
+    } catch (err) {
+      console.error('[EvidenceTab] Metadata update failure:', err);
+      triggerToast(`Update failed: ${err.message}`);
+    } finally {
+      setIsUpdatingMeta(false);
+    }
   };
 
   return (
-    <div className="trace-evidence-tab">
+    <div className="trace-evidence-tab text-left">
+      {toastMsg && (
+        <div className="fixed top-20 right-6 z-50 bg-[#0f1425] border border-[#47faf3] text-[#47faf3] text-xs px-4 py-2.5 rounded-lg shadow-xl font-bold">
+          {toastMsg}
+        </div>
+      )}
+
       {/* Component styles module */}
       <style dangerouslySetInnerHTML={{
         __html: `
@@ -355,12 +399,6 @@ export default function EvidenceTab({ caseId = 'TRC-2026-0042' }) {
             background-color: rgba(59, 130, 246, 0.02);
           }
 
-          .trace-evidence-dropzone:focus-visible {
-            border-color: var(--color-primary, #3b82f6);
-            outline: 2px solid var(--color-primary, #3b82f6);
-            outline-offset: -2px;
-          }
-
           .trace-evidence-dropzone-icon {
             font-size: 1.8rem;
             color: var(--text-muted, #64748b);
@@ -380,7 +418,15 @@ export default function EvidenceTab({ caseId = 'TRC-2026-0042' }) {
             color: var(--text-muted, #64748b);
           }
 
-          /* File selected indicator pill */
+          /* File selected indicator list */
+          .trace-evidence-queue-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            max-height: 150px;
+            overflow-y: auto;
+          }
+
           .trace-evidence-selected-file {
             display: flex;
             align-items: center;
@@ -398,6 +444,7 @@ export default function EvidenceTab({ caseId = 'TRC-2026-0042' }) {
             flex-direction: column;
             min-width: 0;
             gap: 2px;
+            text-align: left;
           }
 
           .trace-evidence-file-name {
@@ -430,16 +477,13 @@ export default function EvidenceTab({ caseId = 'TRC-2026-0042' }) {
             background-color: rgba(239, 68, 68, 0.08);
           }
 
-          .trace-evidence-remove-file-btn:focus-visible {
-            outline: 2px solid var(--status-critical, #ef4444);
-          }
-
           /* Fields and controls styling */
           .trace-evidence-field {
             display: flex;
             flex-direction: column;
             gap: 6px;
             box-sizing: border-box;
+            text-align: left;
           }
 
           .trace-evidence-label {
@@ -469,12 +513,10 @@ export default function EvidenceTab({ caseId = 'TRC-2026-0042' }) {
 
           .trace-evidence-select:focus {
             border-color: var(--color-primary, #3b82f6);
-            box-shadow: 0 0 0 1px var(--color-primary-light, rgba(59, 130, 246, 0.1));
           }
 
           .trace-evidence-select.error {
             border-color: var(--status-critical, #ef4444);
-            box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.15);
           }
 
           .trace-evidence-textarea {
@@ -486,17 +528,27 @@ export default function EvidenceTab({ caseId = 'TRC-2026-0042' }) {
             color: var(--text-primary, #f8fafc);
             font-size: 0.875rem;
             outline: none;
-            transition: border-color var(--transition-speed, 200ms) ease;
             height: 60px;
             box-sizing: border-box;
             resize: vertical;
             line-height: 1.4;
-            font-family: inherit;
           }
 
-          .trace-evidence-textarea:focus {
+          .trace-evidence-input {
+            width: 100%;
+            background-color: var(--bg-secondary, #0a0f1d);
+            border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+            border-radius: var(--radius-sm, 4px);
+            padding: 8px 12px;
+            color: var(--text-primary, #f8fafc);
+            font-size: 0.875rem;
+            outline: none;
+            height: 38px;
+            box-sizing: border-box;
+          }
+
+          .trace-evidence-input:focus, .trace-evidence-textarea:focus {
             border-color: var(--color-primary, #3b82f6);
-            box-shadow: 0 0 0 1px var(--color-primary-light, rgba(59, 130, 246, 0.1));
           }
 
           .trace-evidence-validation-error {
@@ -515,7 +567,6 @@ export default function EvidenceTab({ caseId = 'TRC-2026-0042' }) {
             font-size: 0.875rem;
             font-weight: 600;
             cursor: pointer;
-            transition: background-color var(--transition-speed, 200ms) ease;
             width: 100%;
             height: 40px;
             display: flex;
@@ -535,14 +586,6 @@ export default function EvidenceTab({ caseId = 'TRC-2026-0042' }) {
           .trace-evidence-submit-btn:disabled {
             opacity: 0.65;
             cursor: not-allowed;
-            background-color: var(--bg-surface-elevated, #162035);
-            color: var(--text-muted, #64748b);
-            border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
-          }
-
-          .trace-evidence-submit-btn:focus-visible {
-            outline: 2px solid var(--color-secondary, #06b6d4);
-            outline-offset: 2px;
           }
 
           /* Interactive progress simulation bar */
@@ -564,7 +607,6 @@ export default function EvidenceTab({ caseId = 'TRC-2026-0042' }) {
             justify-content: space-between;
             font-size: 0.75rem;
             font-weight: 600;
-            user-select: none;
           }
 
           .trace-evidence-progress-status {
@@ -580,7 +622,7 @@ export default function EvidenceTab({ caseId = 'TRC-2026-0042' }) {
             width: 100%;
             height: 4px;
             background-color: rgba(255, 255, 255, 0.05);
-            border-radius: var(--radius-full, 9999px);
+            border-radius: 999px;
             overflow: hidden;
           }
 
@@ -591,7 +633,7 @@ export default function EvidenceTab({ caseId = 'TRC-2026-0042' }) {
           }
 
           .trace-evidence-progress-fill.verified {
-            background-color: var(--status-low, #22c55e);
+            background-color: #10b981;
           }
 
           /* Right column evidence list */
@@ -628,7 +670,6 @@ export default function EvidenceTab({ caseId = 'TRC-2026-0042' }) {
             letter-spacing: 0.05em;
             color: var(--text-muted, #64748b);
             border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
-            user-select: none;
           }
 
           .trace-evidence-table td {
@@ -686,23 +727,11 @@ export default function EvidenceTab({ caseId = 'TRC-2026-0042' }) {
             justify-content: center;
             outline: none;
             font-size: 0.8rem;
-            transition: all var(--transition-speed, 200ms);
           }
 
           .trace-evidence-copy-btn:hover {
             color: var(--color-primary, #3b82f6);
             background-color: var(--bg-surface-elevated, #162035);
-          }
-
-          .trace-evidence-copy-btn:focus-visible {
-            outline: 2px solid var(--color-primary, #3b82f6);
-          }
-
-          .trace-evidence-copied-feedback {
-            font-size: 0.65rem;
-            color: var(--status-low, #22c55e);
-            font-weight: 600;
-            margin-left: 2px;
           }
 
           .trace-evidence-row-btn {
@@ -714,35 +743,27 @@ export default function EvidenceTab({ caseId = 'TRC-2026-0042' }) {
             font-size: 0.725rem;
             font-weight: 600;
             cursor: pointer;
-            transition: all var(--transition-speed, 200ms) ease;
-            outline: none;
             height: 28px;
             box-sizing: border-box;
-            user-select: none;
           }
 
           .trace-evidence-row-btn:hover {
             border-color: var(--color-primary, #3b82f6);
-            background-color: var(--color-primary-light, rgba(59, 130, 246, 0.1));
+            background-color: rgba(59, 130, 246, 0.1);
             color: var(--text-primary, #f8fafc);
-          }
-
-          .trace-evidence-row-btn:focus-visible {
-            outline: 2px solid var(--color-secondary, #06b6d4);
-            outline-offset: 1px;
           }
 
           /* Expanded details panel in table */
           .trace-evidence-details-row td {
-            padding: 14px 20px;
-            background-color: rgba(0, 0, 0, 0.14);
+            padding: 16px 20px;
+            background-color: rgba(0, 0, 0, 0.2);
             border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
           }
 
           .trace-evidence-details-panel {
             display: flex;
             flex-direction: column;
-            gap: 8px;
+            gap: 12px;
             font-size: 0.8125rem;
           }
 
@@ -755,7 +776,7 @@ export default function EvidenceTab({ caseId = 'TRC-2026-0042' }) {
           .trace-evidence-details-label {
             font-weight: 600;
             color: var(--text-muted, #64748b);
-            width: 100px;
+            width: 110px;
             flex-shrink: 0;
           }
 
@@ -767,6 +788,140 @@ export default function EvidenceTab({ caseId = 'TRC-2026-0042' }) {
           .trace-evidence-details-value.monospace {
             font-family: monospace;
             color: var(--color-secondary, #06b6d4);
+          }
+
+          /* Timeline styling */
+          .trace-evidence-timeline {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-top: 6px;
+            border-left: 1.5px solid rgba(255, 255, 255, 0.08);
+            padding-left: 16px;
+            margin-left: 6px;
+          }
+
+          .trace-evidence-timeline-node {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            text-align: left;
+          }
+
+          .trace-evidence-timeline-bullet {
+            position: absolute;
+            left: -22px;
+            top: 4px;
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            background-color: var(--color-secondary, #06b6d4);
+            border: 2px solid #0a0f1d;
+          }
+
+          .trace-evidence-timeline-header {
+            font-size: 0.775rem;
+            color: var(--text-primary, #f8fafc);
+          }
+
+          .trace-evidence-timeline-header strong {
+            color: var(--color-primary, #3b82f6);
+          }
+
+          .trace-evidence-timeline-header span {
+            color: var(--text-secondary, #cbd5e1);
+          }
+
+          .trace-evidence-timeline-header em {
+            font-style: normal;
+            color: var(--text-muted, #64748b);
+            margin-left: 4px;
+          }
+
+          .trace-evidence-timeline-notes {
+            font-size: 0.75rem;
+            color: var(--text-secondary, #cbd5e1);
+            margin: 2px 0;
+          }
+
+          .trace-evidence-timeline-ip {
+            font-size: 0.675rem;
+            color: var(--text-muted, #64748b);
+            font-family: monospace;
+          }
+
+          /* Editing panel */
+          .trace-evidence-edit-box {
+            background-color: rgba(255, 255, 255, 0.015);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 4px;
+            padding: 14px;
+            margin-top: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+          }
+
+          .trace-evidence-edit-row {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+          }
+
+          .trace-evidence-edit-col {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            flex: 1;
+            min-width: 150px;
+          }
+
+          .trace-evidence-edit-buttons {
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+            margin-top: 4px;
+          }
+
+          .trace-evidence-inline-btn {
+            background-color: transparent;
+            border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+            color: var(--text-primary, #f8fafc);
+            padding: 5px 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            border-radius: 4px;
+            cursor: pointer;
+            height: 30px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            outline: none;
+          }
+
+          .trace-evidence-inline-btn.save {
+            background-color: var(--color-primary, #3b82f6);
+            border-color: var(--color-primary, #3b82f6);
+          }
+
+          .trace-evidence-inline-btn.save:hover {
+            background-color: var(--color-primary-hover, #2563eb);
+          }
+
+          .trace-evidence-inline-btn.cancel:hover {
+            background-color: rgba(255, 255, 255, 0.05);
+          }
+
+          /* Tag pills */
+          .trace-evidence-tag-pill {
+            background-color: rgba(6, 182, 212, 0.1);
+            border: 1px solid rgba(6, 182, 212, 0.2);
+            color: var(--color-secondary, #06b6d4);
+            font-size: 0.7rem;
+            padding: 2px 8px;
+            border-radius: 99px;
+            font-weight: 600;
           }
 
           /* Polished empty state placeholder */
@@ -809,7 +964,6 @@ export default function EvidenceTab({ caseId = 'TRC-2026-0042' }) {
             line-height: 1.45;
           }
 
-          /* Scoped Visually Hidden inputs */
           .trace-evidence-hidden-input {
             position: absolute;
             width: 1px;
@@ -821,7 +975,6 @@ export default function EvidenceTab({ caseId = 'TRC-2026-0042' }) {
             border: 0;
           }
 
-          /* Visually hidden spinner keyframes */
           .trace-evidence-spinner {
             width: 14px;
             height: 14px;
@@ -832,18 +985,13 @@ export default function EvidenceTab({ caseId = 'TRC-2026-0042' }) {
             flex-shrink: 0;
           }
 
-          /* Responsive Layout */
+          @keyframes trace-btn-spin {
+            to { transform: rotate(360deg); }
+          }
+
           @media (max-width: 992px) {
             .trace-evidence-workspace {
               grid-template-columns: 1fr;
-            }
-          }
-
-          @media (max-width: 768px) {
-            .trace-evidence-header {
-              flex-direction: column;
-              align-items: flex-start;
-              gap: 12px;
             }
           }
         `
@@ -851,21 +999,21 @@ export default function EvidenceTab({ caseId = 'TRC-2026-0042' }) {
 
       {/* Overview segment */}
       <div className="trace-evidence-header" role="region" aria-label="Evidence Overview Summary">
-        <div className="trace-evidence-title-group">
-          <h3 className="trace-evidence-title">Evidence</h3>
+        <div className="trace-evidence-title-group text-left">
+          <h3 className="trace-evidence-title">Evidence Intake Console</h3>
           <p className="trace-evidence-subtitle">
-            Upload, verify and manage forensic evidence for this investigation.
+            Securely upload, hash verify, and track Chain of Custody for case #{caseId}.
           </p>
         </div>
         <div className="trace-evidence-summary-row">
           <span className="trace-evidence-summary-pill">
-            Total Evidence: <strong>{totalEvidence}</strong>
+            Total Files: <strong>{totalEvidence}</strong>
           </span>
           <span className="trace-evidence-summary-pill">
-            Verified: <strong>{verifiedCount}</strong>
+            Active: <strong>{activeCount}</strong>
           </span>
           <span className="trace-evidence-summary-pill">
-            Integrity Issues: <strong>{integrityIssues}</strong>
+            Integrity Checked: <strong>{integrityCount}</strong>
           </span>
         </div>
       </div>
@@ -875,72 +1023,81 @@ export default function EvidenceTab({ caseId = 'TRC-2026-0042' }) {
         
         {/* Left Side: Upload zone card */}
         <section className="trace-evidence-upload-card" aria-label="Forensic upload interface">
-          <h4 className="trace-evidence-upload-title">Upload Evidence</h4>
+          <h4 className="trace-evidence-upload-title text-left">Upload Evidence</h4>
           
           <form onSubmit={handleUploadSubmit} className="trace-evidence-field" style={{ gap: '16px' }} noValidate>
             
             {/* File Dropzone / Select Area */}
             <div className="trace-evidence-field">
-              <span className="trace-evidence-label">Select File</span>
-              {!selectedFile ? (
-                /* Drag and drop triggers manual input clicks */
-                <label 
-                  className={`trace-evidence-dropzone ${isDragActive ? 'active' : ''}`}
-                  onDragEnter={handleDrag}
-                  onDragOver={handleDrag}
-                  onDragLeave={handleDrag}
-                  onDrop={handleDrop}
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      document.getElementById('trace-file-select-input').click();
-                    }
-                  }}
-                  title="Click or drag file here to load evidence"
-                >
-                  <span className="trace-evidence-dropzone-icon" aria-hidden="true">
-                    <FiUpload />
-                  </span>
-                  <span className="trace-evidence-dropzone-text">
-                    Drag &amp; drop file here, or click to browse
-                  </span>
-                  <span className="trace-evidence-dropzone-subtext">
-                    Supports RAW, PCAP, EVTX, LOG, JSON, IMG (Max 2GB)
-                  </span>
-                  <input
-                    id="trace-file-select-input"
-                    type="file"
-                    className="trace-evidence-hidden-input"
-                    onChange={handleFileChange}
-                    disabled={isUploading}
-                    aria-label="Upload file input"
-                  />
-                </label>
-              ) : (
-                /* Active file indicator badge */
-                <div className="trace-evidence-selected-file">
-                  <div className="trace-evidence-file-info">
-                    <span className="trace-evidence-file-name" title={selectedFile.name}>
-                      {selectedFile.name}
-                    </span>
-                    <span className="trace-evidence-file-meta">
-                      Size: {selectedFile.size}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    className="trace-evidence-remove-file-btn"
-                    onClick={() => {
-                      if (!isUploading) setSelectedFile(null);
-                    }}
-                    disabled={isUploading}
-                    aria-label="Remove selected file"
-                  >
-                    Remove
-                  </button>
+              <span className="trace-evidence-label">Select Files</span>
+              
+              {/* Drag and drop zone */}
+              <div 
+                className={`trace-evidence-dropzone ${isDragActive ? 'active' : ''}`}
+                onDragEnter={handleDrag}
+                onDragOver={handleDrag}
+                onDragLeave={handleDrag}
+                onDrop={handleDrop}
+                onClick={() => document.getElementById('trace-file-select-input').click()}
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    document.getElementById('trace-file-select-input').click();
+                  }
+                }}
+                title="Click or drag files here to queue evidence"
+              >
+                <span className="trace-evidence-dropzone-icon" aria-hidden="true">
+                  <FiUpload />
+                </span>
+                <span className="trace-evidence-dropzone-text">
+                  Drag &amp; drop files here, or click to browse
+                </span>
+                <span className="trace-evidence-dropzone-subtext">
+                  Queues multiple RAW, PCAP, EVTX, LOG, JSON, IMG files
+                </span>
+                <input
+                  id="trace-file-select-input"
+                  type="file"
+                  multiple
+                  className="trace-evidence-hidden-input"
+                  onChange={handleFileChange}
+                  disabled={isUploading}
+                  aria-label="Upload files input"
+                />
+              </div>
+
+              {/* Upload queue list */}
+              {selectedFiles.length > 0 && (
+                <div className="trace-evidence-queue-list mt-2">
+                  {selectedFiles.map((sf, idx) => (
+                    <div key={idx} className="trace-evidence-selected-file">
+                      <div className="trace-evidence-file-info">
+                        <span className="trace-evidence-file-name" title={sf.name}>
+                          {sf.name}
+                        </span>
+                        <span className="trace-evidence-file-meta">
+                          Size: {sf.formattedSize}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        className="trace-evidence-remove-file-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (!isUploading) handleRemoveQueuedFile(idx);
+                        }}
+                        disabled={isUploading}
+                        aria-label="Remove queued file"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
                 </div>
               )}
+
               {errors.file && (
                 <span className="trace-evidence-validation-error" role="alert">
                   {errors.file}
@@ -951,7 +1108,7 @@ export default function EvidenceTab({ caseId = 'TRC-2026-0042' }) {
             {/* Evidence Classification Dropdown */}
             <div className="trace-evidence-field">
               <label htmlFor="trace-evidence-type-dropdown" className="trace-evidence-label">
-                Evidence Type
+                Evidence Type *
               </label>
               <select
                 id="trace-evidence-type-dropdown"
@@ -974,21 +1131,37 @@ export default function EvidenceTab({ caseId = 'TRC-2026-0042' }) {
                 <option value="Other">Other</option>
               </select>
               {errors.evidenceType && (
-                <span id="trace-evidence-type-error" className="trace-evidence-validation-error" role="alert">
+                <span className="trace-evidence-validation-error" role="alert">
                   {errors.evidenceType}
                 </span>
               )}
             </div>
 
+            {/* Tags Input */}
+            <div className="trace-evidence-field">
+              <label htmlFor="trace-evidence-tags-field" className="trace-evidence-label">
+                Tags (Comma separated)
+              </label>
+              <input
+                id="trace-evidence-tags-field"
+                type="text"
+                className="trace-evidence-input"
+                placeholder="e.g. host-04, brute-force, web-server"
+                value={tagsText}
+                onChange={(e) => setTagsText(e.target.value)}
+                disabled={isUploading}
+              />
+            </div>
+
             {/* Description / Analyst Notes */}
             <div className="trace-evidence-field">
               <label htmlFor="trace-evidence-description-field" className="trace-evidence-label">
-                Description (Optional)
+                Analyst Notes / Origin Info (Optional)
               </label>
               <textarea
                 id="trace-evidence-description-field"
                 className="trace-evidence-textarea"
-                placeholder="Add notes about forensic origin or source host..."
+                placeholder="Add details about acquisition environment or custody chain..."
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 disabled={isUploading}
@@ -1000,22 +1173,22 @@ export default function EvidenceTab({ caseId = 'TRC-2026-0042' }) {
             <button
               type="submit"
               className="trace-evidence-submit-btn"
-              disabled={isUploading}
+              disabled={isUploading || selectedFiles.length === 0}
             >
               {isUploading && <span className="trace-evidence-spinner" aria-hidden="true" />}
-              <span>{isUploading ? 'Uploading...' : 'Upload Evidence'}</span>
+              <span>{isUploading ? 'Uploading...' : `Upload ${selectedFiles.length || ''} File(s)`}</span>
             </button>
 
             {/* Simulated progress tracker container */}
             {isUploading && (
               <div 
-                className="trace-evidence-progress-container"
+                className="trace-evidence-progress-container text-left"
                 role="status"
                 aria-live="polite"
                 aria-busy="true"
               >
                 <div className="trace-evidence-progress-status-row">
-                  <span className="trace-evidence-progress-status">
+                  <span className="trace-evidence-progress-status text-xs">
                     {uploadStatus}
                   </span>
                   <span className="trace-evidence-progress-percent">
@@ -1033,75 +1206,110 @@ export default function EvidenceTab({ caseId = 'TRC-2026-0042' }) {
 
           </form>
         </section>
-
+        
         {/* Right Side: Evidence list table */}
         <section className="trace-evidence-list-card" aria-label="Incident forensic items directory">
-          <h4 className="trace-evidence-upload-title" style={{ borderBottom: 'none', paddingBottom: 0 }}>
+          <h4 className="trace-evidence-upload-title text-left" style={{ borderBottom: 'none', paddingBottom: 0 }}>
             Forensic Evidence Directory
           </h4>
 
-          {evidenceItems.length > 0 ? (
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center py-20 gap-3 text-primary animate-pulse">
+              <span className="material-symbols-outlined animate-spin text-[32px]">sync</span>
+              <p className="text-xs">Loading case forensic repository...</p>
+            </div>
+          ) : error ? (
+            <div className="flex flex-col items-center justify-center py-20 text-[#ef4444] gap-2">
+              <FiAlertTriangle className="text-[32px]" />
+              <p className="text-sm font-bold">Failed to load evidence catalog</p>
+              <p className="text-xs text-on-surface-variant max-w-sm">{error}</p>
+            </div>
+          ) : evidenceItems.length > 0 ? (
             <div className="trace-evidence-table-container">
               <table className="trace-evidence-table">
                 <thead>
                   <tr>
-                    <th scope="col">File Name</th>
-                    <th scope="col">Evidence Type</th>
+                    <th scope="col" className="text-left">File Name</th>
+                    <th scope="col">Type</th>
                     <th scope="col">Size</th>
-                    <th scope="col">Uploaded</th>
+                    <th scope="col">Ingested</th>
                     <th scope="col">SHA-256</th>
-                    <th scope="col">Verification</th>
-                    <th scope="col">Actions</th>
+                    <th scope="col">Status</th>
+                    <th scope="col" className="text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {evidenceItems.map((item) => {
-                    const isExpanded = expandedRow === item.sha256;
-                    const isCopied = copiedHash === item.sha256;
+                    const isExpanded = expandedRow === item._id || expandedRow === item.evidenceId;
+                    const isCopied = copiedHash === item._id;
                     
                     return (
-                      <React.Fragment key={item.sha256}>
+                      <React.Fragment key={item._id}>
                         {/* Summary Data Row */}
                         <tr className={`trace-evidence-row ${isExpanded ? 'expanded' : ''}`}>
-                          <td className="trace-evidence-file-cell" title={item.name}>
-                            {item.name}
+                          <td className="trace-evidence-file-cell text-left" title={item.originalName}>
+                            <div className="font-semibold text-xs text-on-surface leading-normal">{item.originalName}</div>
+                            <div className="text-[10px] text-on-surface-variant font-mono mt-0.5">{item.evidenceId}</div>
                           </td>
-                          <td>{item.type}</td>
-                          <td>{item.size}</td>
-                          <td>{item.uploaded}</td>
+                          <td>{item.fileType}</td>
+                          <td>{formatFileSize(item.fileSize)}</td>
+                          <td>{new Date(item.uploadedAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
                           <td>
                             <span 
                               className="trace-evidence-hash-cell" 
-                              title={`SHA-256 Hash: ${item.sha256}`}
+                              title={`SHA-256 Hash: ${item.sha256Hash}`}
                             >
-                              {item.sha256.slice(0, 12)}...
-                              <button
-                                type="button"
-                                className="trace-evidence-copy-btn"
-                                onClick={() => handleCopyHash(item.sha256)}
-                                aria-label={`Copy SHA-256 hash for ${item.name}`}
-                              >
-                                {isCopied ? (
-                                  <span className="trace-evidence-copied-feedback">Copied</span>
-                                ) : (
-                                  <FiCopy />
-                                )}
-                              </button>
+                              {item.sha256Hash ? `${item.sha256Hash.slice(0, 10)}...` : 'N/A'}
+                              {item.sha256Hash && (
+                                <button
+                                  type="button"
+                                  className="trace-evidence-copy-btn"
+                                  onClick={() => handleCopyHash(item.sha256Hash)}
+                                  aria-label={`Copy SHA-256 hash`}
+                                >
+                                  {isCopied ? (
+                                    <span className="trace-evidence-copied-feedback">Copied</span>
+                                  ) : (
+                                    <FiCopy />
+                                  )}
+                                </button>
+                              )}
                             </span>
                           </td>
                           <td>
-                            <StatusBadge status={item.status} />
+                            <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
+                              item.status === 'Active' ? 'bg-[#10b981]/15 text-[#10b981] border border-[#10b981]/30' : 'bg-white/5 text-on-surface-variant'
+                            }`}>
+                              {item.status}
+                            </span>
                           </td>
-                          <td>
-                            <button
-                              type="button"
-                              className="trace-evidence-row-btn"
-                              onClick={() => toggleRowDetails(item.sha256)}
-                              aria-expanded={isExpanded}
-                              title={`Toggle details view for ${item.name}`}
-                            >
-                              {isExpanded ? 'Hide' : 'Details'}
-                            </button>
+                          <td className="text-right">
+                            <div className="flex justify-end gap-1">
+                              <button
+                                type="button"
+                                className="trace-evidence-row-btn"
+                                onClick={() => toggleRowDetails(item._id, item)}
+                                aria-expanded={isExpanded}
+                              >
+                                {isExpanded ? 'Hide' : 'Details'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDownload(item)}
+                                className="p-1 text-on-surface-variant hover:text-primary hover:bg-white/5 rounded transition-all cursor-pointer bg-transparent border-none"
+                                title="Download File"
+                              >
+                                <FiDownload className="text-[16px]" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDelete(item)}
+                                className="p-1 text-on-surface-variant hover:text-[#ef4444] hover:bg-white/5 rounded transition-all cursor-pointer bg-transparent border-none"
+                                title="Delete Evidence"
+                              >
+                                <FiTrash2 className="text-[16px]" />
+                              </button>
+                            </div>
                           </td>
                         </tr>
 
@@ -1109,15 +1317,152 @@ export default function EvidenceTab({ caseId = 'TRC-2026-0042' }) {
                         {isExpanded && (
                           <tr className="trace-evidence-details-row">
                             <td colSpan={7}>
-                              <div className="trace-evidence-details-panel">
-                                <div className="trace-evidence-details-item">
-                                  <span className="trace-evidence-details-label">Description:</span>
-                                  <span className="trace-evidence-details-value">{item.description}</span>
+                              <div className="trace-evidence-details-panel text-left">
+                                {/* Metadata fields */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  <div className="space-y-2">
+                                    <div className="trace-evidence-details-item">
+                                      <span className="trace-evidence-details-label">Uploaded By:</span>
+                                      <span className="trace-evidence-details-value">
+                                        {item.uploadedBy?.fullName || 'Analyst'} ({item.uploadedBy?.email || 'N/A'})
+                                      </span>
+                                    </div>
+                                    <div className="trace-evidence-details-item">
+                                      <span className="trace-evidence-details-label">Mime Type:</span>
+                                      <span className="trace-evidence-details-value font-mono">{item.mimeType}</span>
+                                    </div>
+                                    <div className="trace-evidence-details-item">
+                                      <span className="trace-evidence-details-label">MD5 Checksum:</span>
+                                      <span className="trace-evidence-details-value monospace font-mono">{item.md5Hash}</span>
+                                    </div>
+                                    <div className="trace-evidence-details-item">
+                                      <span className="trace-evidence-details-label">SHA-1 Checksum:</span>
+                                      <span className="trace-evidence-details-value monospace font-mono">{item.sha1Hash}</span>
+                                    </div>
+                                    <div className="trace-evidence-details-item">
+                                      <span className="trace-evidence-details-label">SHA-256 Checksum:</span>
+                                      <span className="trace-evidence-details-value monospace font-mono">{item.sha256Hash}</span>
+                                    </div>
+                                    <div className="trace-evidence-details-item">
+                                      <span className="trace-evidence-details-label">Description:</span>
+                                      <span className="trace-evidence-details-value">{item.notes || 'No description logged.'}</span>
+                                    </div>
+                                    <div className="trace-evidence-details-item">
+                                      <span className="trace-evidence-details-label">Tags:</span>
+                                      <div className="flex flex-wrap gap-1.5 mt-0.5">
+                                        {item.tags && item.tags.length > 0 ? (
+                                          item.tags.map((tag, tIdx) => (
+                                            <span key={tIdx} className="trace-evidence-tag-pill">{tag}</span>
+                                          ))
+                                        ) : (
+                                          <span className="text-on-surface-variant text-[11px]">No tags assigned.</span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Chain of custody timeline */}
+                                  <div>
+                                    <span className="trace-evidence-details-label mb-2 block">Chain of Custody History:</span>
+                                    <div className="trace-evidence-timeline">
+                                      {item.chainOfCustody && item.chainOfCustody.map((coc, cIdx) => (
+                                        <div key={cIdx} className="trace-evidence-timeline-node">
+                                          <div className="trace-evidence-timeline-bullet" />
+                                          <div className="trace-evidence-timeline-content">
+                                            <div className="trace-evidence-timeline-header text-xs">
+                                              <strong>{coc.action}</strong> by <span>{coc.performedBy}</span>
+                                              <span className="text-[10px] text-on-surface-variant block font-medium mt-0.5">
+                                                {new Date(coc.timestamp).toLocaleString()}
+                                              </span>
+                                            </div>
+                                            <p className="trace-evidence-timeline-notes text-on-surface-variant leading-relaxed text-[11.5px] my-1">
+                                              {coc.notes}
+                                            </p>
+                                            <div className="trace-evidence-timeline-ip text-[10px] text-on-surface-variant font-mono">
+                                              IP Source: {coc.ipAddress}
+                                            </div>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
                                 </div>
-                                <div className="trace-evidence-details-item">
-                                  <span className="trace-evidence-details-label">SHA-256 Hash:</span>
-                                  <span className="trace-evidence-details-value monospace">{item.sha256}</span>
-                                </div>
+
+                                {/* Edit trigger button */}
+                                {editingItemId !== item._id ? (
+                                  <div className="pt-2 border-t border-white/5 flex justify-end">
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditingItemId(item._id)}
+                                      className="text-xs text-primary font-bold hover:underline flex items-center gap-1 cursor-pointer bg-transparent border-none"
+                                    >
+                                      <FiEdit2 /> Edit Metadata
+                                    </button>
+                                  </div>
+                                ) : (
+                                  /* Inline editing fields */
+                                  <form onSubmit={(e) => handleUpdateMetadataSubmit(e, item)} className="trace-evidence-edit-box">
+                                    <h5 className="font-semibold text-xs text-on-surface mb-1">Modify Telemetry Parameters</h5>
+                                    
+                                    <div className="trace-evidence-edit-row">
+                                      <div className="trace-evidence-edit-col">
+                                        <label className="text-[10px] text-on-surface-variant uppercase font-bold" htmlFor="edit-status">Status</label>
+                                        <select
+                                          id="edit-status"
+                                          className="trace-evidence-select mt-1"
+                                          value={editStatus}
+                                          onChange={(e) => setEditStatus(e.target.value)}
+                                          disabled={isUpdatingMeta}
+                                        >
+                                          <option value="Active">Active</option>
+                                          <option value="Archived">Archived</option>
+                                          <option value="Processing">Processing</option>
+                                        </select>
+                                      </div>
+
+                                      <div className="trace-evidence-edit-col">
+                                        <label className="text-[10px] text-on-surface-variant uppercase font-bold" htmlFor="edit-tags">Tags (Comma-separated)</label>
+                                        <input
+                                          id="edit-tags"
+                                          type="text"
+                                          className="trace-evidence-input mt-1"
+                                          value={editTags}
+                                          onChange={(e) => setEditTags(e.target.value)}
+                                          disabled={isUpdatingMeta}
+                                        />
+                                      </div>
+                                    </div>
+
+                                    <div className="trace-evidence-edit-col">
+                                      <label className="text-[10px] text-on-surface-variant uppercase font-bold" htmlFor="edit-notes">Analyst Notes</label>
+                                      <textarea
+                                        id="edit-notes"
+                                        className="trace-evidence-textarea mt-1"
+                                        value={editNotes}
+                                        onChange={(e) => setEditNotes(e.target.value)}
+                                        disabled={isUpdatingMeta}
+                                      />
+                                    </div>
+
+                                    <div className="trace-evidence-edit-buttons">
+                                      <button
+                                        type="button"
+                                        onClick={() => setEditingItemId(null)}
+                                        className="trace-evidence-inline-btn cancel"
+                                        disabled={isUpdatingMeta}
+                                      >
+                                        Cancel
+                                      </button>
+                                      <button
+                                        type="submit"
+                                        className="trace-evidence-inline-btn save"
+                                        disabled={isUpdatingMeta}
+                                      >
+                                        {isUpdatingMeta ? 'Saving...' : 'Save telemetry'}
+                                      </button>
+                                    </div>
+                                  </form>
+                                )}
                               </div>
                             </td>
                           </tr>
@@ -1136,7 +1481,7 @@ export default function EvidenceTab({ caseId = 'TRC-2026-0042' }) {
               </div>
               <p className="trace-evidence-empty-title">No evidence added</p>
               <p className="trace-evidence-empty-desc">
-                No evidence has been added to this investigation. Choose a raw log or network dump file on the left to begin triangulation.
+                No evidence has been added to this case folder. Choose files on the left to begin triangulation and cryptographic indexing.
               </p>
             </div>
           )}

@@ -1,9 +1,4 @@
-.glass-card {
-  background: rgba(27, 31, 44, 0.4);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-top-color: rgba(255, 255, 255, 0.15);
-}
+
 .cyber-grid {
   background-image: radial-gradient(rgba(0, 221, 214, 0.05) 1px, transparent 1px);
   background-size: 32px 32px;

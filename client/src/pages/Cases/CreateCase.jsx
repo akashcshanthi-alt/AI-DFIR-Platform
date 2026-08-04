@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft, ChevronLeft, ChevronRight, Rocket, Loader2 } from 'lucide-react';
 import './CreateCase.css';
+import { casesService } from '../../services/cases.service';
 
 // Import modular wizard steps
 import StepBasicInfo from './components/StepBasicInfo';
@@ -83,18 +84,40 @@ export default function CreateCase() {
     setCurrentStep(step);
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (isSubmitting) return;
     setIsSubmitting(true);
     setErrorMsg('');
     
-    setTimeout(() => {
+    try {
+      const mappedSeverity = severity === 'LOW' ? 'Low' : severity === 'MED' ? 'Medium' : severity === 'HIGH' ? 'High' : 'Critical';
+      const assetStr = assets || '';
+      const ipPattern = /\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/;
+      const ipMatch = assetStr.match(ipPattern);
+      const destinationIP = ipMatch ? ipMatch[0] : '';
+
+      const payload = {
+        title: caseTitle.trim(),
+        description: description.trim() || `Incident Type: ${incidentType}. Initial IOCs: ${iocs}`,
+        severity: mappedSeverity,
+        status: 'Open',
+        assignedAnalyst: leadInvestigator || 'Unassigned',
+        sourceIP: '',
+        destinationIP: destinationIP,
+        evidenceCount: 0,
+        targetHost: assetStr || 'N/A'
+      };
+
+      await casesService.createCase(payload);
       setIsSuccess(true);
-      setIsSubmitting(false);
       setTimeout(() => {
         navigate('/cases');
       }, 2000);
-    }, 2000);
+    } catch (err) {
+      setErrorMsg(err.message || 'Failed to submit investigation.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // Progress line percent width

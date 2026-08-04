@@ -4,10 +4,11 @@ import { ChevronRight, ChevronLeft, Sparkles } from 'lucide-react';
 export default function AIInsightsSidebar({ isSidebarCollapsed, setIsSidebarCollapsed }) {
   return (
     <aside 
-      className="insight-sidebar border-l border-white/10 flex flex-col relative bg-surface-container-low/75 backdrop-blur-md h-[calc(100vh-80px)]"
+      className="insight-sidebar border-l border-white/10 flex flex-col relative bg-surface-container-low/75 backdrop-blur-md h-[calc(100vh-70px)] transition-all duration-300 ease-in-out"
       style={{ 
         width: isSidebarCollapsed ? '0px' : '350px',
-        borderLeftWidth: isSidebarCollapsed ? '0px' : '1px' 
+        borderLeftWidth: isSidebarCollapsed ? '0px' : '1px',
+        boxShadow: isSidebarCollapsed ? 'none' : '0 0 20px rgba(34, 211, 238, 0.04)'
       }}
       aria-label="AI Insights Sidebar"
     >
@@ -46,7 +47,7 @@ export default function AIInsightsSidebar({ isSidebarCollapsed, setIsSidebarColl
             <p className="text-xs text-on-surface-variant leading-relaxed">
               Detected pattern similar to 2023 REvil breach. Recommend lateral movement scan on <span className="text-on-surface font-semibold">V-SUITE-12</span>.
             </p>
-            <button type="button" className="w-full py-2 bg-secondary/20 hover:bg-secondary/30 text-secondary text-[10px] font-bold rounded transition-colors uppercase tracking-widest font-mono select-none">
+            <button type="button" className="w-full h-[32px] bg-secondary/10 hover:bg-secondary/20 border border-secondary/30 text-secondary text-[10px] font-bold rounded-lg transition-colors uppercase tracking-widest select-none flex items-center justify-center">
               Escalate Investigation
             </button>
           </div>

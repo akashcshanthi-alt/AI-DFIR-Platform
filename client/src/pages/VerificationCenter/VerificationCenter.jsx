@@ -62,9 +62,13 @@ export default function VerificationCenter() {
           startPolling();
         }
       } else {
-        // If Firebase says no user is logged in, redirect to login
-        setUser(null);
-        navigate('/login', { replace: true });
+        if (location.state?.email) {
+          setUser({ email: location.state.email });
+          setVerificationState('pending');
+        } else {
+          setUser(null);
+          navigate('/login', { replace: true });
+        }
       }
       setIsInitializing(false);
     });
@@ -381,31 +385,35 @@ export default function VerificationCenter() {
               </button>
             ) : (
               <>
-                <button
-                  type="button"
-                  className="trace-verify-btn trace-verify-btn-primary"
-                  onClick={handleResendEmail}
-                  disabled={countdown > 0 || isSending}
-                >
-                  <Send className="w-4 h-4" />
-                  <span>
-                    {countdown > 0 
-                      ? `Resend available in ${countdown}s` 
-                      : isSending 
-                        ? 'Sending Code...' 
-                        : 'Resend Verification Email'}
-                  </span>
-                </button>
+                {auth.currentUser && (
+                  <>
+                    <button
+                      type="button"
+                      className="trace-verify-btn trace-verify-btn-primary"
+                      onClick={handleResendEmail}
+                      disabled={countdown > 0 || isSending}
+                    >
+                      <Send className="w-4 h-4" />
+                      <span>
+                        {countdown > 0 
+                          ? `Resend available in ${countdown}s` 
+                          : isSending 
+                            ? 'Sending Code...' 
+                            : 'Resend Verification Email'}
+                      </span>
+                    </button>
 
-                <button
-                  type="button"
-                  className="trace-verify-btn trace-verify-btn-secondary"
-                  onClick={handleRefreshStatus}
-                  disabled={isChecking}
-                >
-                  <RefreshCw className={`w-4 h-4 ${isChecking ? 'animate-spin' : ''}`} />
-                  <span>Refresh Verification Status</span>
-                </button>
+                    <button
+                      type="button"
+                      className="trace-verify-btn trace-verify-btn-secondary"
+                      onClick={handleRefreshStatus}
+                      disabled={isChecking}
+                    >
+                      <RefreshCw className={`w-4 h-4 ${isChecking ? 'animate-spin' : ''}`} />
+                      <span>Refresh Verification Status</span>
+                    </button>
+                  </>
+                )}
 
                 <button
                   type="button"

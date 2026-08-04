@@ -347,21 +347,32 @@ th,
 .trace-register-btn,
 .trace-forgot-btn,
 .trace-create-submit-btn,
-.trace-settings-submit-btn {
-  background-color: var(--color-primary) !important;
-  color: #ffffff !important;
+.trace-settings-submit-btn,
+.trace-forgot-submit-btn,
+.trace-reset-submit-btn,
+.trace-login-primary-cta-btn,
+.trace-register-primary-cta-btn,
+.ai-chat-send-btn,
+.ai-action-btn,
+button.bg-\[\#3b82f6\],
+button.bg-\[\#3B82F6\],
+button.bg-primary {
+  background: linear-gradient(135deg, #47FAF3 0%, #3B82F6 100%) !important;
+  color: #050814 !important;
   font-size: 13.5px !important;
   font-weight: 600 !important;
-  border-radius: var(--radius-sm, 4px) !important;
-  border: 1px solid transparent !important;
+  border-radius: var(--radius-md, 8px) !important;
+  border: none !important;
   padding: 8px 16px !important;
   cursor: pointer !important;
   display: inline-flex !important;
   align-items: center !important;
+  justify-content: center !important;
   gap: 8px !important;
   transition: all var(--transition-speed, 200ms) ease !important;
   height: 38px !important;
   box-sizing: border-box !important;
+  box-shadow: 0 4px 14px 0 rgba(71, 250, 243, 0.2) !important;
 }
 
 .btn-primary:hover,
@@ -370,16 +381,65 @@ th,
 .trace-register-btn:hover,
 .trace-forgot-btn:hover,
 .trace-create-submit-btn:hover,
-.trace-settings-submit-btn:hover {
-  background-color: var(--color-primary-hover, #2563eb) !important;
+.trace-settings-submit-btn:hover,
+.trace-forgot-submit-btn:hover,
+.trace-reset-submit-btn:hover,
+.trace-login-primary-cta-btn:hover,
+.trace-register-primary-cta-btn:hover,
+.ai-chat-send-btn:hover,
+.ai-action-btn:hover,
+button.bg-\[\#3b82f6\]:hover,
+button.bg-\[\#3B82F6\]:hover,
+button.bg-primary:hover {
+  background: linear-gradient(135deg, #32e0d9 0%, #2563eb 100%) !important;
+  color: #050814 !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 6px 20px 0 rgba(71, 250, 243, 0.35) !important;
+  filter: brightness(1.15) !important;
 }
 
+.btn-primary:active,
+.trace-login-primary-cta-btn:active,
+.trace-register-primary-cta-btn:active,
+.trace-forgot-submit-btn:active,
+.trace-reset-submit-btn:active {
+  transform: scale(0.98) !important;
+}
+
+.btn-primary:disabled,
+.trace-login-primary-cta-btn:disabled,
+.trace-register-primary-cta-btn:disabled,
+.trace-forgot-submit-btn:disabled,
+.trace-reset-submit-btn:disabled,
+.ai-action-btn:disabled {
+  opacity: 0.45 !important;
+  cursor: not-allowed !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+/* Large button layout overrides for auth screens */
+.trace-login-primary-cta-btn,
+.trace-register-primary-cta-btn,
+.trace-forgot-submit-btn,
+.trace-reset-submit-btn {
+  height: 54px !important;
+  font-size: 15px !important;
+}
+
+/* Secondary Button overrides */
 .btn-secondary,
 .trace-create-cancel-btn,
-.trace-settings-cancel-btn {
-  background-color: var(--bg-surface, #0e1626) !important;
-  border: 1px solid var(--border-color, rgba(255,255,255,0.08)) !important;
-  border-radius: var(--radius-sm, 4px) !important;
+.trace-settings-cancel-btn,
+button.bg-surface-variant\/50,
+button.bg-\[\#0f1423\],
+button.bg-\[\#0f142c\],
+button.bg-surface-container-high,
+button.bg-surface-bright,
+button.bg-secondary-container {
+  background-color: rgba(30, 41, 59, 0.8) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: var(--radius-md, 8px) !important;
   color: var(--text-primary, #f8fafc) !important;
   font-size: 13.5px !important;
   font-weight: 600 !important;
@@ -387,17 +447,28 @@ th,
   cursor: pointer !important;
   display: inline-flex !important;
   align-items: center !important;
+  justify-content: center !important;
   gap: 8px !important;
   transition: all var(--transition-speed, 200ms) ease !important;
   height: 38px !important;
   box-sizing: border-box !important;
+  box-shadow: var(--shadow-sm) !important;
 }
 
 .btn-secondary:hover,
 .trace-create-cancel-btn:hover,
-.trace-settings-cancel-btn:hover {
-  background-color: var(--bg-surface-elevated, #162035) !important;
-  border-color: var(--border-color-hover, rgba(255,255,255,0.15)) !important;
+.trace-settings-cancel-btn:hover,
+button.bg-surface-variant\/50:hover,
+button.bg-\[\#0f1423\]:hover,
+button.bg-\[\#0f142c\]:hover,
+button.bg-surface-container-high:hover,
+button.bg-surface-bright:hover,
+button.bg-secondary-container:hover {
+  background-color: rgba(51, 65, 85, 0.8) !important;
+  border-color: rgba(71, 250, 243, 0.3) !important;
+  color: var(--text-primary, #f8fafc) !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
 }
 
 /* 3. Global Form Input Uniformity */
@@ -410,10 +481,17 @@ th,
 .trace-settings-input,
 .trace-settings-select,
 .trace-settings-textarea,
-.trace-header-search-input {
-  background-color: var(--bg-secondary, #0a0f1d) !important;
-  border: 1px solid var(--border-color, rgba(255,255,255,0.08)) !important;
-  border-radius: var(--radius-sm, 4px) !important;
+.trace-settings-text-input,
+.trace-header-search-input,
+.trace-reset-input,
+input[type="text"],
+input[type="email"],
+input[type="password"],
+select,
+textarea {
+  background-color: var(--bg-main, #050814) !important;
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08)) !important;
+  border-radius: var(--radius-md, 8px) !important;
   color: var(--text-primary, #f8fafc) !important;
   padding: 8px 12px !important;
   font-size: 14px !important;
@@ -421,6 +499,15 @@ th,
   width: 100% !important;
   box-sizing: border-box !important;
 }
+
+/* Search input specific padding overrides to prevent icon overlaps */
+.trace-header-search input.trace-header-search-input {
+  padding: 0 16px 0 48px !important;
+}
+input[type="text"].pl-10 {
+  padding-left: 40px !important;
+}
+
 
 .trace-login-input:focus,
 .trace-register-input:focus,
@@ -431,24 +518,20 @@ th,
 .trace-settings-input:focus,
 .trace-settings-select:focus,
 .trace-settings-textarea:focus,
-.trace-header-search-input:focus {
-  border-color: var(--color-primary, #3b82f6) !important;
+.trace-settings-text-input:focus,
+.trace-header-search-input:focus,
+.trace-reset-input:focus,
+input[type="text"]:focus,
+input[type="email"]:focus,
+input[type="password"]:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--color-primary, #47FAF3) !important;
   outline: none !important;
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2) !important;
+  box-shadow: 0 0 0 2px rgba(71, 250, 243, 0.15) !important;
 }
 
-/* Input error state mapping */
-.trace-login-input.error,
-.trace-register-input.error,
-.trace-forgot-input.error,
-.trace-create-input.error,
-.trace-create-select.error,
-.trace-create-textarea.error {
-  border-color: var(--status-critical, #ef4444) !important;
-  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2) !important;
-}
-
-/* 4. Layout Structural Polish overrides (Sidebar & Header) */
+/* 4. Layout Structural overrides (Sidebar & Header) */
 .trace-sidebar-brand {
   border-bottom: none !important;
 }
@@ -468,11 +551,6 @@ th,
   border-left: 3px solid var(--color-primary, #3b82f6) !important;
 }
 
-.trace-header-search-input::placeholder {
-  color: var(--text-muted, #64748b) !important;
-  opacity: 0.8 !important;
-}
-
 /* 5. Dashboard Cards Consistency */
 .trace-dashboard-stat-card,
 .trace-dashboard-main-card,
@@ -480,16 +558,24 @@ th,
 .trace-create-card,
 .trace-details-card,
 .trace-settings-card,
-.trace-audit-card {
-  background-color: var(--bg-surface, #0e1626) !important;
+.trace-audit-card,
+.soc-card,
+.glass-card,
+.glass-panel {
+  background-color: var(--bg-surface, #101827) !important;
   border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08)) !important;
-  border-radius: var(--radius-md, 8px) !important;
-  box-shadow: var(--shadow-sm) !important;
+  border-radius: var(--radius-lg, 12px) !important;
+  box-shadow: var(--shadow-md) !important;
+  backdrop-filter: blur(12px) !important;
 }
 
 .trace-dashboard-stat-card:hover,
-.trace-dashboard-main-card:hover {
-  border-color: var(--border-color-hover, rgba(255, 255, 255, 0.15)) !important;
+.trace-dashboard-main-card:hover,
+.soc-card:hover,
+.glass-card:hover,
+.glass-panel:hover {
+  border-color: rgba(71, 250, 243, 0.15) !important;
+  box-shadow: 0 0 15px rgba(71, 250, 243, 0.03) !important;
 }
 
 /* 6. Standard Table layout style override */
@@ -567,4 +653,73 @@ th,
   background-color: var(--color-primary, #3b82f6) !important;
   border-radius: 2px !important;
 }
+
+/* 8. Responsive Design overrides */
+@media (max-width: 1024px) {
+  .trace-reports-page {
+    padding: 24px !important;
+  }
+}
+
+@media (max-width: 768px) {
+  /* Collapse grids to single column on mobile */
+  .grid-cols-12, .grid-cols-2, .grid-cols-3, .grid-cols-5 {
+    grid-template-columns: repeat(1, minmax(0, 1fr)) !important;
+  }
+  .col-span-12, .col-span-6, .col-span-4, .col-span-8, .col-span-3, .col-span-5, .lg\:col-span-3, .lg\:col-span-9, .lg\:col-span-4, .lg\:col-span-5 {
+    grid-column: span 12 / span 12 !important;
+  }
+  .trace-app-layout {
+    flex-direction: column !important;
+  }
+  .trace-sidebar {
+    width: 100% !important;
+    height: auto !important;
+    position: relative !important;
+    border-right: none !important;
+    border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.08)) !important;
+  }
+  .trace-sidebar-header {
+    height: 60px !important;
+  }
+  .trace-sidebar-nav-container {
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    padding: 8px !important;
+    gap: 4px !important;
+    overflow-y: visible !important;
+  }
+  .trace-sidebar-nav-item {
+    padding: 8px 12px !important;
+    font-size: 12px !important;
+    height: 34px !important;
+  }
+  .trace-sidebar-footer {
+    display: none !important; /* Hide redundant mobile footer */
+  }
+  .trace-app-main {
+    height: auto !important;
+    overflow: visible !important;
+  }
+  .trace-header {
+    height: 60px !important;
+    padding: 0 16px !important;
+  }
+  .trace-header-left {
+    display: none !important; /* Hide left title layout on mobile to fit logo */
+  }
+}
+
+/* Layout overrides for Cases page independent scroll panel */
+@media (min-width: 1024px) {
+  .trace-cases-layout {
+    height: calc(100vh - 70px) !important;
+    overflow: hidden !important;
+  }
+  .trace-cases-layout > div {
+    height: 100% !important;
+    min-height: auto !important;
+  }
+}
+
 

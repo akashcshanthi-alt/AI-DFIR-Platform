@@ -15,12 +15,13 @@ import AIInvestigation from './pages/AIInvestigation/AIInvestigation';
 import ReportsCenter from './pages/Reports/ReportsCenter';
 import Profile from './pages/Profile/Profile';
 import VerificationCenter from './pages/VerificationCenter/VerificationCenter';
+import ResetPassword from './pages/ResetPassword/ResetPassword';
+import UserManagement from './pages/UserManagement/UserManagement';
 
 // Import layout components
 import Sidebar from './components/layout/Sidebar';
 import Header from './components/layout/Header';
-import { auth } from './services/firebase';
-import { signOut } from 'firebase/auth';
+import { authService } from './services/auth.service';
 
 // Local development auth guard — checks if user is authenticated in localStorage
 const isAuthenticated = () => localStorage.getItem('isAuthenticated') === 'true';
@@ -56,11 +57,10 @@ function MainLayout() {
   // Terminate developer session and redirect to Login
   const handleLogout = async () => {
     try {
-      await signOut(auth);
+      await authService.logout();
     } catch (err) {
       console.error('Logout error:', err);
     } finally {
-      localStorage.clear();
       navigate('/login', { replace: true });
     }
   };
@@ -77,6 +77,7 @@ function MainLayout() {
     if (path === '/settings') return 'Settings';
     if (path === '/reports') return 'Reports Center';
     if (path === '/profile') return 'Analyst Workspace';
+    if (path === '/users') return 'Operator Registry';
     return 'Dashboard';
   };
 
@@ -169,7 +170,7 @@ function MainLayout() {
         {/* Route Aware Header */}
         <Header 
           title={getHeaderTitle()} 
-          userName="Security Analyst" 
+          userName={localStorage.getItem('operatorName') || 'Security Analyst'} 
           userRole="Investigator" 
         />
 
@@ -190,7 +191,9 @@ export default function App() {
         <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
         <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
         <Route path="/forgot-password" element={<PublicRoute><ForgotPassword /></PublicRoute>} />
+        <Route path="/reset-password" element={<PublicRoute><ResetPassword /></PublicRoute>} />
         <Route path="/verify" element={<PublicRoute><VerificationCenter /></PublicRoute>} />
+        <Route path="/verification-center" element={<PublicRoute><VerificationCenter /></PublicRoute>} />
 
         {/* Protected Authenticated Routing Layout */}
         <Route element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
@@ -203,6 +206,7 @@ export default function App() {
           <Route path="/ai-investigation" element={<AIInvestigation />} />
           <Route path="/reports" element={<ReportsCenter />} />
           <Route path="/profile" element={<Profile />} />
+          <Route path="/users" element={<UserManagement />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Route>
       </Routes>

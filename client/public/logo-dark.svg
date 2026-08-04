@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" width="100%" height="100%">
+  <!-- Outer Futuristic Shield in Dark Navy -->
+  <path d="M 400,100 L 650,200 L 650,480 C 650,620 520,720 400,750 C 280,720 150,620 150,480 L 150,200 Z" 
+        fill="none" 
+        stroke="#0B1220" 
+        stroke-width="24" 
+        stroke-linejoin="round" />
+        
+  <!-- Inner Shield Border -->
+  <path d="M 400,140 L 610,224 L 610,480 C 610,600 500,680 400,710 C 300,680 190,600 190,480 L 190,224 Z" 
+        fill="transparent" 
+        stroke="rgba(11, 18, 32, 0.2)" 
+        stroke-width="8" 
+        stroke-linejoin="round" />
+
+  <!-- AI Circuit Patterns & Central CPU Core -->
+  <g transform="translate(400, 420)">
+    <!-- Circuit Lines -->
+    <path d="M -80,-80 L -150,-150 L -150,-210" stroke="#0B1220" stroke-width="6" fill="none" opacity="0.8" />
+    <circle cx="-150" cy="-210" r="10" fill="#2563EB" />
+    
+    <path d="M 80,-80 L 150,-150 L 210,-150" stroke="#0B1220" stroke-width="6" fill="none" opacity="0.8" />
+    <circle cx="210" cy="-150" r="10" fill="#2563EB" />
+
+    <path d="M -80,80 L -140,140 L -200,140" stroke="#0B1220" stroke-width="6" fill="none" opacity="0.8" />
+    <circle cx="-200" cy="140" r="10" fill="#2563EB" />
+
+    <path d="M 80,80 L 140,140 L 140,210" stroke="#0B1220" stroke-width="6" fill="none" opacity="0.8" />
+    <circle cx="140" cy="210" r="10" fill="#0B1220" />
+
+    <!-- CPU Core -->
+    <rect x="-60" y="-60" width="120" height="120" rx="15" fill="#FFFFFF" stroke="#0B1220" stroke-width="12" />
+    <rect x="-40" y="-40" width="80" height="80" rx="8" fill="rgba(11, 18, 32, 0.05)" stroke="#0B1220" stroke-width="4" />
+    <circle cx="0" cy="0" r="16" fill="#2563EB" />
+  </g>
+</svg>

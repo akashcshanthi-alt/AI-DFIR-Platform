@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Shield, Mail, Lock, Eye, EyeOff, Bolt, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { authService } from '../../services/auth.service';
+import { signInWithEmailAndPassword, sendEmailVerification, signOut } from 'firebase/auth';
 import { auth, googleProvider, signInWithPopup } from '../../services/firebase';
-import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
 
 /**
  * Login Component
@@ -22,46 +23,11 @@ export default function Login() {
   // Validation and Loading states
   const [errors, setErrors] = useState({});
   const [isLoading, setIsLoading] = useState(false);
-  const [googleLoading, setGoogleLoading] = useState(false);
-  const [googleError, setGoogleError] = useState('');
 
-  const handleGoogleSignIn = async () => {
-    if (googleLoading) return;
-    setGoogleLoading(true);
-    setGoogleError('');
-
-    // Pre-flight environment keys check: explain exactly what is missing
-    const apiKey = import.meta.env.VITE_FIREBASE_API_KEY;
-    if (!apiKey || apiKey === 'mock-api-key-replace-this') {
-      setGoogleError('Configuration Error: VITE_FIREBASE_API_KEY is not configured or is set to mock value in client/.env. Please replace it with your Firebase Web App credentials.');
-      setGoogleLoading(false);
-      return;
-    }
-
-    try {
-      const result = await signInWithPopup(auth, googleProvider);
-      if (result.user) {
-        localStorage.setItem('isAuthenticated', 'true');
-        localStorage.setItem('operatorName', result.user.displayName || 'Operator');
-        localStorage.setItem('operatorEmail', result.user.email || '');
-        localStorage.setItem('operatorAvatar', result.user.photoURL || '');
-        navigate('/dashboard', { replace: true });
-      }
-    } catch (error) {
-      if (error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
-        console.log('Google Auth popup closed by user.');
-        return;
-      }
-      if (error.code === 'auth/api-key-not-valid' || (error.message && error.message.includes('api-key-not-valid'))) {
-        setGoogleError('Invalid Firebase API Key. Please verify that the credentials inside client/.env match your Google console project.');
-      } else {
-        setGoogleError(error.message || 'Google Federated Authentication failed.');
-      }
-      setTimeout(() => setGoogleError(''), 7000);
-    } finally {
-      setGoogleLoading(false);
-    }
-  };
+  // Email verification resend states
+  const [showResend, setShowResend] = useState(false);
+  const [resendSuccess, setResendSuccess] = useState('');
+  const [isResending, setIsResending] = useState(false);
 
   // Client-side validations
   const validateForm = () => {
@@ -82,24 +48,7 @@ export default function Login() {
     return Object.keys(tempErrors).length === 0;
   };
 
-  const mapFirebaseError = (error) => {
-    switch (error.code) {
-      case 'auth/wrong-password':
-      case 'auth/user-not-found':
-      case 'auth/invalid-credential':
-        return 'Invalid email or password.';
-      case 'auth/invalid-email':
-        return 'Please enter a valid operator email address.';
-      case 'auth/too-many-requests':
-        return 'Access blocked due to excessive attempts. Please try again later.';
-      case 'auth/operation-not-allowed':
-        return 'Email/Password provider is disabled in your Firebase console. Please go to Authentication > Sign-in method in Firebase Console to enable it.';
-      default:
-        return error.message || 'An unexpected authentication error occurred.';
-    }
-  };
-
-  // Submit Handler with Firebase Authentication
+  // Submit Handler with Backend Authentication and Firebase Verification Check
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (isLoading) return;
@@ -107,28 +56,111 @@ export default function Login() {
     if (validateForm()) {
       setIsLoading(true);
       setErrors({});
+      setShowResend(false);
+      setResendSuccess('');
 
       try {
-        const result = await signInWithEmailAndPassword(auth, email.trim(), password);
-        
-        // Redirect to Verification Center if email is not verified
-        if (!result.user.emailVerified) {
-          console.log('[Login] User email not verified. Redirecting to Verification Center...');
+        // 1. Sign in with Firebase
+        const userCredential = await signInWithEmailAndPassword(auth, email.trim(), password);
+        const user = userCredential.user;
+
+        // 2. Check if email is verified in Firebase
+        if (!user.emailVerified) {
+          await signOut(auth);
           setIsLoading(false);
-          navigate('/verify');
+          setErrors({ auth: 'Please verify your email before signing in.' });
+          setShowResend(true);
           return;
         }
 
-        localStorage.setItem('isAuthenticated', 'true');
-        localStorage.setItem('operatorName', result.user.displayName || 'Operator');
-        localStorage.setItem('operatorEmail', result.user.email || '');
-        localStorage.setItem('operatorAvatar', result.user.photoURL || '');
+        // 3. Allow login normally on local backend if email is verified
+        await authService.login(email.trim(), password);
         navigate('/dashboard', { replace: true });
       } catch (error) {
+        console.error('[Login] Detailed login error:', {
+          message: error.message,
+          code: error.code,
+          stack: error.stack,
+          raw: error
+        });
         setIsLoading(false);
-        const userFriendlyMessage = mapFirebaseError(error);
-        setErrors({ auth: userFriendlyMessage });
+        let errorMsg = error.message || 'Invalid email or password.';
+        if (error.code === 'auth/invalid-credential') {
+          errorMsg = 'Invalid email or password.';
+        } else if (error.message && error.message.includes('Failed to fetch')) {
+          errorMsg = `Failed to fetch: Connection to backend API [${import.meta.env.VITE_API_URL}] failed. Verify the backend server is running and accessible.`;
+        }
+        setErrors({ auth: errorMsg });
       }
+    }
+  };
+
+  // Resend verification flow
+  const handleResendVerification = async () => {
+    if (isResending || !email.trim() || !password) return;
+    setIsResending(true);
+    setResendSuccess('');
+    setErrors({});
+
+    try {
+      // Temporarily sign in to get the user object, send email verification, and sign out
+      const userCredential = await signInWithEmailAndPassword(auth, email.trim(), password);
+      await sendEmailVerification(userCredential.user);
+      await signOut(auth);
+      setResendSuccess('Verification email resent successfully! Please check your inbox.');
+    } catch (error) {
+      console.error('[Login] Resend verification error:', error);
+      let errorMsg = 'Failed to resend verification email. Ensure credentials are correct.';
+      if (error.code === 'auth/too-many-requests') {
+        errorMsg = 'Server limit exceeded. Please wait a moment before trying again.';
+      }
+      setErrors({ auth: errorMsg });
+    } finally {
+      setIsResending(false);
+    }
+  };
+
+  // Google OAuth popup handler
+  const handleGoogleSignIn = async () => {
+    if (isLoading) return;
+    setIsLoading(true);
+    setErrors({});
+    setResendSuccess('');
+    setShowResend(false);
+
+    try {
+      // 1. Authenticate with Google popup in Firebase
+      const userCredential = await signInWithPopup(auth, googleProvider);
+      const user = userCredential.user;
+
+      // 2. Authenticate with local backend
+      await authService.googleLogin(
+        user.email,
+        user.displayName || user.email.split('@')[0],
+        user.photoURL || ''
+      );
+
+      navigate('/dashboard', { replace: true });
+    } catch (error) {
+      console.error('[Login] Detailed Google auth error:', {
+        message: error.message,
+        code: error.code,
+        stack: error.stack,
+        raw: error
+      });
+      setIsLoading(false);
+      
+      let errorMsg = error.message || 'Google authentication failed.';
+      if (error.code === 'auth/popup-closed-by-user') {
+        errorMsg = 'Authentication popup was closed before completion (auth/popup-closed-by-user).';
+      } else if (error.code === 'auth/network-request-failed') {
+        errorMsg = 'Network connectivity issue during authentication (auth/network-request-failed). Check your internet connection.';
+      } else if (error.message && error.message.includes('Failed to fetch')) {
+        errorMsg = `Failed to fetch: Connection to backend API [${import.meta.env.VITE_API_URL}] failed. Verify the backend server is running and accessible.`;
+      } else {
+        errorMsg = `Google authentication failed: ${error.message || error}`;
+      }
+      setErrors({ auth: errorMsg });
     }
   };
 
@@ -154,11 +186,6 @@ export default function Login() {
 
   return (
     <main className="trace-login-page">
-      {googleError && (
-        <div className="fixed top-20 right-6 z-50 bg-[#0f1425] border border-[#ef4444] text-[#ef4444] text-xs px-4 py-2.5 rounded-lg shadow-xl font-bold">
-          ✕ {googleError}
-        </div>
-      )}
       {/* Scoped styling block for the login screen */}
       <style dangerouslySetInnerHTML={{
         __html: `
@@ -384,34 +411,38 @@ export default function Login() {
 
           .trace-login-card-header {
             text-align: center;
-            margin-bottom: 24px;
+            margin-bottom: 28px;
           }
 
           .trace-login-logo {
+            display: block;
+            width: 64px;
             height: 64px;
+            aspect-ratio: 1/1;
+            object-fit: contain;
             margin-left: auto;
             margin-right: auto;
-            margin-bottom: 16px;
+            margin-bottom: 20px;
           }
 
           .trace-login-card-title {
             font-size: 1.5rem;
             font-weight: 700;
             color: #F8FAFC;
-            margin: 0 0 6px;
+            margin: 0 0 8px;
           }
 
           .trace-login-card-subtitle {
             font-size: 0.875rem;
             color: #94A3B8;
-            margin: 6px 0 0;
+            margin: 0;
           }
 
           /* Form Elements */
           .trace-login-form {
             display: flex;
             flex-direction: column;
-            gap: 18px;
+            gap: 20px;
           }
 
           .trace-login-field-group {
@@ -434,17 +465,22 @@ export default function Login() {
             position: relative;
             border-radius: 14px;
             border: 1px solid rgba(255, 255, 255, 0.08);
-            background-color: #0F172A;
-            transition: border-color 250ms ease, box-shadow 250ms ease;
-            height: 54px;
+            background-color: rgba(10, 16, 30, 0.85);
+            transition: all 0.3s ease;
+            height: 56px;
             display: flex;
             align-items: center;
             box-sizing: border-box;
           }
 
+          .trace-login-input-wrapper:hover {
+            border-color: rgba(0, 217, 255, 0.45);
+            background-color: rgba(16, 24, 44, 0.85);
+          }
+
           .trace-login-input-wrapper:focus-within {
-            border-color: #47FAF3;
-            box-shadow: 0 0 20px rgba(71, 250, 243, 0.25);
+            border-color: #00D9FF;
+            box-shadow: 0 0 0 3px rgba(0, 217, 255, 0.15);
           }
 
           .trace-login-input-wrapper.error-border {
@@ -459,31 +495,42 @@ export default function Login() {
             width: 18px;
             height: 18px;
             color: #94A3B8;
+            opacity: 0.6;
             pointer-events: none;
             display: flex;
             align-items: center;
             justify-content: center;
             z-index: 10;
+            transition: all 0.3s ease;
           }
 
-          .trace-login-input-field {
-            width: 100%;
-            background: transparent;
-            border: none;
-            color: #F8FAFC;
+          .trace-login-input-wrapper:focus-within .trace-login-input-icon {
+            color: #00D9FF;
+            opacity: 1;
+          }
+
+          .trace-login-input-wrapper input.trace-login-input-field {
+            width: 100% !important;
+            background: transparent !important;
+            background-color: transparent !important;
+            border: none !important;
+            color: #FFFFFF !important;
             padding-left: 52px !important;
-            padding-right: 48px;
-            padding-top: 0;
-            padding-bottom: 0;
-            border-radius: 14px;
-            font-size: 14px;
-            outline: none;
-            height: 100%;
-            box-sizing: border-box;
+            padding-right: 48px !important;
+            padding-top: 0 !important;
+            padding-bottom: 0 !important;
+            border-radius: 14px !important;
+            font-size: 14px !important;
+            outline: none !important;
+            height: 100% !important;
+            box-sizing: border-box !important;
+            transition: all 0.3s ease !important;
+            line-height: normal !important;
+            box-shadow: none !important;
           }
 
-          .trace-login-input-field::placeholder {
-            color: #94A3B8;
+          .trace-login-input-wrapper input.trace-login-input-field::placeholder {
+            color: #7C879E !important;
           }
 
           .trace-login-field-header {
@@ -496,7 +543,7 @@ export default function Login() {
             font-size: 12px;
             color: #47FAF3;
             text-decoration: none;
-            transition: color 250ms ease;
+            transition: color 0.3s ease;
             font-weight: 600;
           }
 
@@ -506,25 +553,33 @@ export default function Login() {
 
           .trace-login-password-toggle-btn {
             position: absolute;
-            right: 0;
-            top: 0;
-            bottom: 0;
+            right: 4px;
+            top: 50%;
+            transform: translateY(-50%);
             background: none;
             border: none;
             color: #94A3B8;
+            opacity: 0.6;
             cursor: pointer;
-            transition: color 250ms ease;
+            transition: all 0.3s ease;
             display: flex;
             align-items: center;
             justify-content: center;
-            width: 48px;
-            height: 54px;
-            padding: 0 18px 0 10px;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
             box-sizing: border-box;
           }
 
           .trace-login-password-toggle-btn:hover {
-            color: #47FAF3;
+            color: #00D9FF;
+            opacity: 1;
+            background-color: rgba(255, 255, 255, 0.03);
+          }
+
+          .trace-login-input-wrapper:focus-within .trace-login-password-toggle-btn {
+            color: #00D9FF;
+            opacity: 1;
           }
 
           .trace-login-validation-feedback {
@@ -577,10 +632,10 @@ export default function Login() {
             font-weight: 600;
             border: none;
             border-radius: 14px;
-            height: 54px;
+            height: 56px;
             box-shadow: 0 10px 30px rgba(34, 211, 238, 0.35);
             cursor: pointer;
-            transition: all 250ms ease;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -591,7 +646,7 @@ export default function Login() {
 
           .trace-login-primary-cta-btn:hover:not(:disabled) {
             transform: translateY(-2px);
-            box-shadow: 0 10px 30px rgba(34, 211, 238, 0.45);
+            box-shadow: 0 8px 24px rgba(6, 182, 212, 0.4);
           }
 
           .trace-login-primary-cta-btn:active:not(:disabled) {
@@ -601,10 +656,12 @@ export default function Login() {
           .trace-login-primary-cta-btn:disabled {
             opacity: 0.4;
             cursor: not-allowed;
+            transform: none !important;
+            box-shadow: none !important;
           }
 
           .trace-login-bolt-icon {
-            transition: transform 250ms ease;
+            transition: transform 0.3s ease;
           }
 
           .trace-login-primary-cta-btn:hover:not(:disabled) .trace-login-bolt-icon {
@@ -612,6 +669,58 @@ export default function Login() {
           }
 
           /* SSO & Divider */
+          .trace-login-google-btn {
+            width: 100%;
+            background-color: #FFFFFF;
+            color: #1F1F1F;
+            font-size: 15px;
+            font-weight: 600;
+            border: 1px solid #E5E7EB;
+            border-radius: 14px;
+            height: 56px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            position: relative;
+            box-sizing: border-box;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            margin-top: 14px;
+          }
+
+          .trace-login-google-btn:hover:not(:disabled) {
+            background-color: #F3F4F6;
+            transform: translateY(-2px);
+            border-color: #D1D5DB;
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+          }
+
+          @media (prefers-color-scheme: dark) {
+            .trace-login-google-btn:hover:not(:disabled) {
+              box-shadow: 0 0 15px rgba(71, 250, 243, 0.35);
+              border-color: #47FAF3;
+            }
+          }
+
+          .trace-login-google-btn:active:not(:disabled) {
+            transform: scale(0.98);
+          }
+
+          .trace-login-google-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+          }
+
+          .trace-login-google-icon {
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }
+
           .trace-login-divider {
             display: flex;
             align-items: center;
@@ -642,10 +751,10 @@ export default function Login() {
             color: #F8FAFC;
             font-size: 14px;
             font-weight: 600;
-            height: 54px;
+            height: 56px;
             border-radius: 14px;
             cursor: pointer;
-            transition: all 250ms ease;
+            transition: all 0.3s ease;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -661,7 +770,7 @@ export default function Login() {
           .trace-login-sso-icon {
             width: 20px;
             height: 20px;
-            transition: transform 250ms ease;
+            transition: transform 0.3s ease;
           }
 
           .trace-login-sso-btn:hover .trace-login-sso-icon {
@@ -684,7 +793,7 @@ export default function Login() {
             font-weight: 600;
             text-decoration: none;
             margin-left: 6px;
-            transition: color 250ms ease;
+            transition: color 0.3s ease;
           }
 
           .trace-login-register-link:hover {
@@ -803,7 +912,7 @@ export default function Login() {
         <div className="trace-login-card">
           {/* Brand & Header */}
           <div className="trace-login-card-header">
-            <img alt="TRACE AI Logo" className="trace-login-logo" src="https://lh3.googleusercontent.com/aida/AP1WRLuz09skiO_Gg27FxlCj0Xpmpe7cK9UWgHVU9v12QjZ3BJitQrudTVRDg937R92CU6i-PCwIQrGUp6CI60bD4P3WxmRTWiB7d9aKfQFE2CJaem64MD2XEGpf_FgjGDBcJuEr1p6O0X1WRRE7GN2149tDknL7D-yP67AoZBZa4vRWBIbOqAeBpQ9NKLbl3XqyYnmIt-HGsX4uyhnBVZ44dXmpxLXMoZpneLrzRTT8o1vDLfxzcjoH6nIe9S8"/>
+            <img alt="TRACE AI Logo" className="trace-login-logo" src="/logo-white.svg"/>
             <h2 className="trace-login-card-title">Welcome back</h2>
             <p className="trace-login-card-subtitle">AI-Driven Digital Forensics &amp; Incident Response Platform</p>
           </div>
@@ -818,6 +927,7 @@ export default function Login() {
                 <Mail className="trace-login-input-icon w-[18px] h-[18px]" />
                 <input 
                   className="trace-login-input-field" 
+                  style={{ paddingLeft: '52px', paddingRight: '48px' }}
                   id="email" 
                   name="email" 
                   placeholder="name@agency.gov" 
@@ -855,6 +965,7 @@ export default function Login() {
                 <Lock className="trace-login-input-icon w-[18px] h-[18px]" />
                 <input 
                   className="trace-login-input-field" 
+                  style={{ paddingLeft: '52px', paddingRight: '48px' }}
                   id="password" 
                   name="password" 
                   placeholder="••••••••••••" 
@@ -903,11 +1014,41 @@ export default function Login() {
               <label className="trace-login-checkbox-label" htmlFor="remember">Maintain persistent session</label>
             </div>
 
-            {errors.auth && (
+             {errors.auth && (
               <div className="trace-login-validation-feedback error" role="alert" style={{ alignSelf: 'center', margin: '4px 0' }}>
                 <AlertCircle className="w-3.5 h-3.5" />
                 <span>✕ {errors.auth}</span>
               </div>
+            )}
+
+            {resendSuccess && (
+              <div className="trace-login-validation-feedback success" role="alert" style={{ alignSelf: 'center', margin: '4px 0', color: '#10B981' }}>
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>{resendSuccess}</span>
+              </div>
+            )}
+
+            {showResend && (
+              <button 
+                className="trace-login-resend-btn" 
+                type="button"
+                onClick={handleResendVerification}
+                disabled={isResending}
+                style={{
+                  alignSelf: 'center',
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#47FAF3',
+                  fontSize: '0.85rem',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  padding: '8px 12px',
+                  textDecoration: 'underline',
+                  transition: 'opacity 0.2s'
+                }}
+              >
+                {isResending ? 'Resending verification email...' : 'Resend Verification Email'}
+              </button>
             )}
 
             {/* Primary CTA */}
@@ -928,39 +1069,23 @@ export default function Login() {
                 </>
               )}
             </button>
+
+            {/* Google Authentication Sign-In */}
+            <button 
+              type="button"
+              onClick={handleGoogleSignIn}
+              disabled={isLoading}
+              className="trace-login-google-btn"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="trace-login-google-icon">
+                <path fill="#EA4335" d="M12 5.04c1.64 0 3.12.56 4.28 1.67l3.2-3.2C17.52 1.62 14.99 1 12 1 7.37 1 3.4 3.73 1.58 7.72l3.87 3c.87-2.61 3.3-4.68 6.55-4.68z"/>
+                <path fill="#4285F4" d="M23.49 12.27c0-.81-.07-1.59-.2-2.36H12v4.51h6.44c-.28 1.48-1.11 2.73-2.37 3.58l3.68 2.85c2.15-1.99 3.74-4.91 3.74-8.58z"/>
+                <path fill="#34A853" d="M12 23c3.24 0 5.96-1.07 7.95-2.91l-3.68-2.85c-1.02.68-2.33 1.09-4.27 1.09-3.25 0-6.01-2.07-6.99-4.86H1.14v3.08C3.12 20.27 7.23 23 12 23z"/>
+                <path fill="#FBBC05" d="M5.01 13.47c-.24-.71-.38-1.47-.38-2.25s.14-1.54.38-2.25V5.89H1.14C.41 7.38 0 9.04 0 10.8s.41 3.42 1.14 4.91l3.87-2.24z"/>
+              </svg>
+              <span>Continue with Google</span>
+            </button>
           </form>
-
-          {/* Divider */}
-          <div className="trace-login-divider">
-            <div className="trace-login-divider-line"></div>
-            <span className="trace-login-divider-text">or authenticate via</span>
-            <div className="trace-login-divider-line"></div>
-          </div>
-
-          {/* Secondary CTA (SSO) */}
-          <button 
-            className="trace-login-sso-btn" 
-            type="button" 
-            onClick={handleGoogleSignIn}
-            disabled={isLoading || googleLoading}
-          >
-            {googleLoading ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin text-[#47FAF3]" aria-hidden="true" />
-                <span>Authenticating Identity...</span>
-              </>
-            ) : (
-              <>
-                <svg className="trace-login-sso-icon" viewBox="0 0 24 24">
-                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"></path>
-                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"></path>
-                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.27.81-.57z" fill="#FBBC05"></path>
-                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.66l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"></path>
-                </svg>
-                <span>Secure Federated Identity</span>
-              </>
-            )}
-          </button>
 
           {/* Footer Link */}
           <div className="trace-login-card-footer">

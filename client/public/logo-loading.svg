@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="100%" height="100%">
+  <defs>
+    <linearGradient id="ldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00D9FF" />
+      <stop offset="100%" stop-color="#2563EB" />
+    </linearGradient>
+  </defs>
+
+  <!-- Outer Spinning Radar / Loading Ring -->
+  <circle cx="100" cy="100" r="85" fill="none" stroke="url(#ldGradient)" stroke-width="2" stroke-dasharray="15 8" opacity="0.3" />
+  <circle cx="100" cy="100" r="75" fill="none" stroke="#00D9FF" stroke-width="1.5" stroke-dasharray="4 12" opacity="0.5" />
+
+  <!-- Shield Emblem (Centered) -->
+  <g transform="translate(70, 70)">
+    <path d="M 30,6 L 52,14 L 52,36 C 52,47 42,55 30,58 C 18,55 8,47 8,36 L 8,14 Z" 
+          fill="#050814" 
+          stroke="url(#ldGradient)" 
+          stroke-width="4.5" 
+          stroke-linejoin="round" />
+    <circle cx="30" cy="32" r="7" fill="#00D9FF" />
+    
+    <line x1="30" y1="14" x2="30" y2="25" stroke="#00D9FF" stroke-width="2" />
+    <line x1="12" y1="32" x2="23" y2="32" stroke="#00D9FF" stroke-width="2" />
+    <line x1="37" y1="32" x2="48" y2="32" stroke="#2563EB" stroke-width="2" />
+  </g>
+</svg>

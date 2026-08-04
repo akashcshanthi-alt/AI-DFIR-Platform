@@ -1,0 +1,17 @@
+# Server Node Dependencies
+node_modules/
+
+# Local Environment Credentials
+.env
+
+# Logs and system artifacts
+*.log
+npm-debug.log*
+
+# Ignore custom uploaded evidence/reports but preserve structural directories
+src/uploads/evidence/*
+!src/uploads/evidence/.gitkeep
+src/uploads/reports/*
+!src/uploads/reports/.gitkeep
+src/uploads/avatars/*
+!src/uploads/avatars/.gitkeep

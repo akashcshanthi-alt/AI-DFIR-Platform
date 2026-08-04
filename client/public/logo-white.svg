@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" width="100%" height="100%">
+  <!-- Outer Futuristic Shield in Solid White -->
+  <path d="M 400,100 L 650,200 L 650,480 C 650,620 520,720 400,750 C 280,720 150,620 150,480 L 150,200 Z" 
+        fill="none" 
+        stroke="#FFFFFF" 
+        stroke-width="24" 
+        stroke-linejoin="round" />
+        
+  <!-- Inner Shield Border in Semi-Transparent White -->
+  <path d="M 400,140 L 610,224 L 610,480 C 610,600 500,680 400,710 C 300,680 190,600 190,480 L 190,224 Z" 
+        fill="transparent" 
+        stroke="rgba(255, 255, 255, 0.2)" 
+        stroke-width="8" 
+        stroke-linejoin="round" />
+
+  <!-- AI Circuit Patterns & Central CPU Core in White/Cyan -->
+  <g transform="translate(400, 420)">
+    <!-- Circuit Lines -->
+    <path d="M -80,-80 L -150,-150 L -150,-210" stroke="#FFFFFF" stroke-width="6" fill="none" opacity="0.7" />
+    <circle cx="-150" cy="-210" r="10" fill="#00D9FF" />
+    
+    <path d="M 80,-80 L 150,-150 L 210,-150" stroke="#FFFFFF" stroke-width="6" fill="none" opacity="0.7" />
+    <circle cx="210" cy="-150" r="10" fill="#00D9FF" />
+
+    <path d="M -80,80 L -140,140 L -200,140" stroke="#FFFFFF" stroke-width="6" fill="none" opacity="0.7" />
+    <circle cx="-200" cy="140" r="10" fill="#00D9FF" />
+
+    <path d="M 80,80 L 140,140 L 140,210" stroke="#FFFFFF" stroke-width="6" fill="none" opacity="0.7" />
+    <circle cx="140" cy="210" r="10" fill="#FFFFFF" />
+
+    <line x1="-120" y1="0" x2="-60" y2="0" stroke="#FFFFFF" stroke-width="6" opacity="0.7" />
+    <circle cx="-120" cy="0" r="8" fill="#00D9FF" />
+    <line x1="60" y1="0" x2="120" y2="0" stroke="#FFFFFF" stroke-width="6" opacity="0.7" />
+    <circle cx="120" cy="0" r="8" fill="#00D9FF" />
+
+    <!-- CPU Core -->
+    <rect x="-60" y="-60" width="120" height="120" rx="15" fill="#0B1220" stroke="#FFFFFF" stroke-width="12" />
+    <rect x="-40" y="-40" width="80" height="80" rx="8" fill="rgba(255, 255, 255, 0.1)" stroke="#FFFFFF" stroke-width="4" />
+    <circle cx="0" cy="0" r="16" fill="#00D9FF" />
+    
+    <!-- Core tracks -->
+    <line x1="-40" y1="-20" x2="40" y2="-20" stroke="rgba(255,255,255,0.4)" stroke-width="2" />
+    <line x1="-40" y1="0" x2="40" y2="0" stroke="rgba(255,255,255,0.4)" stroke-width="2" />
+    <line x1="-40" y1="20" x2="40" y2="20" stroke="rgba(255,255,255,0.4)" stroke-width="2" />
+  </g>
+</svg>

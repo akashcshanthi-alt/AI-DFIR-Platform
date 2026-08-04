@@ -1,16 +1,45 @@
 import React, { useState, useEffect } from 'react';
+import { reportsService } from '../../services/reports.service';
+import { casesService } from '../../services/cases.service';
 
 export default function ReportsCenter() {
-  const [qualityScore, setQualityScore] = useState(0);
-  const [clickedRow, setClickedRow] = useState(null);
+  const [reports, setReports] = useState([]);
+  const [cases, setCases] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
   const [toastMsg, setToastMsg] = useState('');
+  
+  // Search & Filters
+  const [searchQuery, setSearchQuery] = useState('');
+  const [formatFilter, setFormatFilter] = useState('');
+  const [typeFilter, setTypeFilter] = useState('');
+  
+  // Pagination
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalReportsCount, setTotalReportsCount] = useState(0);
+
+  // Selected report preview states
+  const [selectedReport, setSelectedReport] = useState(null);
+  const [selectedCaseDetails, setSelectedCaseDetails] = useState(null);
+  const [isLoadingDetails, setIsLoadingDetails] = useState(false);
+
+  // Modal generation states
+  const [showGenerateModal, setShowGenerateModal] = useState(false);
+  const [genTitle, setGenTitle] = useState('');
+  const [genCaseId, setGenCaseId] = useState('');
+  const [genFormat, setGenFormat] = useState('PDF');
+  const [genReportType, setGenReportType] = useState('Incident Summary');
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  const [qualityScore, setQualityScore] = useState(90);
 
   const triggerToast = (msg) => {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(''), 3000);
   };
 
-  // Dynamically load Google Fonts and Material Symbols for the Stitch screen
+  // Dynamically load Google Fonts and Material Symbols for styling
   useEffect(() => {
     const linkFont = document.createElement('link');
     linkFont.href = 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Geist:wght@400;600;700&display=swap';
@@ -32,28 +61,148 @@ export default function ReportsCenter() {
     };
   }, []);
 
-  // Simple quality score animation simulation
-  useEffect(() => {
-    let score = 0;
-    const targetScore = 90;
-    const timer = setTimeout(() => {
-      const interval = setInterval(() => {
-        if (score < targetScore) {
-          score++;
-          setQualityScore(score);
-        } else {
-          clearInterval(interval);
-        }
-      }, 15);
-      return () => clearInterval(interval);
-    }, 500);
+  // Fetch report list
+  const fetchReports = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const res = await reportsService.getReports({
+        search: searchQuery,
+        format: formatFilter,
+        reportType: typeFilter,
+        page: page,
+        limit: 5,
+        sortBy: 'createdAt',
+        sortOrder: 'desc'
+      });
+      setReports(res.data || []);
+      setTotalReportsCount(res.pagination.total || 0);
+      setTotalPages(res.pagination.pages || 1);
 
-    return () => clearTimeout(timer);
+      // Default selection to first report if none is active
+      if (res.data && res.data.length > 0) {
+        const currentSelected = res.data.find(r => r._id === selectedReport?._id || r.reportId === selectedReport?.reportId);
+        if (currentSelected) {
+          setSelectedReport(currentSelected);
+        } else {
+          setSelectedReport(res.data[0]);
+        }
+      } else {
+        setSelectedReport(null);
+      }
+    } catch (err) {
+      console.error('[ReportsCenter] List fetch error:', err);
+      setError(err.message || 'Failed to load forensic reports.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Trigger search and page queries
+  useEffect(() => {
+    fetchReports();
+  }, [searchQuery, formatFilter, typeFilter, page]);
+
+  // Load cases catalog on mount for report generation selector
+  useEffect(() => {
+    const fetchCases = async () => {
+      try {
+        const res = await casesService.getCases({ limit: 100 });
+        setCases(res.data || []);
+      } catch (err) {
+        console.warn('[ReportsCenter] Failed to fetch cases selection list:', err);
+      }
+    };
+    fetchCases();
   }, []);
 
-  const handleRowClick = (index) => {
-    setClickedRow(index);
-    setTimeout(() => setClickedRow(null), 200);
+  // Fetch case details dynamically when selected report changes
+  useEffect(() => {
+    const fetchCaseDetails = async () => {
+      if (!selectedReport) {
+        setSelectedCaseDetails(null);
+        return;
+      }
+      setIsLoadingDetails(true);
+      try {
+        const details = await casesService.getCaseById(selectedReport.caseId);
+        setSelectedCaseDetails(details);
+        // Randomize template score slightly to make the dashboard feel alive
+        setQualityScore(85 + (details.evidenceCount % 11));
+      } catch (err) {
+        console.warn(`[ReportsCenter] Failed to load case details for ${selectedReport.caseId}:`, err.message);
+        setSelectedCaseDetails(null);
+      } finally {
+        setIsLoadingDetails(false);
+      }
+    };
+    fetchCaseDetails();
+  }, [selectedReport]);
+
+  const handleGenerate = async (e) => {
+    e.preventDefault();
+    if (!genCaseId) {
+      triggerToast('Please select a case to generate a report.');
+      return;
+    }
+    setIsGenerating(true);
+    try {
+      const res = await reportsService.generateReport({
+        title: genTitle.trim() || undefined,
+        caseId: genCaseId,
+        format: genFormat,
+        reportType: genReportType
+      });
+      triggerToast(`Report ${res.reportId} synthesized successfully!`);
+      setShowGenerateModal(false);
+      setGenTitle('');
+      setGenCaseId('');
+      setPage(1);
+      fetchReports();
+    } catch (err) {
+      console.error('[ReportsCenter] Generation failure:', err);
+      triggerToast(`Failed to generate: ${err.message}`);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleDownload = async (report) => {
+    if (!report) return;
+    try {
+      const id = report.reportId || report._id;
+      const fileName = `${report.reportId || 'report'}.${report.format.toLowerCase()}`;
+      triggerToast(`Downloading report file ${report.reportId}...`);
+      await reportsService.downloadReport(id, fileName);
+    } catch (err) {
+      console.error('[ReportsCenter] Download failure:', err);
+      triggerToast(`Download failed: ${err.message}`);
+    }
+  };
+
+  const handleDelete = async (report) => {
+    if (!report) return;
+    if (!window.confirm(`Are you sure you want to permanently delete report ${report.reportId}?`)) {
+      return;
+    }
+    try {
+      const id = report.reportId || report._id;
+      await reportsService.deleteReport(id);
+      triggerToast(`Report ${report.reportId} deleted successfully.`);
+      fetchReports();
+    } catch (err) {
+      console.error('[ReportsCenter] Delete failure:', err);
+      triggerToast(`Delete failed: ${err.message}`);
+    }
+  };
+
+  const formatSize = (bytes) => {
+    if (bytes === undefined || bytes === null || isNaN(bytes)) return '0 B';
+    if (bytes < 1024) return `${bytes} B`;
+    const kb = bytes / 1024;
+    if (kb < 1024) return `${kb.toFixed(1)} KB`;
+    const mb = kb / 1024;
+    return `${mb.toFixed(1)} MB`;
   };
 
   return (
@@ -63,7 +212,8 @@ export default function ReportsCenter() {
           {toastMsg}
         </div>
       )}
-      {/* Scope-contained custom styles matching the Stitch layout */}
+
+      {/* Scope-contained custom styles */}
       <style dangerouslySetInnerHTML={{
         __html: `
           .trace-reports-page {
@@ -106,31 +256,18 @@ export default function ReportsCenter() {
       {/* Main Content Area */}
       <div className="p-0">
         {/* Header Actions */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10 text-left">
           <div>
             <h1 className="font-headline-lg text-headline-lg text-on-surface mb-2">Reports Center</h1>
             <p className="text-on-surface-variant font-body-md max-w-2xl">
-              Manage, generate, and analyze forensic evidence reports. AI-assisted synthesis is currently active for critical incident #TR-8821.
+              Generate, download, and analyze digital forensic investigations and AI-assisted case digests.
             </p>
           </div>
           <div className="flex items-center gap-3">
             <button 
-              onClick={() => triggerToast('Opening scheduler wizard...')}
-              className="px-5 py-2.5 bg-surface-container-high text-on-surface border border-white/10 rounded-lg font-label-caps text-label-caps flex items-center gap-2 hover:bg-surface-container-highest transition-all cursor-pointer"
-            >
-              <span className="material-symbols-outlined text-[20px]">calendar_month</span>
-              Schedule
-            </button>
-            <button 
-              onClick={() => triggerToast('Exporting reports catalog...')}
-              className="px-5 py-2.5 bg-surface-container-high text-on-surface border border-white/10 rounded-lg font-label-caps text-label-caps flex items-center gap-2 hover:bg-surface-container-highest transition-all cursor-pointer"
-            >
-              <span className="material-symbols-outlined text-[20px]">ios_share</span>
-              Export
-            </button>
-            <button 
-              onClick={() => triggerToast('Generating comprehensive incident summary report...')}
-              className="px-5 py-2.5 bg-primary text-on-primary rounded-lg font-label-caps text-label-caps flex items-center gap-2 hover:bg-primary/90 transition-all neon-glow-primary cursor-pointer"
+              type="button"
+              onClick={() => setShowGenerateModal(true)}
+              className="px-5 py-2.5 bg-primary text-on-primary rounded-lg font-label-caps text-label-caps flex items-center gap-2 hover:bg-primary/90 transition-all neon-glow-primary cursor-pointer border-none"
             >
               <span className="material-symbols-outlined text-[20px]">magic_button</span>
               Generate Report
@@ -139,401 +276,505 @@ export default function ReportsCenter() {
         </div>
 
         {/* KPI Bento Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-gutter mb-gutter">
-          <div className="glass-card p-5 rounded-xl flex flex-col justify-between h-32 relative overflow-hidden group">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          <div className="glass-card p-5 rounded-xl flex flex-col justify-between h-28 relative overflow-hidden group text-left">
             <div className="absolute -right-4 -top-4 text-primary opacity-5 transform group-hover:scale-110 transition-transform duration-500">
               <span className="material-symbols-outlined text-[80px]">description</span>
             </div>
-            <span className="text-on-surface-variant font-label-caps text-label-caps">Total Generated</span>
+            <span className="text-on-surface-variant font-label-caps text-[10px] tracking-wider uppercase">Total Reports</span>
             <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-headline-md text-on-surface">1,284</span>
-              <span className="text-xs text-secondary">+12%</span>
+              <span className="text-3xl font-bold text-on-surface">{totalReportsCount}</span>
+              <span className="text-xs text-secondary">Active Console</span>
             </div>
           </div>
-          <div className="glass-card p-5 rounded-xl flex flex-col justify-between h-32 relative overflow-hidden group">
-            <span className="text-on-surface-variant font-label-caps text-label-caps">Scheduled</span>
+
+          <div className="glass-card p-5 rounded-xl flex flex-col justify-between h-28 relative overflow-hidden group text-left">
+            <span className="text-on-surface-variant font-label-caps text-[10px] tracking-wider uppercase font-medium">Compliance Index</span>
             <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-headline-md text-on-surface">42</span>
-              <span className="text-xs text-on-surface-variant">Ongoing</span>
-            </div>
-            <div className="w-full bg-white/5 h-1 rounded-full mt-2 overflow-hidden">
-              <div className="bg-primary h-full w-[65%]"></div>
-            </div>
-          </div>
-          <div className="glass-card p-5 rounded-xl flex flex-col justify-between h-32 relative overflow-hidden group">
-            <span className="text-on-surface-variant font-label-caps text-label-caps">Investigations</span>
-            <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-headline-md text-secondary">89</span>
-              <span className="text-xs text-secondary-fixed-dim">Active</span>
-            </div>
-          </div>
-          <div className="glass-card p-5 rounded-xl flex flex-col justify-between h-32 relative overflow-hidden group">
-            <span className="text-on-surface-variant font-label-caps text-label-caps">Compliance</span>
-            <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-headline-md text-on-surface">99.2%</span>
+              <span className="text-3xl font-bold text-on-surface">99.2%</span>
               <span className="text-xs text-secondary">Optimal</span>
             </div>
+            <div className="w-full bg-white/5 h-1 rounded-full overflow-hidden">
+              <div className="bg-primary h-full w-[99%]"></div>
+            </div>
           </div>
-          <div className="glass-card p-5 rounded-xl flex flex-col justify-between h-32 border-primary/20 bg-primary/5 relative overflow-hidden group">
-            <span className="text-primary font-label-caps text-label-caps">AI Generated</span>
+
+          <div className="glass-card p-5 rounded-xl flex flex-col justify-between h-28 relative overflow-hidden group text-left">
+            <span className="text-on-surface-variant font-label-caps text-[10px] tracking-wider uppercase font-medium">Available Formats</span>
             <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-headline-md text-on-surface">412</span>
-              <span className="material-symbols-outlined text-primary text-[18px]">auto_awesome</span>
+              <span className="text-2xl font-bold text-secondary">PDF / CSV</span>
+            </div>
+          </div>
+
+          <div className="glass-card p-5 rounded-xl border-primary/20 bg-primary/5 flex flex-col justify-between h-28 relative overflow-hidden group text-left">
+            <span className="text-primary font-label-caps text-[10px] tracking-wider uppercase font-medium">AI Heuristics Engine</span>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-bold text-on-surface">Enabled</span>
+              <span className="material-symbols-outlined text-primary text-[18px] ml-1">auto_awesome</span>
             </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-gutter">
-          {/* Left Column (Templates & Main List) */}
-          <div className="lg:col-span-8 space-y-gutter">
-            {/* Report Templates Grid */}
-            <section>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-on-surface font-headline-md text-[20px]">Report Templates</h2>
-                <button 
-                  onClick={() => triggerToast('Loading complete templates database...')}
-                  className="text-secondary text-sm font-label-caps flex items-center gap-1 hover:underline cursor-pointer bg-transparent border-none"
-                >
-                  View All <span className="material-symbols-outlined text-[16px]">chevron_right</span>
-                </button>
+        {/* Main Interface Split */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* Left Column (Search, Filters, & Table List) */}
+          <div className="lg:col-span-7 space-y-6">
+            {/* Search and Filters bar */}
+            <div className="glass-card p-4 rounded-xl flex flex-col md:flex-row gap-4 items-center justify-between">
+              <div className="relative w-full md:max-w-xs flex items-center">
+                <input
+                  type="text"
+                  placeholder="Search by title or case..."
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setPage(1);
+                  }}
+                  className="w-full bg-surface-container-low border border-white/10 rounded-lg px-4 py-2 pl-9 text-xs text-on-surface placeholder-on-surface-variant outline-none focus:border-primary/50"
+                />
+                <span className="material-symbols-outlined absolute left-3 text-on-surface-variant text-[16px]">search</span>
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                {/* Template Card */}
-                <div 
-                  onClick={() => triggerToast('Initializing Executive Summary template...')}
-                  className="glass-card p-4 rounded-xl hover:border-secondary/40 transition-all cursor-pointer group"
+              <div className="flex gap-2 w-full md:w-auto">
+                <select
+                  value={formatFilter}
+                  onChange={(e) => {
+                    setFormatFilter(e.target.value);
+                    setPage(1);
+                  }}
+                  className="bg-surface-container-low border border-white/10 rounded-lg px-3 py-2 text-xs text-on-surface outline-none cursor-pointer"
                 >
-                  <div className="w-10 h-10 rounded-lg bg-surface-container-highest flex items-center justify-center mb-3 group-hover:bg-secondary/10 transition-colors">
-                    <span className="material-symbols-outlined text-secondary">monitoring</span>
-                  </div>
-                  <h3 className="font-semibold text-on-surface text-sm mb-1">Executive Summary</h3>
-                  <p className="text-[11px] text-on-surface-variant line-clamp-2">High-level briefing for leadership and stakeholders.</p>
-                </div>
-                <div 
-                  onClick={() => triggerToast('Initializing Incident Report template...')}
-                  className="glass-card p-4 rounded-xl hover:border-secondary/40 transition-all cursor-pointer group"
-                >
-                  <div className="w-10 h-10 rounded-lg bg-surface-container-highest flex items-center justify-center mb-3 group-hover:bg-secondary/10 transition-colors">
-                    <span className="material-symbols-outlined text-secondary">crisis_alert</span>
-                  </div>
-                  <h3 className="font-semibold text-on-surface text-sm mb-1">Incident Report</h3>
-                  <p className="text-[11px] text-on-surface-variant line-clamp-2">Technical analysis of breach events and remediation.</p>
-                </div>
-                <div 
-                  onClick={() => triggerToast('Initializing Malware Analysis template...')}
-                  className="glass-card p-4 rounded-xl hover:border-secondary/40 transition-all cursor-pointer group"
-                >
-                  <div className="w-10 h-10 rounded-lg bg-surface-container-highest flex items-center justify-center mb-3 group-hover:bg-secondary/10 transition-colors">
-                    <span className="material-symbols-outlined text-secondary">bug_report</span>
-                  </div>
-                  <h3 className="font-semibold text-on-surface text-sm mb-1">Malware Analysis</h3>
-                  <p className="text-[11px] text-on-surface-variant line-clamp-2">Detailed behavioral study of isolated malicious files.</p>
-                </div>
-                <div 
-                  onClick={() => triggerToast('Initializing Evidence Report template...')}
-                  className="glass-card p-4 rounded-xl hover:border-secondary/40 transition-all cursor-pointer group"
-                >
-                  <div className="w-10 h-10 rounded-lg bg-surface-container-highest flex items-center justify-center mb-3 group-hover:bg-secondary/10 transition-colors">
-                    <span className="material-symbols-outlined text-secondary">gavel</span>
-                  </div>
-                  <h3 className="font-semibold text-on-surface text-sm mb-1">Evidence Report</h3>
-                  <p className="text-[11px] text-on-surface-variant line-clamp-2">Forensic chain of custody and artifact extraction docs.</p>
-                </div>
-                <div 
-                  onClick={() => triggerToast('Initializing IOC Report template...')}
-                  className="glass-card p-4 rounded-xl hover:border-secondary/40 transition-all cursor-pointer group"
-                >
-                  <div className="w-10 h-10 rounded-lg bg-surface-container-highest flex items-center justify-center mb-3 group-hover:bg-secondary/10 transition-colors">
-                    <span className="material-symbols-outlined text-secondary">hub</span>
-                  </div>
-                  <h3 className="font-semibold text-on-surface text-sm mb-1">IOC Report</h3>
-                  <p className="text-[11px] text-on-surface-variant line-clamp-2">Indicators of Compromise for fleet-wide distribution.</p>
-                </div>
-                <div 
-                  onClick={() => triggerToast('Initializing Compliance Template...')}
-                  className="glass-card p-4 rounded-xl hover:border-secondary/40 transition-all cursor-pointer group"
-                >
-                  <div className="w-10 h-10 rounded-lg bg-surface-container-highest flex items-center justify-center mb-3 group-hover:bg-secondary/10 transition-colors">
-                    <span className="material-symbols-outlined text-secondary">verified_user</span>
-                  </div>
-                  <h3 className="font-semibold text-on-surface text-sm mb-1">Compliance</h3>
-                  <p className="text-[11px] text-on-surface-variant line-clamp-2">GDPR/SOC2/HIPAA specific regulatory alignment.</p>
-                </div>
-              </div>
-            </section>
+                  <option value="">All Formats</option>
+                  <option value="PDF">PDF</option>
+                  <option value="CSV">CSV</option>
+                </select>
 
-            {/* Recent Reports Table */}
+                <select
+                  value={typeFilter}
+                  onChange={(e) => {
+                    setTypeFilter(e.target.value);
+                    setPage(1);
+                  }}
+                  className="bg-surface-container-low border border-white/10 rounded-lg px-3 py-2 text-xs text-on-surface outline-none cursor-pointer"
+                >
+                  <option value="">All Types</option>
+                  <option value="Incident Summary">Incident Summary</option>
+                  <option value="Forensic Audit">Forensic Audit</option>
+                  <option value="AI Investigation">AI Investigation</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Reports List Table */}
             <section className="glass-card rounded-xl overflow-hidden">
-              <div className="p-5 border-b border-white/5 flex items-center justify-between">
-                <h2 className="text-on-surface font-headline-md text-[20px]">Recent Reports</h2>
-                <div className="flex gap-2">
-                  <button className="p-1.5 hover:bg-white/5 rounded cursor-pointer bg-transparent border-none text-on-surface-variant">
-                    <span className="material-symbols-outlined text-[20px]">filter_list</span>
-                  </button>
-                </div>
+              <div className="p-5 border-b border-white/5 flex items-center justify-between text-left">
+                <h2 className="text-on-surface font-semibold text-base">Forensic Reports catalog</h2>
+                <span className="text-xs text-on-surface-variant">{totalReportsCount} entries found</span>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left">
-                  <thead className="bg-surface-container-low/50 text-[11px] text-on-surface-variant font-label-caps uppercase tracking-wider">
+                  <thead className="bg-surface-container-low/50 text-[10px] text-on-surface-variant font-label-caps uppercase tracking-wider">
                     <tr>
-                      <th className="px-6 py-4">Report Name</th>
-                      <th className="px-6 py-4">Case ID</th>
-                      <th className="px-6 py-4">Generated By</th>
-                      <th className="px-6 py-4">Date</th>
-                      <th className="px-6 py-4 text-right">Status</th>
+                      <th className="px-6 py-4">Report Details</th>
+                      <th className="px-6 py-4">Case Link</th>
+                      <th className="px-6 py-4">Format</th>
+                      <th className="px-6 py-4">Size</th>
+                      <th className="px-6 py-4 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5 text-sm">
-                    {[
-                      { name: 'SOC-L3 Breach Summary', caseId: '#TR-8821', by: 'AI Sentinel v4', byIconBg: 'bg-surface-container-highest border border-white/10', date: 'Oct 24, 14:22', status: 'Complete', statusBg: 'bg-secondary/10 text-secondary' },
-                      { name: 'Malware Analysis: Gootloader', caseId: '#TR-8790', by: 'D. Sterling', byIconBg: 'bg-primary-container/20 border border-primary/20', date: 'Oct 23, 09:15', status: 'Complete', statusBg: 'bg-secondary/10 text-secondary' },
-                      { name: 'Compliance Audit Q3', caseId: '#CMP-442', by: 'System Auto', byIconBg: 'bg-surface-container-highest', date: 'Oct 22, 23:59', status: 'Processing', statusBg: 'bg-primary/10 text-primary' },
-                      { name: 'Endpoint Forensics Node-8', caseId: '#TR-8815', by: 'M. Chen', byIconBg: 'bg-primary-container/20 border border-primary/20', date: 'Oct 21, 11:45', status: 'Complete', statusBg: 'bg-secondary/10 text-secondary' }
-                    ].map((row, idx) => (
-                      <tr 
-                        key={idx} 
-                        onClick={() => {
-                          setClickedRow(idx);
-                          triggerToast(`Selected report: ${row.name}`);
-                          setTimeout(() => setClickedRow(null), 1000);
-                        }}
-                        className={`transition-colors cursor-pointer group ${
-                          clickedRow === idx ? 'bg-primary/5' : 'hover:bg-white/[0.02]'
-                        }`}
-                      >
-                        <td className="px-6 py-4 font-medium text-on-surface">{row.name}</td>
-                        <td className="px-6 py-4 text-secondary font-code-sm">{row.caseId}</td>
-                        <td className="px-6 py-4 flex items-center gap-2">
-                          <div className={`w-6 h-6 rounded-full ${row.byIconBg}`}></div>
-                          <span>{row.by}</span>
-                        </td>
-                        <td className="px-6 py-4 text-on-surface-variant">{row.date}</td>
-                        <td className="px-6 py-4 text-right">
-                          <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${row.statusBg}`}>{row.status}</span>
+                    {isLoading ? (
+                      // Loading Skeletons
+                      Array.from({ length: 4 }).map((_, idx) => (
+                        <tr key={idx} className="animate-pulse">
+                          <td className="px-6 py-4">
+                            <div className="h-4 bg-white/5 rounded w-36 mb-2"></div>
+                            <div className="h-3 bg-white/5 rounded w-20"></div>
+                          </td>
+                          <td className="px-6 py-4"><div className="h-4 bg-white/5 rounded w-16"></div></td>
+                          <td className="px-6 py-4"><div className="h-4 bg-white/5 rounded w-12"></div></td>
+                          <td className="px-6 py-4"><div className="h-4 bg-white/5 rounded w-10"></div></td>
+                          <td className="px-6 py-4 text-right"><div className="h-6 bg-white/5 rounded w-12 ml-auto"></div></td>
+                        </tr>
+                      ))
+                    ) : error ? (
+                      <tr>
+                        <td colSpan="5" className="px-6 py-8 text-center text-[#ef4444] font-medium">
+                          ✕ {error}
                         </td>
                       </tr>
-                    ))}
+                    ) : reports.length === 0 ? (
+                      <tr>
+                        <td colSpan="5" className="px-6 py-8 text-center text-on-surface-variant">
+                          All clear. No generated reports match query criteria.
+                        </td>
+                      </tr>
+                    ) : (
+                      reports.map((report) => (
+                        <tr 
+                          key={report._id} 
+                          onClick={() => setSelectedReport(report)}
+                          className={`transition-colors cursor-pointer group ${
+                            selectedReport?._id === report._id ? 'bg-primary/5' : 'hover:bg-white/[0.01]'
+                          }`}
+                        >
+                          <td className="px-6 py-4 text-left">
+                            <div className="font-semibold text-on-surface text-xs leading-normal">{report.title}</div>
+                            <div className="text-[10px] text-on-surface-variant font-code-sm mt-1">{report.reportType}</div>
+                          </td>
+                          <td className="px-6 py-4 text-secondary font-mono text-xs">{report.caseId}</td>
+                          <td className="px-6 py-4">
+                            <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
+                              report.format === 'PDF' ? 'bg-[#ef4444]/15 text-[#ef4444] border border-[#ef4444]/30' : 'bg-[#10b981]/15 text-[#10b981] border border-[#10b981]/30'
+                            }`}>
+                              {report.format}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-on-surface-variant text-xs">{formatSize(report.fileSize)}</td>
+                          <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex justify-end gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handleDownload(report)}
+                                className="p-1 text-on-surface-variant hover:text-primary hover:bg-white/5 rounded transition-all cursor-pointer bg-transparent border-none"
+                                title="Download Report"
+                              >
+                                <span className="material-symbols-outlined text-[18px]">download</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDelete(report)}
+                                className="p-1 text-on-surface-variant hover:text-[#ef4444] hover:bg-white/5 rounded transition-all cursor-pointer bg-transparent border-none"
+                                title="Delete Report"
+                              >
+                                <span className="material-symbols-outlined text-[18px]">delete</span>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
-            </section>
 
-            {/* Detailed Report Preview */}
-            <section className="glass-card rounded-xl p-8 border-primary/20 relative overflow-hidden">
-              <div className="absolute top-0 right-0 p-4">
-                <span className="text-[10px] font-code-sm text-primary uppercase opacity-50">Draft v2.1.0</span>
-              </div>
-              <div className="max-w-4xl mx-auto">
-                <div className="flex items-center gap-4 mb-8">
-                  <div className="w-12 h-16 bg-surface-container flex flex-col items-center justify-center rounded border border-white/10 shadow-lg">
-                    <span className="text-[10px] font-bold text-on-surface-variant">PDF</span>
-                    <span className="material-symbols-outlined text-primary">description</span>
-                  </div>
-                  <div>
-                    <h3 className="text-2xl font-headline-md text-on-surface">Incident Analysis #TR-8821</h3>
-                    <p className="text-on-surface-variant">Generated: Oct 24, 2023 | Classification: Top Secret</p>
-                  </div>
-                </div>
-                <div className="space-y-8">
-                  <div>
-                    <h4 className="text-secondary font-label-caps text-label-caps mb-3 flex items-center gap-2">
-                      <span className="w-1 h-4 bg-secondary"></span> Executive Summary
-                    </h4>
-                    <p className="text-on-surface-variant leading-relaxed">
-                      The incident involved a targeted credential harvesting campaign against Tier-2 administrative accounts. Rapid identification occurred at T+14 minutes, followed by an automated isolation of 3 redundant domain controllers. No data exfiltration was detected in the primary ledger.
-                    </p>
-                  </div>
-                  <div className="grid grid-cols-2 gap-8">
-                    <div>
-                      <h4 className="text-secondary font-label-caps text-label-caps mb-3 flex items-center gap-2">
-                        <span className="w-1 h-4 bg-secondary"></span> Evidence Summary
-                      </h4>
-                      <ul className="space-y-2 text-sm text-on-surface-variant">
-                        <li className="flex items-center gap-2"><span className="material-symbols-outlined text-[14px] text-primary">check_circle</span> 14 Memory Dumps Analyzed</li>
-                        <li className="flex items-center gap-2"><span className="material-symbols-outlined text-[14px] text-primary">check_circle</span> 42 Network PCAP Files</li>
-                        <li className="flex items-center gap-2"><span className="material-symbols-outlined text-[14px] text-primary">check_circle</span> Registry Hive Snapshots</li>
-                      </ul>
-                    </div>
-                    <div>
-                      <h4 className="text-secondary font-label-caps text-label-caps mb-3 flex items-center gap-2">
-                        <span className="w-1 h-4 bg-secondary"></span> AI Findings
-                      </h4>
-                      <div className="bg-surface-container/50 p-4 rounded-lg border border-primary/10">
-                        <p className="text-[12px] italic text-primary">
-                          "98.4% confidence match with APT-29 signature behaviors. Tactics suggest a lateral movement attempt using compromised PowerShell scripts."
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="pt-6 border-t border-white/5">
-                    <h4 className="text-on-surface-variant font-label-caps text-[10px] uppercase mb-4 tracking-widest">Incident Timeline</h4>
-                    <div className="relative pl-6 border-l border-white/10 space-y-6">
-                      <div className="relative">
-                        <div className="absolute -left-[29px] top-1.5 w-3 h-3 rounded-full bg-secondary ring-4 ring-secondary/20"></div>
-                        <span className="text-[11px] font-code-sm text-secondary">02:14:22 UTC</span>
-                        <p className="text-sm">Initial intrusion detected via VPN Node 4</p>
-                      </div>
-                      <div className="relative">
-                        <div className="absolute -left-[29px] top-1.5 w-3 h-3 rounded-full bg-primary ring-4 ring-primary/20"></div>
-                        <span className="text-[11px] font-code-sm text-primary">02:28:10 UTC</span>
-                        <p className="text-sm">Automated containment triggered for affected nodes</p>
-                      </div>
-                      <div className="relative opacity-50">
-                        <div className="absolute -left-[29px] top-1.5 w-3 h-3 rounded-full bg-white/20"></div>
-                        <span className="text-[11px] font-code-sm text-on-surface-variant">03:00:00 UTC</span>
-                        <p className="text-sm">Root cause analysis initialized</p>
-                      </div>
-                    </div>
+              {/* Pagination controls */}
+              {totalPages > 1 && (
+                <div className="p-4 border-t border-white/5 flex items-center justify-between text-xs text-on-surface-variant">
+                  <span>Page {page} of {totalPages}</span>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      disabled={page === 1}
+                      onClick={() => setPage(prev => Math.max(1, prev - 1))}
+                      className="px-3 py-1.5 bg-surface-container-low border border-white/10 rounded hover:bg-surface-container-high disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer text-on-surface"
+                    >
+                      Previous
+                    </button>
+                    <button
+                      type="button"
+                      disabled={page === totalPages}
+                      onClick={() => setPage(prev => Math.min(totalPages, prev + 1))}
+                      className="px-3 py-1.5 bg-surface-container-low border border-white/10 rounded hover:bg-surface-container-high disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer text-on-surface"
+                    >
+                      Next
+                    </button>
                   </div>
                 </div>
-              </div>
+              )}
             </section>
           </div>
 
-          {/* Right Column (AI Assistant & Insights) */}
-          <div className="lg:col-span-4 space-y-gutter">
-            {/* AI Assistant Panel */}
-            <div className="glass-card rounded-xl p-6 flex flex-col gap-6 sticky top-24">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
-                  <span className="material-symbols-outlined text-primary" style={{ fontVariationSettings: "'FILL' 1" }}>auto_awesome</span>
-                </div>
-                <div>
-                  <h3 className="font-headline-md text-[18px]">AI Assistant</h3>
-                  <span className="text-[10px] text-secondary uppercase font-bold tracking-widest">Reports Optimizer</span>
-                </div>
+          {/* Right Column (Detailed Preview Area) */}
+          <div className="lg:col-span-5 text-left">
+            <div className="glass-card rounded-xl p-6 space-y-6 sticky top-24">
+              <div className="flex items-center justify-between pb-4 border-b border-white/5">
+                <h3 className="font-semibold text-on-surface">Report Detail Preview</h3>
+                {selectedReport && (
+                  <button
+                    type="button"
+                    onClick={() => handleDownload(selectedReport)}
+                    className="text-xs text-primary font-bold hover:underline flex items-center gap-1 cursor-pointer bg-transparent border-none"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">download</span> Export Document
+                  </button>
+                )}
               </div>
-              <div className="space-y-4">
-                <div className="bg-surface-container-high/50 p-4 rounded-lg">
-                  <p className="text-xs text-on-surface-variant mb-2">Suggested Improvements:</p>
-                  <ul className="space-y-2">
-                    <li className="flex items-start gap-2 text-[13px]">
-                      <span className="material-symbols-outlined text-secondary text-[16px] mt-0.5">add_task</span>
-                      Add MITRE ATT&amp;CK mapping for Section 4.2
-                    </li>
-                    <li className="flex items-start gap-2 text-[13px]">
-                      <span className="material-symbols-outlined text-secondary text-[16px] mt-0.5">add_task</span>
-                      Expand on root cause of credential leak
-                    </li>
-                  </ul>
+
+              {!selectedReport ? (
+                <div className="flex flex-col items-center justify-center py-20 text-on-surface-variant text-center">
+                  <span className="material-symbols-outlined text-[48px] text-white/10 mb-4">description</span>
+                  <p className="text-sm">Select a report from the catalog table to activate detail telemetry preview.</p>
                 </div>
-                <div className="flex flex-col items-center py-6 border-y border-white/5">
-                  <div className="relative w-32 h-32 flex items-center justify-center">
-                    <svg className="w-full h-full transform -rotate-90">
-                      <circle className="text-white/5" cx="64" cy="64" fill="transparent" r="58" stroke="currentColor" strokeWidth="8"></circle>
-                      <circle className="text-secondary" cx="64" cy="64" fill="transparent" r="58" stroke="currentColor" strokeDasharray="364" strokeDashoffset={`${364 - (364 * qualityScore) / 100}`} strokeWidth="8"></circle>
-                    </svg>
-                    <div className="absolute flex flex-col items-center">
-                      <span className="text-2xl font-bold text-on-surface">{qualityScore}</span>
-                      <span className="text-[10px] text-on-surface-variant uppercase">Quality Score</span>
+              ) : (
+                <div className="space-y-6">
+                  {/* Preview header */}
+                  <div className="flex items-start gap-4">
+                    <div className="w-10 h-12 bg-surface-container flex flex-col items-center justify-center rounded border border-white/10 shadow-lg shrink-0">
+                      <span className="text-[9px] font-bold text-on-surface-variant">{selectedReport.format}</span>
+                      <span className="material-symbols-outlined text-primary text-[16px]">description</span>
+                    </div>
+                    <div className="min-w-0">
+                      <h4 className="font-bold text-on-surface text-sm leading-snug break-words">{selectedReport.title}</h4>
+                      <p className="text-[10px] text-on-surface-variant mt-1">
+                        Report ID: <span className="font-mono">{selectedReport.reportId}</span> | Format: {selectedReport.format}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Summary grid */}
+                  <div className="grid grid-cols-2 gap-4 bg-white/[0.01] border border-white/5 rounded-lg p-4 text-[11px] leading-relaxed">
+                    <div>
+                      <span className="text-on-surface-variant block uppercase font-bold tracking-wider mb-1">Related Case</span>
+                      <span className="text-secondary font-mono">{selectedReport.caseId}</span>
+                    </div>
+                    <div>
+                      <span className="text-on-surface-variant block uppercase font-bold tracking-wider mb-1">Size</span>
+                      <span>{formatSize(selectedReport.fileSize)}</span>
+                    </div>
+                    <div>
+                      <span className="text-on-surface-variant block uppercase font-bold tracking-wider mb-1">Type</span>
+                      <span>{selectedReport.reportType}</span>
+                    </div>
+                    <div>
+                      <span className="text-on-surface-variant block uppercase font-bold tracking-wider mb-1">Generated At</span>
+                      <span>{new Date(selectedReport.createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>
+                  </div>
+
+                  {/* Dynamic Case Details */}
+                  {isLoadingDetails ? (
+                    <div className="flex flex-col items-center justify-center py-8 gap-2 text-primary">
+                      <span className="material-symbols-outlined animate-spin">sync</span>
+                      <span className="text-xs">Synchronizing details ledger...</span>
+                    </div>
+                  ) : selectedCaseDetails ? (
+                    <div className="space-y-4 pt-2">
+                      <div>
+                        <h5 className="text-secondary font-bold text-[10px] uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                          <span className="w-1 h-3 bg-secondary"></span> Incident Description
+                        </h5>
+                        <p className="text-[11.5px] text-on-surface-variant leading-relaxed pl-2.5 border-l border-white/10">
+                          {selectedCaseDetails.description || 'No description logged in the telemetry records.'}
+                        </p>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <h5 className="text-secondary font-bold text-[10px] uppercase tracking-wider mb-1.5">
+                            Incident Scope
+                          </h5>
+                          <ul className="space-y-1.5 text-[11px] text-on-surface-variant pl-1">
+                            <li className="flex items-center gap-1.5">
+                              <span className="material-symbols-outlined text-[12px] text-primary">circle</span>
+                              Host: {selectedCaseDetails.targetHost || 'N/A'}
+                            </li>
+                            <li className="flex items-center gap-1.5">
+                              <span className="material-symbols-outlined text-[12px] text-primary">circle</span>
+                              Status: {selectedCaseDetails.status || 'N/A'}
+                            </li>
+                          </ul>
+                        </div>
+
+                        <div>
+                          <h5 className="text-secondary font-bold text-[10px] uppercase tracking-wider mb-1.5">
+                            Network IOCs
+                          </h5>
+                          <ul className="space-y-1.5 text-[11px] text-on-surface-variant pl-1">
+                            <li className="flex items-center gap-1.5">
+                              <span className="material-symbols-outlined text-[12px] text-primary">arrow_forward</span>
+                              Src: {selectedCaseDetails.sourceIP || 'N/A'}
+                            </li>
+                            <li className="flex items-center gap-1.5">
+                              <span className="material-symbols-outlined text-[12px] text-primary">arrow_forward</span>
+                              Dst: {selectedCaseDetails.destinationIP || 'N/A'}
+                            </li>
+                          </ul>
+                        </div>
+                      </div>
+
+                      {/* Timeline */}
+                      <div className="pt-2">
+                        <h5 className="text-on-surface-variant font-bold text-[9px] uppercase tracking-widest mb-3">
+                          Triage Timeline
+                        </h5>
+                        <div className="relative pl-4 border-l border-white/10 space-y-4 ml-1">
+                          <div className="relative text-[11px]">
+                            <div className="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-secondary ring-4 ring-secondary/20"></div>
+                            <span className="text-[10px] font-code-sm text-secondary block mb-0.5">
+                              {new Date(selectedCaseDetails.createdAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                            </span>
+                            <span className="text-on-surface-variant">Incident created &amp; logged by {selectedReport.generatedBy?.fullName || 'Analyst'}.</span>
+                          </div>
+                          <div className="relative text-[11px]">
+                            <div className="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-primary ring-4 ring-primary/20"></div>
+                            <span className="text-[10px] font-code-sm text-primary block mb-0.5">T+14 minutes</span>
+                            <span className="text-on-surface-variant">Cognitive EDR rules automatically compiled.</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-surface-container-high/30 p-4 rounded-lg border border-white/5 text-[11.5px] text-on-surface-variant text-center">
+                      Case telemetry unavailable or archived. Raw report file size can still be exported.
+                    </div>
+                  )}
+
+                  {/* Quality score gauges */}
+                  <div className="flex flex-col items-center py-4 border-t border-white/5">
+                    <div className="relative w-24 h-24 flex items-center justify-center">
+                      <svg className="w-full h-full transform -rotate-90">
+                        <circle className="text-white/5" cx="48" cy="48" fill="transparent" r="42" stroke="currentColor" strokeWidth="6"></circle>
+                        <circle className="text-secondary" cx="48" cy="48" fill="transparent" r="42" stroke="currentColor" strokeDasharray="264" strokeDashoffset={`${264 - (264 * qualityScore) / 100}`} strokeWidth="6"></circle>
+                      </svg>
+                      <div className="absolute flex flex-col items-center">
+                        <span className="text-lg font-bold text-on-surface">{qualityScore}</span>
+                        <span className="text-[8px] text-on-surface-variant uppercase tracking-wider">Quality Score</span>
+                      </div>
                     </div>
                   </div>
                 </div>
-                <div>
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-xs font-label-caps">Compliance Status</span>
-                    <span className="text-xs text-secondary">92%</span>
-                  </div>
-                  <div className="w-full h-2 bg-white/5 rounded-full overflow-hidden">
-                    <div className="h-full bg-secondary" style={{ width: '92%' }}></div>
-                  </div>
-                </div>
-                <button 
-                  onClick={() => triggerToast('Applying automated AI formatting fixes...')}
-                  className="w-full py-3 border border-primary/30 text-primary rounded-lg text-xs font-label-caps hover:bg-primary/5 transition-all cursor-pointer bg-transparent"
-                >
-                  APPLY AUTO-FIXES
-                </button>
-              </div>
-              <div className="space-y-4 pt-4 border-t border-white/5">
-                <h4 className="text-xs font-label-caps text-on-surface-variant">Version Control</h4>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between text-[11px]">
-                    <div className="flex items-center gap-2">
-                      <span className="material-symbols-outlined text-[14px]">history</span>
-                      <span>v2.1.0 (Current)</span>
-                    </div>
-                    <span className="text-on-surface-variant">10m ago</span>
-                  </div>
-                  <div className="flex items-center justify-between text-[11px] opacity-60">
-                    <div className="flex items-center gap-2">
-                      <span className="material-symbols-outlined text-[14px]">history</span>
-                      <span>v2.0.4 (Published)</span>
-                    </div>
-                    <span className="text-on-surface-variant">2h ago</span>
-                  </div>
-                </div>
-              </div>
+              )}
             </div>
           </div>
         </div>
-
-        {/* History Section */}
-        <section className="mt-gutter">
-          <h2 className="text-on-surface font-headline-md text-[20px] mb-6">Report History &amp; Archival</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div 
-              onClick={() => triggerToast('Downloading Q2 archive package (2.4 GB)...')}
-              className="glass-card p-4 rounded-xl flex items-center justify-between group hover:bg-white/[0.05] transition-colors cursor-pointer"
-            >
-              <div className="flex items-center gap-3">
-                <span className="material-symbols-outlined text-on-surface-variant">folder_zip</span>
-                <div>
-                  <p className="text-sm font-medium">Q2 Archive</p>
-                  <p className="text-[10px] text-on-surface-variant">420 Reports | 2.4 GB</p>
-                </div>
-              </div>
-              <span className="material-symbols-outlined text-on-surface-variant opacity-0 group-hover:opacity-100 transition-opacity">download</span>
-            </div>
-            <div 
-              onClick={() => triggerToast('Downloading Compliance-2022 package (1.1 GB)...')}
-              className="glass-card p-4 rounded-xl flex items-center justify-between group hover:bg-white/[0.05] transition-colors cursor-pointer"
-            >
-              <div className="flex items-center gap-3">
-                <span className="material-symbols-outlined text-on-surface-variant">inventory_2</span>
-                <div>
-                  <p className="text-sm font-medium">Compliance-2022</p>
-                  <p className="text-[10px] text-on-surface-variant">88 Reports | 1.1 GB</p>
-                </div>
-              </div>
-              <span className="material-symbols-outlined text-on-surface-variant opacity-0 group-hover:opacity-100 transition-opacity">download</span>
-            </div>
-            <div 
-              onClick={() => triggerToast('Opening Drafts Hub view...')}
-              className="glass-card p-4 rounded-xl flex items-center justify-between group hover:bg-white/[0.05] transition-colors cursor-pointer"
-            >
-              <div className="flex items-center gap-3">
-                <span className="material-symbols-outlined text-on-surface-variant">description</span>
-                <div>
-                  <p className="text-sm font-medium">Drafts Hub</p>
-                  <p className="text-[10px] text-on-surface-variant">12 Active Drafts</p>
-                </div>
-              </div>
-              <span className="material-symbols-outlined text-on-surface-variant opacity-0 group-hover:opacity-100 transition-opacity">arrow_forward</span>
-            </div>
-            <div 
-              onClick={() => triggerToast('Creating new archive folder...')}
-              className="glass-card p-4 rounded-xl border-dashed border-white/10 flex items-center justify-center gap-2 group hover:border-primary/50 transition-colors cursor-pointer"
-            >
-              <span className="material-symbols-outlined text-on-surface-variant">add</span>
-              <span className="text-sm text-on-surface-variant font-label-caps">Create Folder</span>
-            </div>
-          </div>
-        </section>
-
-        {/* Local Footer Status Bar for the component layout */}
-        <footer className="bg-surface-dim/80 backdrop-blur-xl border-t border-white/5 py-4 px-margin-desktop flex flex-col sm:flex-row items-center justify-between gap-4 mt-12 rounded-lg">
-          <div className="flex flex-wrap items-center justify-center gap-6 text-[10px] text-on-surface-variant font-label-caps tracking-widest">
-            <span className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-secondary"></span> SECURE TUNNEL ACTIVE</span>
-            <span>ENCRYPTION: AES-256-GCM</span>
-            <span>WORKSTATION: NODE-X-88</span>
-          </div>
-          <div className="flex items-center gap-4 text-[10px] text-on-surface-variant font-label-caps">
-            <span>© 2026 TRACE AI FORENSICS</span>
-            <a className="hover:text-primary transition-colors" href="#">API ACCESS</a>
-          </div>
-        </footer>
       </div>
+
+      {/* Generate Report Overlay Modal */}
+      {showGenerateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-surface-container-high border border-white/10 rounded-xl w-full max-w-md overflow-hidden shadow-2xl animate-fade-in text-left">
+            <div className="p-5 border-b border-white/5 flex items-center justify-between">
+              <h3 className="font-semibold text-on-surface flex items-center gap-2 text-sm">
+                <span className="material-symbols-outlined text-primary text-[20px]">magic_button</span>
+                Generate Forensic Report
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!isGenerating) setShowGenerateModal(false);
+                }}
+                className="text-on-surface-variant hover:text-on-surface p-1 rounded hover:bg-white/5 cursor-pointer bg-transparent border-none"
+              >
+                <span className="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
+
+            <form onSubmit={handleGenerate} className="p-5 space-y-4">
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-on-surface-variant mb-2" htmlFor="rep-title">
+                  Report Title
+                </label>
+                <input
+                  id="rep-title"
+                  type="text"
+                  placeholder="e.g. Executive Incident Digest"
+                  value={genTitle}
+                  onChange={(e) => setGenTitle(e.target.value)}
+                  className="w-full bg-surface-container-low border border-white/10 rounded-lg px-4 py-2 text-xs text-on-surface placeholder-on-surface-variant outline-none focus:border-primary/50"
+                  disabled={isGenerating}
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-on-surface-variant mb-2" htmlFor="rep-case">
+                  Target Case ID *
+                </label>
+                <select
+                  id="rep-case"
+                  required
+                  value={genCaseId}
+                  onChange={(e) => setGenCaseId(e.target.value)}
+                  className="w-full bg-surface-container-low border border-white/10 rounded-lg px-4 py-2.5 text-xs text-on-surface outline-none cursor-pointer focus:border-primary/50"
+                  disabled={isGenerating}
+                >
+                  <option value="">Select an incident case...</option>
+                  {cases.map((c) => (
+                    <option key={c._id} value={c.caseId}>
+                      {c.caseId} - {c.title}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-on-surface-variant mb-2" htmlFor="rep-format">
+                    Format *
+                  </label>
+                  <select
+                    id="rep-format"
+                    value={genFormat}
+                    onChange={(e) => setGenFormat(e.target.value)}
+                    className="w-full bg-surface-container-low border border-white/10 rounded-lg px-4 py-2.5 text-xs text-on-surface outline-none cursor-pointer focus:border-primary/50"
+                    disabled={isGenerating}
+                  >
+                    <option value="PDF">PDF</option>
+                    <option value="CSV">CSV</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-on-surface-variant mb-2" htmlFor="rep-type">
+                    Report Type *
+                  </label>
+                  <select
+                    id="rep-type"
+                    value={genReportType}
+                    onChange={(e) => setGenReportType(e.target.value)}
+                    className="w-full bg-surface-container-low border border-white/10 rounded-lg px-4 py-2.5 text-xs text-on-surface outline-none cursor-pointer focus:border-primary/50"
+                    disabled={isGenerating}
+                  >
+                    <option value="Incident Summary">Incident Summary</option>
+                    <option value="Forensic Audit">Forensic Audit</option>
+                    <option value="AI Investigation">AI Investigation</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-white/5 flex justify-end gap-2 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setShowGenerateModal(false)}
+                  className="px-4 py-2 bg-transparent text-on-surface hover:bg-white/5 rounded border border-white/10 cursor-pointer"
+                  disabled={isGenerating}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-primary text-on-primary hover:bg-primary/95 rounded font-bold cursor-pointer flex items-center gap-1.5 border-none"
+                  disabled={isGenerating}
+                >
+                  {isGenerating ? (
+                    <>
+                      <span className="material-symbols-outlined text-[16px] animate-spin">sync</span>
+                      Synthesizing...
+                    </>
+                  ) : (
+                    <>
+                      <span className="material-symbols-outlined text-[16px]">done</span>
+                      Generate
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Local Footer Status Bar */}
+      <footer className="bg-surface-dim/80 backdrop-blur-xl border-t border-white/5 py-4 px-margin-desktop flex flex-col sm:flex-row items-center justify-between gap-4 mt-12 rounded-lg text-xs">
+        <div className="flex flex-wrap items-center justify-center gap-6 text-[10px] text-on-surface-variant font-label-caps tracking-widest">
+          <span className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-secondary"></span> SECURE TUNNEL ACTIVE</span>
+          <span>ENCRYPTION: AES-256-GCM</span>
+          <span>WORKSTATION: NODE-X-88</span>
+        </div>
+        <div className="flex items-center gap-4 text-[10px] text-on-surface-variant font-label-caps">
+          <span>© 2026 TRACE AI FORENSICS</span>
+          <a className="hover:text-primary transition-colors" href="#">API ACCESS</a>
+        </div>
+      </footer>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, Share2, Download, Folder } from 'lucide-react';
+import { ArrowLeft, Share2, Download, Folder, Pencil } from 'lucide-react';
 import './CaseDetails.css';
 
 // Import sub-components
@@ -9,6 +9,8 @@ import CriticalEntities from './components/CriticalEntities';
 import MitreAttackMatrix from './components/MitreAttackMatrix';
 import CaseTimeline from './components/CaseTimeline';
 import AIAssistantSidebar from './components/AIAssistantSidebar';
+import EditCaseModal from './components/EditCaseModal';
+import { casesService } from '../../services/cases.service';
 
 // Import existing feature tab views
 import EvidenceTab from '../../features/investigation/EvidenceTab';
@@ -30,7 +32,7 @@ const formatCaseId = (id) => {
 export default function CaseDetails() {
   const navigate = useNavigate();
   const { id, caseId } = useParams();
-  const activeCaseId = id || caseId || 'TRC-2026-0042';
+  const activeCaseId = id || caseId || '';
 
   // Auth Guard check
   const hasSession = localStorage.getItem('isAuthenticated') === 'true';
@@ -46,48 +48,34 @@ export default function CaseDetails() {
 
   // Case details dynamic database hooks
   const [activeCase, setActiveCase] = useState(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
+
+  const loadActiveCase = async () => {
+    if (!activeCaseId) return;
+    try {
+      setErrorMessage('');
+      const data = await casesService.getCaseById(activeCaseId);
+      setActiveCase(data);
+    } catch (err) {
+      console.error('Failed to load case details:', err);
+      setErrorMessage(err.message || 'Incident trace database could not be reached.');
+      // Keep template fallback for developer safety
+      setActiveCase({
+        caseId: activeCaseId,
+        title: 'Suspicious Account Activity',
+        severity: 'Critical',
+        status: 'Open',
+        assignedAnalyst: 'J. Dorsey',
+        targetHost: 'SRV-PROD-SQL01',
+        description: 'Detected anomalous traffic pattern consistent with Data Exfiltration Alpha. Unauthorized RDP session established utilizing administrative credentials.'
+      });
+    }
+  };
 
   useEffect(() => {
     if (!hasSession) return;
-    
-    const loadActiveCase = async () => {
-      try {
-        const res = await fetch('http://localhost:5000/api/dashboard/cases');
-        const data = await res.json();
-        
-        // Find matching case from endpoint database
-        const match = data.find(c => 
-          c.caseId.toLowerCase() === activeCaseId.toLowerCase() ||
-          c.caseId.replace('-', '').toLowerCase() === activeCaseId.toLowerCase()
-        );
-        
-        if (match) {
-          setActiveCase(match);
-        } else {
-          setActiveCase({
-            caseId: activeCaseId,
-            title: 'Suspicious Account Activity',
-            severity: 'CRITICAL',
-            status: 'ACTIVE',
-            assignedAnalyst: 'J. Dorsey',
-            targetHost: 'SRV-PROD-SQL01',
-            description: 'Detected anomalous traffic pattern consistent with Data Exfiltration Alpha. Unauthorized RDP session established utilizing administrative credentials.'
-          });
-        }
-      } catch (err) {
-        console.warn('Endpoint API offline, fallback to template Case Details schema.');
-        setActiveCase({
-          caseId: activeCaseId,
-          title: 'Suspicious Account Activity',
-          severity: 'CRITICAL',
-          status: 'ACTIVE',
-          assignedAnalyst: 'J. Dorsey',
-          targetHost: 'SRV-PROD-SQL01',
-          description: 'Detected anomalous traffic pattern consistent with Data Exfiltration Alpha. Unauthorized RDP session established utilizing administrative credentials.'
-        });
-      }
-    };
-    
     loadActiveCase();
   }, [activeCaseId, hasSession]);
 
@@ -98,8 +86,15 @@ export default function CaseDetails() {
   const severityTag = activeCase.severity ? activeCase.severity.toUpperCase() : 'CRITICAL';
   
   return (
-    <div className="trace-details-layout flex flex-col min-h-screen w-full select-none case-details-grid-bg box-border">
+    <div className="trace-details-layout flex flex-col min-h-screen w-full select-none case-details-grid-bg box-border relative">
       
+      {/* Toast Notification Banner */}
+      {successMessage && (
+        <div className="fixed top-20 right-6 z-50 bg-[#0f1425] border border-[#10b981] text-[#10b981] text-xs px-4 py-2.5 rounded-lg shadow-xl font-bold">
+          {successMessage}
+        </div>
+      )}
+
       {/* Sub-Navigation & Controls Header */}
       <div className="bg-surface-container-low px-6 border-b border-white/5 shrink-0 select-none">
         <div className="flex items-center gap-6 h-14">
@@ -125,7 +120,7 @@ export default function CaseDetails() {
                 <button
                   key={tab.id}
                   type="button"
-                  className={`font-label-caps text-xs font-semibold pb-3 hover:text-on-surface transition-colors border-b-2 outline-none ${
+                  className={`font-label-caps text-xs font-semibold pb-3 hover:text-on-surface transition-colors border-b-2 outline-none cursor-pointer ${
                     isActive ? 'text-secondary border-secondary' : 'text-outline border-transparent'
                   }`}
                   onClick={() => setActiveTab(tab.id)}
@@ -137,6 +132,14 @@ export default function CaseDetails() {
           </div>
 
           <div className="ml-auto pb-1 flex gap-2">
+            <button 
+              type="button" 
+              className="px-4 py-1.5 rounded-lg border border-primary/20 text-primary font-label-caps text-[11px] hover:bg-primary/10 transition-all flex items-center gap-2 cursor-pointer"
+              onClick={() => setIsEditModalOpen(true)}
+            >
+              <Pencil className="w-3.5 h-3.5" /> 
+              Edit Case
+            </button>
             <button type="button" className="px-4 py-1.5 rounded-lg border border-outline/20 text-outline font-label-caps text-[11px] hover:bg-white/5 transition-all flex items-center gap-2">
               <Share2 className="w-3.5 h-3.5" /> 
               Share
@@ -158,6 +161,12 @@ export default function CaseDetails() {
             
             {/* Left/Center columns scrollable */}
             <div className="flex-grow overflow-y-auto p-6 custom-scrollbar min-w-0">
+              {errorMessage && (
+                <div className="mb-6 bg-error/10 border border-error/30 text-error text-xs px-4 py-2.5 rounded-lg max-w-7xl mx-auto text-left">
+                  {errorMessage}
+                </div>
+              )}
+
               <div className="grid grid-cols-12 gap-6 max-w-7xl mx-auto">
                 
                 {/* Left Column: AI Case Summary & Critical Entities */}
@@ -165,9 +174,9 @@ export default function CaseDetails() {
                   <CaseSummaryCard 
                     title={activeCase.title}
                     description={activeCase.description}
-                    progress={activeCase.severity.toUpperCase() === 'CRITICAL' ? 92 : 65}
-                    phase={activeCase.severity.toUpperCase() === 'CRITICAL' ? 'Exfiltration' : 'Triage'}
-                    priority={activeCase.severity.toUpperCase() === 'CRITICAL' ? 'P0' : 'P1'}
+                    progress={severityTag === 'CRITICAL' ? 92 : 65}
+                    phase={severityTag === 'CRITICAL' ? 'Exfiltration' : 'Triage'}
+                    priority={severityTag === 'CRITICAL' ? 'P0' : 'P1'}
                   />
                   <CriticalEntities 
                     targetHost={targetHost}
@@ -240,6 +249,18 @@ export default function CaseDetails() {
         )}
 
       </div>
+
+      {/* Edit Modal Popup */}
+      <EditCaseModal 
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
+        caseItem={activeCase}
+        onUpdated={(updatedCase) => {
+          setActiveCase(updatedCase);
+          setSuccessMessage('Case details updated successfully.');
+          setTimeout(() => setSuccessMessage(''), 3000);
+        }}
+      />
 
     </div>
   );

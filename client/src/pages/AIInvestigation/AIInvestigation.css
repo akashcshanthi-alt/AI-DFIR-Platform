@@ -1,102 +1,151 @@
-.ai-investigation-grid-bg {
-  background-color: #0F172A !important;
-  background-image: radial-gradient(circle at 50% 50%, rgba(71, 250, 243, 0.03) 0%, transparent 80%),
-                    linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
-                    linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
-  background-size: 100% 100%, 32px 32px, 32px 32px;
+/* Premium SOC Workspace Root overrides */
+.trace-ai-investigation-layout {
+  background-color: #0A0F1E !important;
+  font-family: 'Inter', system-ui, sans-serif;
+  height: 100vh;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
-.glass-panel {
-  background: #111827 !important;
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(71, 250, 243, 0.15) !important;
+/* Header style layout */
+.trace-ai-header {
+  background: rgba(10, 15, 30, 0.95) !important;
+  backdrop-filter: blur(16px);
+  z-index: 50;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
 }
 
-.neon-glow-cyan {
-  box-shadow: 0 0 15px rgba(71, 250, 243, 0.1);
-}
-
-.investigation-tab-btn {
-  background: transparent;
-  border: none;
-  border-bottom: 2px solid transparent;
-  color: #94A3B8;
-  padding-bottom: 12px;
-  font-size: 12px;
-  font-family: 'JetBrains Mono', monospace;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
-  white-space: nowrap;
-  outline: none;
-}
-
-.investigation-tab-btn:hover {
-  color: #F8FAFC;
-  border-bottom-color: rgba(71, 250, 243, 0.4);
-  text-shadow: 0 0 4px rgba(71, 250, 243, 0.2);
-}
-
-.investigation-tab-btn.active {
-  color: #47FAF3;
-  border-bottom-color: #47FAF3;
-  text-shadow: 0 0 8px rgba(71, 250, 243, 0.5);
-  box-shadow: 0 4px 12px -4px rgba(71, 250, 243, 0.3);
-}
-
-.node-pulse {
-  position: relative;
-}
-
-.node-pulse::after {
-  content: '';
-  position: absolute;
-  width: 12px;
-  height: 12px;
-  background: #47FAF3;
-  border-radius: 50%;
-  box-shadow: 0 0 10px #47FAF3;
-  animation: pulse-node 2s infinite;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-}
-
-@keyframes pulse-node {
-  0% { transform: translate(-50%, -50%) scale(0.9); opacity: 1; }
-  70% { transform: translate(-50%, -50%) scale(2.5); opacity: 0; }
-  100% { transform: translate(-50%, -50%) scale(0.9); opacity: 0; }
-}
-
-@keyframes pulse-node-active {
-  0% { transform: scale(0.95); opacity: 1; box-shadow: 0 0 0 0 rgba(71, 250, 243, 0.7); }
-  70% { transform: scale(1.2); opacity: 0.9; box-shadow: 0 0 0 10px rgba(71, 250, 243, 0); }
-  100% { transform: scale(0.95); opacity: 1; box-shadow: 0 0 0 0 rgba(71, 250, 243, 0); }
-}
-
-.timeline-pulse-active {
-  animation: pulse-node-active 2s infinite;
-}
-
+/* Three-Panel responsive structure */
 .custom-scrollbar::-webkit-scrollbar {
   width: 6px;
+  height: 6px;
 }
 .custom-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
+  background: rgba(10, 15, 30, 0.4);
 }
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(71, 250, 243, 0.2);
-  border-radius: 10px;
+  background: rgba(0, 229, 255, 0.15);
+  border-radius: 9px;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(71, 250, 243, 0.4);
+  background: rgba(0, 229, 255, 0.35);
 }
 
-@keyframes fade-in-scale {
-  from { opacity: 0; transform: scale(0.95); }
-  to { opacity: 1; transform: scale(1); }
+/* Rounded Cards */
+.rounded-xl {
+  border-radius: 18px !important;
 }
 
-.animate-fade-in {
-  animation: fade-in-scale 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+/* Custom glow borders and inputs */
+input:focus {
+  outline: none !important;
 }
+
+/* Interactive elements animations */
+.transition-all {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+/* Radar scanning spinner details */
+@keyframes spin-radar {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.animate-spin {
+  animation: spin-radar 1.2s linear infinite !important;
+}
+
+/* Blinking live telemetry pulse badge */
+@keyframes pulse-cyan {
+  0% { opacity: 0.5; transform: scale(0.95); }
+  50% { opacity: 1; transform: scale(1.05); }
+  100% { opacity: 0.5; transform: scale(0.95); }
+}
+
+.animate-pulse {
+  animation: pulse-cyan 2s infinite ease-in-out !important;
+}
+
+/* Custom risk indicator drop shadow */
+.risk-index-glow {
+  box-shadow: 0 0 15px rgba(0, 229, 255, 0.25);
+}
+
+/* MITRE Phase Badge style */
+.phase-badge {
+  background: rgba(0, 229, 255, 0.08);
+  border: 1px solid rgba(0, 229, 255, 0.15);
+}
+
+/* Custom isolated Workspace Tabs styling */
+.trace-workspace-tab {
+  background: transparent !important;
+  border: none !important;
+  border-bottom: 2px solid transparent !important;
+  color: #94A3B8 !important;
+  padding: 0 0 12px 0 !important;
+  font-family: 'JetBrains Mono', monospace !important;
+  font-size: 0.75rem !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  white-space: nowrap !important;
+}
+.trace-workspace-tab:hover {
+  color: #FFFFFF !important;
+  border-bottom-color: rgba(0, 229, 255, 0.4) !important;
+}
+.trace-workspace-tab.active {
+  color: #00E5FF !important;
+  border-bottom-color: #00E5FF !important;
+  text-shadow: 0 0 8px rgba(0, 229, 255, 0.5) !important;
+}
+
+/* Custom isolated Action Button styles */
+.trace-action-btn-primary {
+  background: linear-gradient(135deg, #00E5FF 0%, #3B82F6 100%) !important;
+  color: #0A0F1E !important;
+  border: none !important;
+  font-weight: 700 !important;
+  border-radius: 12px !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  box-shadow: 0 0 12px rgba(0, 229, 255, 0.2) !important;
+}
+.trace-action-btn-primary:hover {
+  transform: translateY(-1px) !important;
+  box-shadow: 0 0 20px rgba(0, 229, 255, 0.4) !important;
+}
+
+.trace-action-btn-secondary {
+  background: #141C2B !important;
+  border: 1px solid rgba(0, 229, 255, 0.2) !important;
+  color: #FFFFFF !important;
+  font-weight: 600 !important;
+  border-radius: 12px !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  box-shadow: none !important;
+}
+.trace-action-btn-secondary:hover {
+  background: #1C283F !important;
+  border-color: rgba(0, 229, 255, 0.4) !important;
+}
+
+.trace-action-btn-danger {
+  background: rgba(239, 68, 68, 0.15) !important;
+  border: 1px solid rgba(239, 68, 68, 0.25) !important;
+  color: #EF4444 !important;
+  font-weight: 600 !important;
+  border-radius: 12px !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  box-shadow: none !important;
+}
+.trace-action-btn-danger:hover {
+  background: rgba(239, 68, 68, 0.25) !important;
+}
+

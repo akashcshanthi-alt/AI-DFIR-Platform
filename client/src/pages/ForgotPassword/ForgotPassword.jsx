@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Shield, Mail, ArrowLeft, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
-import { sendPasswordResetEmail } from 'firebase/auth';
-import { auth } from '../../services/firebase';
+import { authService } from '../../services/auth.service';
 
 /**
  * ForgotPassword Component
@@ -31,20 +30,7 @@ export default function ForgotPassword() {
     return Object.keys(tempErrors).length === 0;
   };
 
-  const mapFirebaseError = (error) => {
-    switch (error.code) {
-      case 'auth/user-not-found':
-        return 'No operator record found with this email address.';
-      case 'auth/invalid-email':
-        return 'Please enter a valid operator email address.';
-      case 'auth/too-many-requests':
-        return 'Access blocked due to excessive attempts. Please try again later.';
-      default:
-        return error.message || 'An unexpected error occurred. Please try again.';
-    }
-  };
-
-  // Firebase sendPasswordResetEmail submit handler
+  // Backend forgot-password submit handler
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (isLoading || isSent) return;
@@ -54,17 +40,13 @@ export default function ForgotPassword() {
       setErrors({});
 
       try {
-        console.log('[ForgotPassword] Starting sendPasswordResetEmail for email:', email.trim());
-        await sendPasswordResetEmail(auth, email.trim());
-        console.log('[ForgotPassword] sendPasswordResetEmail Success');
+        await authService.forgotPassword(email.trim());
         setIsLoading(false);
         setIsSent(true);
       } catch (error) {
         console.error('[ForgotPassword] Error occurred:', error);
-        console.error('[ForgotPassword] Error code:', error.code, 'Error message:', error.message);
         setIsLoading(false);
-        const userFriendlyMessage = mapFirebaseError(error);
-        setErrors({ auth: `${userFriendlyMessage} (Debug Code: ${error.code || 'unknown'})` });
+        setErrors({ auth: error.message || 'An unexpected error occurred. Please try again.' });
       }
     }
   };
@@ -316,23 +298,25 @@ export default function ForgotPassword() {
             z-index: 10;
           }
 
-          .trace-forgot-input {
-            width: 100%;
-            background: transparent;
-            border: none;
+          .trace-forgot-input-container input.trace-forgot-input {
+            width: 100% !important;
+            background: transparent !important;
+            background-color: transparent !important;
+            border: none !important;
             padding-left: 52px !important;
-            padding-right: 18px;
-            padding-top: 0;
-            padding-bottom: 0;
-            color: #F8FAFC;
-            font-size: 14px;
-            outline: none;
-            height: 100%;
-            box-sizing: border-box;
+            padding-right: 18px !important;
+            padding-top: 0 !important;
+            padding-bottom: 0 !important;
+            color: #F8FAFC !important;
+            font-size: 14px !important;
+            outline: none !important;
+            height: 100% !important;
+            box-sizing: border-box !important;
+            box-shadow: none !important;
           }
 
-          .trace-forgot-input::placeholder {
-            color: #94A3B8;
+          .trace-forgot-input-container input.trace-forgot-input::placeholder {
+            color: #94A3B8 !important;
           }
 
           .trace-forgot-validation-feedback {
@@ -473,7 +457,7 @@ export default function ForgotPassword() {
         <div className="trace-forgot-left-content">
           <div className="trace-forgot-brand">
             <div className="trace-forgot-brand-icon" aria-hidden="true">
-              <Shield className="w-9 h-9 text-[#47FAF3]" />
+              <img src="/logo-white.svg" alt="TRACE AI Logo" className="w-9 h-9" />
             </div>
             <div className="trace-forgot-brand-text">
               <span className="trace-forgot-brand-name">TRACE AI</span>

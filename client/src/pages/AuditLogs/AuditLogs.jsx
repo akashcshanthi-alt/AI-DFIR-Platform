@@ -1,121 +1,30 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-
-// Coherent initial mock audit log data
-const INITIAL_AUDIT_LOGS = [
-  {
-    eventId: 'AUD-2026-00842',
-    timestamp: '2026-08-01 14:22:10',
-    user: 'j.valdes',
-    role: 'Lead Investigator',
-    avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDngz1G28qT0NnYnQdPhJ5e0B6aR-vVdbGceeEJZcx_4TJBQcw_Qfd7WJvfg4j7Y4LhmD2LfSLowfwLFr_XyJAv1Sg18Y0-pWvI4edGM21AqTg20YQ1s3_X_ergSg2kosseWjT2EJpLmEeyvD52j1SLtuzZsMe1fnME-ECo3oF3N9v2RezbOyfpLgNH9YaqqcW5Pm9SjEZsifNy6lf7tDESunXx1whiUwakp4UR2NYZQqV0vR23VQwz',
-    action: 'Investigation Started',
-    module: 'CASES_V2',
-    ip: '192.168.1.124',
-    device: 'desktop_windows',
-    status: 'Success',
-    severity: 'LOW',
-  },
-  {
-    eventId: 'AUD-2026-00841',
-    timestamp: '2026-08-01 14:21:55',
-    user: 's.keller',
-    role: 'SysAdmin',
-    avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDIJOAdi0WrJNZN5Pf369YgQ_v3tllV8sCaQouKhX5g66bF1jyu09uqDMYZE0g77l6g0N5lU3KhDwbsAchSm_7Ne8omw_GHeqWP4RjbUA_wQ5r-IvTeEY6fohh8iqXcmNk08uyKq2yzBx9xIY9IK4IWeiXw6bg4qX94LfoVYVAqS-dlQclo3PsQBLeab29HHiHLxdraQIZZbetq2--e5RZUffLGCmFg5ciyeMxuLdENqyZlW57J8zPY',
-    action: 'Config Change Rejected',
-    module: 'CORE_AUTH',
-    ip: '45.23.11.90',
-    device: 'dns',
-    status: 'Failed',
-    severity: 'CRITICAL',
-  },
-  {
-    eventId: 'AUD-2026-00840',
-    timestamp: '2026-08-01 14:19:02',
-    user: 'SYSTEM_SVC',
-    role: 'Automated Task',
-    avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCMJASTLKBv_5hxba9XgMIbhDOx9ePpptx9XJMHQ5bvMu66SRzcbhbmn8k4AHWbI3tiG2iLbRknDUAzHYxMkqYeINH51ucv057frunHhuR1VDL6FEpYs2TP0bAReXLCXUzVDm4zRQ_oSofgd2mUSdn0uJ0ca2s-_xyIJkD_pxwvPoR4ITV4Fyi1AvSfevnj4n-hxAVanYRKMWjPhnFfXfluEfnRhNOfatpkAxtBRSvJo4_UAql2tTad',
-    action: 'Evidence Uploaded',
-    module: 'DATA_INGEST',
-    ip: '127.0.0.1',
-    device: 'cloud_upload',
-    status: 'Success',
-    severity: 'MEDIUM',
-  },
-  {
-    eventId: 'AUD-2026-00839',
-    timestamp: '2026-08-01 13:42:31',
-    user: 'm.chen',
-    role: 'Investigator',
-    avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCEHLKDfW5_ICUaTDwe0buXxEHlmTw5kgq9uNtVHCOrqiWx4k5bZvESEPVBT8uWQvqyaelKYFWI0KCQKdrcLPSECAtxNtu9FFMl7ZiJkCw9lO0m5evkUqlSqtCNLJLpGF8G4DxXTdMDg5aBPilORCIhS77U6S0t6dUffanedV3FEmHqS9wakzvsTGXB4lkSq_5qvXeOf7oYZCF74WfB-v3DT2NyMSu1tLNsNplpOxS9mhFCtYIjq4SX',
-    action: 'Global Logs Exported',
-    module: 'AUDIT_EXPORT',
-    ip: '192.168.1.105',
-    device: 'desktop_windows',
-    status: 'Success',
-    severity: 'MEDIUM',
-  },
-  {
-    eventId: 'AUD-2026-00838',
-    timestamp: '2026-08-01 13:37:14',
-    user: 'd.wright',
-    role: 'Security Director',
-    avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDFzj_tdRqzIkKS5c_GZWVwh1FUAqIwIVqHbL8gAU5aFYY71LQeN1c4x3EyNfaP3m6IotZtvwiKYANvuVHBeXKiLbuWOER6TaMCu1iUObBK9iSN4RFUZhwNHWpv2YdGwjZIwLwTXiAs8IZXwCf870KNMvAMnJBRUbUIkt7orwCeArqUU0ZcBTsfnGetnjpDuHnZ7YDypkxVwFQDCezBscQOBxQNO7F0-MqOa42lN6XSRK7GHnmF1v9k',
-    action: 'Database Limit Audited',
-    module: 'DB_LINK_PROX',
-    ip: '192.168.1.200',
-    device: 'desktop_windows',
-    status: 'Success',
-    severity: 'LOW',
-  },
-  {
-    eventId: 'AUD-2026-00837',
-    timestamp: '2026-08-01 12:04:15',
-    user: 's.keller',
-    role: 'SysAdmin',
-    avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDIJOAdi0WrJNZN5Pf369YgQ_v3tllV8sCaQouKhX5g66bF1jyu09uqDMYZE0g77l6g0N5lU3KhDwbsAchSm_7Ne8omw_GHeqWP4RjbUA_wQ5r-IvTeEY6fohh8iqXcmNk08uyKq2yzBx9xIY9IK4IWeiXw6bg4qX94LfoVYVAqS-dlQclo3PsQBLeab29HHiHLxdraQIZZbetq2--e5RZUffLGCmFg5ciyeMxuLdENqyZlW57J8zPY',
-    action: 'DB Connection Revived',
-    module: 'CORE_AUTH',
-    ip: '10.0.4.15',
-    device: 'dns',
-    status: 'Success',
-    severity: 'HIGH',
-  },
-  {
-    eventId: 'AUD-2026-00836',
-    timestamp: '2026-08-01 11:55:02',
-    user: 'SYSTEM_SVC',
-    role: 'Automated Task',
-    avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCMJASTLKBv_5hxba9XgMIbhDOx9ePpptx9XJMHQ5bvMu66SRzcbhbmn8k4AHWbI3tiG2iLbRknDUAzHYxMkqYeINH51ucv057frunHhuR1VDL6FEpYs2TP0bAReXLCXUzVDm4zRQ_oSofgd2mUSdn0uJ0ca2s-_xyIJkD_pxwvPoR4ITV4Fyi1AvSfevnj4n-hxAVanYRKMWjPhnFfXfluEfnRhNOfatpkAxtBRSvJo4_UAql2tTad',
-    action: 'API Limit Reset',
-    module: 'CORE_AUTH',
-    ip: '127.0.0.1',
-    device: 'dns',
-    status: 'Success',
-    severity: 'LOW',
-  }
-];
-
-// Tailwind static color utilities map to avoid dynamic template string issues
-const streamEventStyles = {
-  primary: 'flex gap-3 items-start border-l-2 border-primary pl-3 py-1 bg-primary/5 rounded-r transition-all duration-500',
-  secondary: 'flex gap-3 items-start border-l-2 border-secondary pl-3 py-1 bg-secondary/5 rounded-r transition-all duration-500',
-  tertiary: 'flex gap-3 items-start border-l-2 border-tertiary pl-3 py-1 bg-tertiary/5 rounded-r transition-all duration-500',
-  error: 'flex gap-3 items-start border-l-2 border-error pl-3 py-1 bg-error-container/10 rounded-r transition-all duration-500',
-  outline: 'flex gap-3 items-start border-l-2 border-outline pl-3 py-1 transition-all duration-500'
-};
+import { X, Search, Filter, Download, Shield, AlertTriangle, Trash2, Calendar, RefreshCw } from 'lucide-react';
+import { auditService } from '../../services/audit.service';
 
 const severityStyles = {
-  LOW: 'px-2 py-0.5 rounded bg-on-secondary-container/20 text-secondary text-[10px] font-bold border border-secondary/20',
-  MEDIUM: 'px-2 py-0.5 rounded bg-tertiary-container/20 text-tertiary text-[10px] font-bold border border-tertiary/20',
-  HIGH: 'px-2 py-0.5 rounded bg-error-container/10 text-error text-[10px] font-bold border border-error/20',
-  CRITICAL: 'px-2 py-0.5 rounded bg-error-container text-on-error-container text-[10px] font-bold border border-error/50'
+  Low: 'px-2 py-0.5 rounded bg-blue-500/10 text-[#3b82f6] text-[10px] font-bold border border-blue-500/20',
+  Medium: 'px-2 py-0.5 rounded bg-yellow-500/10 text-yellow-500 text-[10px] font-bold border border-yellow-500/20',
+  High: 'px-2 py-0.5 rounded bg-orange-500/10 text-orange-400 text-[10px] font-bold border border-orange-500/20',
+  Critical: 'px-2 py-0.5 rounded bg-red-500/10 text-red-400 text-[10px] font-bold border border-red-500/20',
+  LOW: 'px-2 py-0.5 rounded bg-blue-500/10 text-[#3b82f6] text-[10px] font-bold border border-blue-500/20',
+  MEDIUM: 'px-2 py-0.5 rounded bg-yellow-500/10 text-yellow-500 text-[10px] font-bold border border-yellow-500/20',
+  HIGH: 'px-2 py-0.5 rounded bg-orange-500/10 text-orange-400 text-[10px] font-bold border border-orange-500/20',
+  CRITICAL: 'px-2 py-0.5 rounded bg-red-500/10 text-red-400 text-[10px] font-bold border border-red-500/20'
 };
+
+const defaultAvatars = [
+  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80',
+  'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=100&q=80',
+  'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=100&q=80',
+  'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=100&q=80'
+];
 
 export default function AuditLogs() {
   const navigate = useNavigate();
 
-  // Auth Guard check
+  // Guard verification check
   const hasSession = localStorage.getItem('isAuthenticated') === 'true';
 
   useEffect(() => {
@@ -124,23 +33,45 @@ export default function AuditLogs() {
     }
   }, [hasSession, navigate]);
 
-  // Page telemetry and filter states
+  // Query state parameters
   const [searchTerm, setSearchTerm] = useState('');
   const [userFilter, setUserFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
-  const [expandedEvent, setExpandedEvent] = useState(null);
+  const [severityFilter, setSeverityFilter] = useState('All');
+  const [moduleFilter, setModuleFilter] = useState('All');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [sortBy, setSortBy] = useState('timestamp');
+  const [sortOrder, setSortOrder] = useState('desc');
+  const [currentPage, setCurrentPage] = useState(1);
+  const limit = 10;
 
-  // Live Stream dynamic simulation state
+  // Toggle drawers
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [selectedLog, setSelectedLog] = useState(null);
+
+  // Live database results state
+  const [logs, setLogs] = useState([]);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const [dynamicUsers, setDynamicUsers] = useState([]);
+  const [dynamicModules, setDynamicModules] = useState([]);
+
+  const [isFetching, setIsFetching] = useState(true);
+  const [error, setError] = useState(null);
+  const [toastMsg, setToastMsg] = useState('');
+  const [deleteConfirmId, setDeleteConfirmId] = useState(null);
+
+  // Periodic Telemetry logs simulation array
   const [streamEvents, setStreamEvents] = useState([
-    { time: '14:25:01', type: 'secondary', message: 'Auth service: <span class="text-secondary font-semibold">Token valid</span> for user \'admin\'' },
-    { time: '14:24:58', type: 'tertiary', message: 'Data Node 4: <span class="text-tertiary font-semibold">IO_LATENCY_HIGH</span> (450ms) detected' },
-    { time: '14:24:50', type: 'outline', message: 'API Request: GET /v2/investigations/active' },
-    { time: '14:24:32', type: 'error', message: '<span class="text-error font-bold">SECURITY ALERT:</span> Brute force attempt blocked from 89.2.1.44' },
-    { time: '14:24:12', type: 'outline', message: 'Service check: All systems operational' },
-    { time: '14:24:05', type: 'secondary', message: 'Investigation #8821: <span class="text-secondary font-semibold">Status changed to \'Closed\'</span>' }
+    { time: '14:25:01', type: 'secondary', message: 'Auth service: Token validated successfully for user \'admin\'' },
+    { time: '14:24:58', type: 'tertiary', message: 'Core Cluster Node: IO latency threshold high (420ms) detected' },
+    { time: '14:24:50', type: 'outline', message: 'API Service request: GET /api/dashboard/overview' },
+    { time: '14:24:32', type: 'error', message: 'FIREWALL ALERT: Brute force gateway attack signature blocked' }
   ]);
 
-  // Effect to simulate live activity logging periodically
+  // Periodically generate simulated live stream log events for design aesthetics
   useEffect(() => {
     const interval = setInterval(() => {
       const types = ['primary', 'secondary', 'tertiary', 'error'];
@@ -151,71 +82,195 @@ export default function AuditLogs() {
       let message = '';
       switch (selectedType) {
         case 'primary':
-          message = 'Global search triggered for fingerprint ID <span class="text-primary font-mono">#AX99</span>';
+          message = 'Database audit query execution triggered for Case index #DF-1002';
           break;
         case 'secondary':
-          message = 'Background scan <span class="text-secondary font-bold">COMPLETED</span> for Case #772';
+          message = 'Background EDR surveillance scans successfully completed on local subnet';
           break;
         case 'tertiary':
-          message = 'Metadata verification warning on module <span class="text-tertiary font-mono">DB_LINK_PROX</span>';
+          message = 'Network interface configuration change registered on module FIREWALL';
           break;
         case 'error':
-          message = '<span class="text-error font-bold">LATENCY EXCEEDED:</span> Cluster US-EAST-1 response delay of 680ms';
+          message = 'SECURITY WARNING: Repeated API key access rejection on auth controller';
           break;
         default:
-          message = 'Service check: All telemetry loops operational';
+          message = 'Host agent health checks complete';
       }
 
-      setStreamEvents((prev) => [
-        { time: timeStr, type: selectedType, message },
-        ...prev.slice(0, 19)
-      ]);
-    }, 8000);
+      setStreamEvents(prev => [{ time: timeStr, type: selectedType, message }, ...prev.slice(0, 5)]);
+    }, 9000);
 
     return () => clearInterval(interval);
   }, []);
 
-  if (!hasSession) return null;
+  // Fetch paginated records from Mongoose
+  const fetchAuditLogs = async () => {
+    try {
+      setIsFetching(true);
+      setError(null);
+      const params = {
+        search: searchTerm,
+        user: userFilter,
+        status: statusFilter,
+        severity: severityFilter,
+        module: moduleFilter,
+        startDate,
+        endDate,
+        sortBy,
+        sortOrder,
+        page: currentPage,
+        limit
+      };
 
-  // Toggle expanded details drawer
-  const toggleEventDetails = (eventId) => {
-    setExpandedEvent((prev) => (prev === eventId ? null : eventId));
+      const result = await auditService.getAuditLogs(params);
+      setLogs(result.logs || []);
+      setTotalPages(result.pagination?.totalPages || 1);
+      setTotalCount(result.pagination?.total || 0);
+
+      // Save dynamic dropdown inputs from DB
+      if (result.filters?.users) setDynamicUsers(result.filters.users);
+      if (result.filters?.modules) setDynamicModules(result.filters.modules);
+
+    } catch (err) {
+      console.error(err);
+      setError(err.message || 'Failed to download audit logs.');
+    } finally {
+      setIsFetching(false);
+    }
   };
 
-  // Filter audit logs based on search and filters
-  const filteredLogs = INITIAL_AUDIT_LOGS.filter((log) => {
-    const query = searchTerm.toLowerCase().trim();
-    const matchesSearch =
-      !query ||
-      log.eventId.toLowerCase().includes(query) ||
-      log.user.toLowerCase().includes(query) ||
-      log.action.toLowerCase().includes(query) ||
-      log.module.toLowerCase().includes(query) ||
-      log.ip.toLowerCase().includes(query);
+  // Re-fetch triggers
+  useEffect(() => {
+    if (hasSession) {
+      fetchAuditLogs();
+    }
+  }, [
+    currentPage,
+    userFilter,
+    statusFilter,
+    severityFilter,
+    moduleFilter,
+    startDate,
+    endDate,
+    sortBy,
+    sortOrder,
+    hasSession
+  ]);
 
-    const matchesUser =
-      userFilter === 'All' || log.user.toLowerCase() === userFilter.toLowerCase();
+  // Reset pagination on text changes
+  const handleSearchKeyPress = (e) => {
+    if (e.key === 'Enter') {
+      setCurrentPage(1);
+      fetchAuditLogs();
+    }
+  };
 
-    const matchesStatus =
-      statusFilter === 'All' || log.status.toLowerCase() === statusFilter.toLowerCase();
+  const handleSearchTrigger = () => {
+    setCurrentPage(1);
+    fetchAuditLogs();
+  };
 
-    return matchesSearch && matchesUser && matchesStatus;
-  });
+  // Export CSV / PDF
+  const triggerExport = async (format) => {
+    try {
+      setShowExportMenu(false);
+      setToastMsg(`Preparing ${format.toUpperCase()} export payload...`);
+      const filters = {
+        search: searchTerm,
+        user: userFilter,
+        status: statusFilter,
+        severity: severityFilter,
+        module: moduleFilter,
+        startDate,
+        endDate
+      };
+
+      const blob = await auditService.exportAuditLogs(format, filters);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `trace-audit-logs-${new Date().getTime()}.${format}`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setToastMsg(`Logs exported successfully.`);
+      setTimeout(() => setToastMsg(''), 3000);
+    } catch (err) {
+      console.error(err);
+      setToastMsg(`Export failed: ${err.message}`);
+      setTimeout(() => setToastMsg(''), 4000);
+    }
+  };
+
+  // Deletion logic
+  const handleDeleteLog = async (id) => {
+    try {
+      setToastMsg('Removing audit log entry...');
+      await auditService.deleteAuditLog(id);
+      setSelectedLog(null);
+      setDeleteConfirmId(null);
+      setToastMsg('Audit log successfully deleted.');
+      setTimeout(() => setToastMsg(''), 3000);
+      fetchAuditLogs();
+    } catch (err) {
+      console.error(err);
+      setToastMsg(`Delete failed: ${err.message}`);
+      setTimeout(() => setToastMsg(''), 4000);
+    }
+  };
+
+  const selectLogDetails = async (id) => {
+    try {
+      const data = await auditService.getAuditLogById(id);
+      setSelectedLog(data);
+    } catch (err) {
+      console.error(err);
+      setToastMsg(`Failed to load details: ${err.message}`);
+      setTimeout(() => setToastMsg(''), 3000);
+    }
+  };
+
+  // Formatters
+  const formatDate = (isoString) => {
+    if (!isoString) return 'N/A';
+    return new Date(isoString).toISOString().slice(0, 19).replace('T', ' ');
+  };
+
+  // Skeletons
+  const renderSkeletons = () => (
+    Array.from({ length: limit }).map((_, idx) => (
+      <tr key={idx} className="animate-pulse border-b border-white/5 bg-white/[0.01]">
+        <td className="px-4 py-4"><div className="h-3.5 bg-white/10 rounded w-28"></div></td>
+        <td className="px-4 py-4">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-full bg-white/10"></div>
+            <div className="h-3 bg-white/10 rounded w-16"></div>
+          </div>
+        </td>
+        <td className="px-4 py-4"><div className="h-3.5 bg-white/10 rounded w-44"></div></td>
+        <td className="px-4 py-4"><div className="h-5 bg-white/10 rounded w-16"></div></td>
+        <td className="px-4 py-4"><div className="h-3.5 bg-white/10 rounded w-24"></div></td>
+        <td className="px-4 py-4"><div className="h-4 bg-white/10 rounded w-6"></div></td>
+        <td className="px-4 py-4"><div className="h-3.5 bg-white/10 rounded w-12"></div></td>
+        <td className="px-4 py-4"><div className="h-5 bg-white/10 rounded w-12"></div></td>
+        <td className="px-4 py-4 text-right"><div className="h-6 bg-white/10 rounded w-14 inline-block"></div></td>
+      </tr>
+    ))
+  );
+
+  if (!hasSession) return null;
 
   return (
     <div className="trace-audit-layout min-h-screen text-on-surface font-body-md grid-bg-audit selection:bg-secondary/30 selection:text-secondary">
-      {/* Component Specific CSS Styles */}
+      
+      {/* Dynamic CSS Definitions */}
       <style dangerouslySetInnerHTML={{
         __html: `
           .glass-panel {
-              background: rgba(27, 31, 44, 0.6);
+              background: rgba(15, 20, 35, 0.6);
               backdrop-filter: blur(12px);
-              border: 1px solid rgba(255, 255, 255, 0.08);
-              border-top: 1px solid rgba(255, 255, 255, 0.15);
-          }
-          .neon-border-blue {
-              box-shadow: 0 0 10px rgba(174, 198, 255, 0.1);
-              border: 1px solid rgba(174, 198, 255, 0.3);
+              border: 1px solid rgba(255, 255, 255, 0.05);
+              border-top: 1px solid rgba(255, 255, 255, 0.1);
           }
           .custom-scrollbar::-webkit-scrollbar {
               width: 4px;
@@ -227,154 +282,357 @@ export default function AuditLogs() {
               background: rgba(71, 250, 243, 0.2);
               border-radius: 10px;
           }
-          @keyframes pulse-cyan {
-              0% { box-shadow: 0 0 0 0 rgba(71, 250, 243, 0.4); }
-              70% { box-shadow: 0 0 0 10px rgba(71, 250, 243, 0); }
-              100% { box-shadow: 0 0 0 0 rgba(71, 250, 243, 0); }
-          }
-          .status-pulse {
-              animation: pulse-cyan 2s infinite;
-          }
           .grid-bg-audit {
-              background-image: radial-gradient(circle at 2px 2px, rgba(255,255,255,0.03) 1px, transparent 0);
-              background-size: 32px 32px;
+              background-image: radial-gradient(circle at 1px 1px, rgba(255,255,255,0.015) 1px, transparent 0);
+              background-size: 24px 24px;
           }
           .trace-audit-row-btn {
-              padding: 4px 8px;
-              background-color: var(--surface-bright, #353946);
-              color: var(--on-surface, #dfe2f3);
-              border: 1px solid rgba(255, 255, 255, 0.1);
-              border-radius: 4px;
+              padding: 4px 10px;
+              background-color: rgba(59, 130, 246, 0.1);
+              color: #3b82f6;
+              border: 1px solid rgba(59, 130, 246, 0.2);
+              border-radius: 6px;
               font-size: 11px;
+              font-weight: 600;
               cursor: pointer;
               transition: all 0.2s ease;
           }
           .trace-audit-row-btn:hover {
-              background-color: var(--primary, #aec6ff);
-              color: var(--on-primary, #002e6b);
+              background-color: rgba(59, 130, 246, 0.2);
+              border-color: #3b82f6;
+              color: #ffffff;
+          }
+          .trace-soc-toolbar {
+              background: rgba(18, 25, 40, 0.9) !important;
+              backdrop-filter: blur(12px) !important;
+              border: 1px solid rgba(255, 255, 255, 0.05) !important;
+              border-radius: 16px !important;
+              box-shadow: 0 4px 30px rgba(0, 0, 0, 0.3) !important;
+              padding: 16px 24px !important;
+          }
+          .trace-soc-search-wrapper {
+              position: relative;
+              flex: 1;
+              max-width: 400px;
+              display: flex;
+              align-items: center;
+          }
+          .trace-soc-search-icon {
+              position: absolute;
+              left: 14px;
+              color: #cbd5e1;
+              opacity: 0.5;
+              display: flex;
+              align-items: center;
+          }
+          .trace-soc-search-input {
+              width: 100% !important;
+              height: 38px !important;
+              background-color: #050814 !important;
+              border: 1px solid rgba(255, 255, 255, 0.08) !important;
+              border-radius: 8px !important;
+              padding: 0 16px 0 40px !important;
+              color: #FFFFFF !important;
+              font-size: 0.825rem !important;
+              outline: none !important;
+              transition: all 0.2s ease !important;
+              box-sizing: border-box !important;
+          }
+          .trace-soc-search-input:focus {
+              border-color: rgba(71, 250, 243, 0.4) !important;
+              box-shadow: 0 0 10px rgba(71, 250, 243, 0.15) !important;
+          }
+          .trace-soc-badge-live {
+              display: inline-flex;
+              align-items: center;
+              gap: 6px;
+              background: rgba(71, 250, 243, 0.06) !important;
+              border: 1px solid rgba(71, 250, 243, 0.15) !important;
+              color: #47faf3 !important;
+              border-radius: 20px !important;
+              padding: 0 12px !important;
+              height: 32px !important;
+              font-size: 0.7rem !important;
+              font-weight: 700 !important;
+              letter-spacing: 0.05em;
+          }
+          .trace-soc-dot-cyan {
+              width: 6px;
+              height: 6px;
+              background-color: #47faf3 !important;
+              border-radius: 50%;
+              box-shadow: 0 0 6px #47faf3 !important;
+          }
+          .trace-soc-btn-filter {
+              display: inline-flex !important;
+              align-items: center !important;
+              justify-content: center !important;
+              gap: 6px !important;
+              background-color: rgba(15, 20, 35, 0.8) !important;
+              border: 1px solid rgba(255, 255, 255, 0.08) !important;
+              color: #CBD5E1 !important;
+              border-radius: 8px !important;
+              padding: 0 12px !important;
+              height: 34px !important;
+              font-size: 0.75rem !important;
+              font-weight: 600 !important;
+              cursor: pointer !important;
+              transition: all 0.2s ease !important;
+          }
+          .trace-soc-btn-filter:hover, .trace-soc-btn-filter.active {
+              background-color: rgba(71, 250, 243, 0.08) !important;
+              border-color: #47faf3 !important;
+              color: #47faf3 !important;
+          }
+          .trace-soc-btn-export {
+              display: inline-flex !important;
+              align-items: center !important;
+              justify-content: center !important;
+              gap: 6px !important;
+              background-color: #3b82f6 !important;
+              color: #ffffff !important;
+              border-radius: 8px !important;
+              padding: 0 12px !important;
+              height: 34px !important;
+              font-size: 0.75rem !important;
+              font-weight: 600 !important;
+              cursor: pointer !important;
+              transition: all 0.2s ease !important;
+              border: none !important;
+          }
+          .trace-soc-btn-export:hover {
+              background-color: #2563eb !important;
+          }
+          .trace-pagination-btn {
+              display: inline-flex !important;
+              align-items: center !important;
+              justify-content: center !important;
+              padding: 5px 12px !important;
+              background: rgba(15, 20, 35, 0.8) !important;
+              border: 1px solid rgba(255, 255, 255, 0.05) !important;
+              color: #94a3b8 !important;
+              border-radius: 6px !important;
+              font-size: 0.7rem !important;
+              font-weight: 600 !important;
+              cursor: pointer !important;
+              transition: all 0.15s ease !important;
+          }
+          .trace-pagination-btn:hover:not(:disabled) {
+              border-color: rgba(71, 250, 243, 0.3) !important;
+              color: #47faf3 !important;
+          }
+          .trace-pagination-btn.active {
+              background: #3b82f6 !important;
+              border-color: transparent !important;
+              color: #ffffff !important;
+          }
+          .trace-pagination-btn:disabled {
+              opacity: 0.35 !important;
+              cursor: not-allowed !important;
           }
         `
       }} />
 
-      {/* Main Viewport Container */}
+      {/* Toast Notification Alert */}
+      {toastMsg && (
+        <div className="fixed top-20 right-6 z-50 bg-[#0f1425] border border-[#47faf3] text-[#47faf3] text-[11px] px-4 py-2.5 rounded-lg shadow-2xl font-bold whitespace-nowrap">
+          {toastMsg}
+        </div>
+      )}
+
+      {/* Main Page Layout Wrapper */}
       <div className="p-6 space-y-6">
         
-        {/* Local Page Actions & Search Toolbar */}
-        <section className="flex flex-col md:flex-row justify-between items-stretch md:items-center gap-4 bg-surface-container/60 p-4 rounded-xl border border-white/5 backdrop-blur-md">
-          <div className="flex-1 relative">
-            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-lg">search</span>
+        {/* Header Title */}
+        <div className="flex flex-col text-left select-none">
+          <h1 className="text-xl font-bold text-white tracking-tight">Security Audit Logging Trail</h1>
+          <p className="text-xs text-[#cbd5e1]/50 mt-0.5">SOC Compliance logging infrastructure verifying authorization trails.</p>
+        </div>
+
+        {/* Toolbar: Search, Filters Trigger, Exports */}
+        <section className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4 trace-soc-toolbar relative">
+          <div className="trace-soc-search-wrapper">
+            <span className="trace-soc-search-icon"><Search className="w-4 h-4" /></span>
             <input
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-surface-container-lowest border border-white/10 rounded-lg pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-secondary/50 focus:border-secondary/50 placeholder:text-outline/50 text-on-surface"
-              placeholder="Search event ID, user, IP, or action..."
+              onKeyDown={handleSearchKeyPress}
+              className="trace-soc-search-input font-medium"
+              placeholder="Search user, action, IP, module..."
             />
+            {searchTerm && (
+              <button 
+                type="button"
+                className="absolute right-3 text-outline hover:text-white"
+                onClick={() => { setSearchTerm(''); setCurrentPage(1); }}
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={handleSearchTrigger}
+              className="ml-2 px-3 py-1 bg-surface-bright rounded text-[10px] uppercase font-bold tracking-wider hover:bg-white/10"
+            >
+              Go
+            </button>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2 bg-surface-bright/20 px-3 py-1.5 rounded-lg border border-white/5">
-              <span className="w-2 h-2 rounded-full bg-secondary status-pulse"></span>
-              <span className="text-xs font-bold text-secondary tracking-wider">LIVE TELEMETRY</span>
+
+          <div className="flex items-center gap-3 justify-end">
+            <div className="trace-soc-badge-live">
+              <span className="trace-soc-dot-cyan animate-ping"></span>
+              <span>LIVE UPLINK ACTIVE</span>
             </div>
             
-            <button className="flex items-center gap-2 px-4 py-1.5 bg-surface-bright text-on-surface rounded-lg text-sm font-semibold hover:bg-surface-bright/80 transition-all border border-white/10">
-              <span className="material-symbols-outlined text-sm">filter_list</span>
+            <button 
+              type="button" 
+              onClick={() => setShowAdvanced(!showAdvanced)}
+              className={`trace-soc-btn-filter ${showAdvanced ? 'active' : ''}`}
+            >
+              <Filter className="w-3.5 h-3.5" />
               Advanced Filters
             </button>
-            <button className="flex items-center gap-2 px-4 py-1.5 bg-secondary-container text-on-secondary-container rounded-lg text-sm font-bold hover:opacity-90 transition-all">
-              <span className="material-symbols-outlined text-sm">download</span>
-              Export Logs
-            </button>
-          </div>
-        </section>
 
-        {/* KPI Dashboard Cards Grid */}
-        <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-          <div className="glass-panel p-4 rounded-xl">
-            <p className="text-xs text-outline uppercase font-bold tracking-widest mb-1">Total Events</p>
-            <div className="flex items-end justify-between">
-              <h3 className="font-display-lg text-2xl font-bold text-on-surface">1.2M</h3>
-              <span className="text-secondary text-xs flex items-center gap-0.5">
-                +4.2% <span className="material-symbols-outlined text-xs">trending_up</span>
-              </span>
-            </div>
-          </div>
-          <div className="glass-panel p-4 rounded-xl border-l-2 border-l-error">
-            <p className="text-xs text-outline uppercase font-bold tracking-widest mb-1">Failed Logins</p>
-            <div className="flex items-end justify-between">
-              <h3 className="font-display-lg text-2xl font-bold text-error">42</h3>
-              <span className="text-error text-xs flex items-center gap-0.5">
-                +12 <span className="material-symbols-outlined text-xs">warning</span>
-              </span>
-            </div>
-          </div>
-          <div className="glass-panel p-4 rounded-xl">
-            <p className="text-xs text-outline uppercase font-bold tracking-widest mb-1">Successful Logins</p>
-            <div className="flex items-end justify-between">
-              <h3 className="font-display-lg text-2xl font-bold text-on-surface">856</h3>
-              <span className="text-secondary text-xs">Stable</span>
-            </div>
-          </div>
-          <div className="glass-panel p-4 rounded-xl">
-            <p className="text-xs text-outline uppercase font-bold tracking-widest mb-1">Config Changes</p>
-            <div className="flex items-end justify-between">
-              <h3 className="font-display-lg text-2xl font-bold text-primary">12</h3>
-              <span className="text-outline text-xs italic">Review pending</span>
-            </div>
-          </div>
-          <div className="glass-panel p-4 rounded-xl bg-error-container/10 border-error/30">
-            <p className="text-xs text-error uppercase font-bold tracking-widest mb-1">Critical Events</p>
-            <div className="flex items-end justify-between">
-              <h3 className="font-display-lg text-2xl font-bold text-error">5</h3>
-              <span className="text-error animate-pulse material-symbols-outlined">priority_high</span>
-            </div>
-          </div>
-          <div className="glass-panel p-4 rounded-xl">
-            <p className="text-xs text-outline uppercase font-bold tracking-widest mb-1">Active Users</p>
-            <div className="flex items-end justify-between">
-              <h3 className="font-display-lg text-2xl font-bold text-secondary">24</h3>
-              <span className="text-outline text-xs">Session peak</span>
+            <div className="relative">
+              <button 
+                type="button" 
+                onClick={() => setShowExportMenu(!showExportMenu)}
+                className="trace-soc-btn-export"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Export logs
+              </button>
+              
+              {showExportMenu && (
+                <div className="absolute right-0 mt-2 z-50 bg-[#0f1423] border border-white/10 rounded-lg shadow-2xl p-1.5 w-36 flex flex-col gap-1">
+                  <button 
+                    type="button"
+                    onClick={() => triggerExport('csv')}
+                    className="w-full text-left px-3 py-1.5 rounded hover:bg-white/5 text-xs text-[#cbd5e1] font-semibold"
+                  >
+                    Export as CSV
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={() => triggerExport('pdf')}
+                    className="w-full text-left px-3 py-1.5 rounded hover:bg-white/5 text-xs text-[#cbd5e1] font-semibold"
+                  >
+                    Export as PDF
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </section>
 
-        {/* Main Telemetry & Activity Layout Grid */}
+        {/* Collapsible Advanced Filters Section */}
+        {showAdvanced && (
+          <section className="glass-panel rounded-xl p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs select-none">
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-outline text-[#cbd5e1]/50">Severity</span>
+              <select
+                value={severityFilter}
+                onChange={(e) => { setSeverityFilter(e.target.value); setCurrentPage(1); }}
+                className="w-full h-9 bg-black/40 border border-white/10 rounded px-2.5 text-xs text-white focus:outline-none"
+              >
+                <option value="All">All Severities</option>
+                <option value="Low">Low</option>
+                <option value="Medium">Medium</option>
+                <option value="High">High</option>
+                <option value="Critical">Critical</option>
+              </select>
+            </div>
+            
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-outline text-[#cbd5e1]/50">Module</span>
+              <select
+                value={moduleFilter}
+                onChange={(e) => { setModuleFilter(e.target.value); setCurrentPage(1); }}
+                className="w-full h-9 bg-black/40 border border-white/10 rounded px-2.5 text-xs text-white focus:outline-none"
+              >
+                <option value="All">All Modules</option>
+                {dynamicModules.map(m => <option key={m} value={m}>{m}</option>)}
+              </select>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-outline text-[#cbd5e1]/50">Date Range</span>
+              <div className="flex gap-2 items-center">
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => { setStartDate(e.target.value); setCurrentPage(1); }}
+                  className="w-1/2 h-9 bg-black/40 border border-white/10 rounded px-2 text-xs text-white focus:outline-none"
+                />
+                <span className="text-outline text-white/40">-</span>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => { setEndDate(e.target.value); setCurrentPage(1); }}
+                  className="w-1/2 h-9 bg-black/40 border border-white/10 rounded px-2 text-xs text-white focus:outline-none"
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-outline text-[#cbd5e1]/50">Sorting Parameters</span>
+              <div className="flex gap-2">
+                <select
+                  value={sortBy}
+                  onChange={(e) => { setSortBy(e.target.value); setCurrentPage(1); }}
+                  className="w-1/2 h-9 bg-black/40 border border-white/10 rounded px-2 text-xs text-white focus:outline-none"
+                >
+                  <option value="timestamp">Timestamp</option>
+                  <option value="user">User</option>
+                  <option value="action">Action</option>
+                  <option value="severity">Severity</option>
+                  <option value="status">Status</option>
+                </select>
+                <select
+                  value={sortOrder}
+                  onChange={(e) => { setSortOrder(e.target.value); setCurrentPage(1); }}
+                  className="w-1/2 h-9 bg-black/40 border border-white/10 rounded px-2 text-xs text-white focus:outline-none"
+                >
+                  <option value="desc">Descending</option>
+                  <option value="asc">Ascending</option>
+                </select>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* Primary Log Trail Table Panel Grid */}
         <div className="grid grid-cols-12 gap-6">
-          
-          {/* Left Column: Recent Audit Trail Table & Bottom Panels */}
           <div className="col-span-12 lg:col-span-9 space-y-6">
             
-            {/* Recent Audit Entries Table Section */}
-            <section className="glass-panel rounded-xl overflow-hidden">
-              <div className="px-6 py-4 border-b border-white/5 flex justify-between items-center bg-surface-bright/10">
-                <h4 className="font-bold text-sm tracking-wide flex items-center gap-2">
-                  <span className="material-symbols-outlined text-primary">list_alt</span>
-                  RECENT AUDIT ENTRIES
+            <section className="glass-panel rounded-xl overflow-hidden flex flex-col justify-between min-h-[400px]">
+              <div className="px-6 py-4 border-b border-white/5 flex justify-between items-center bg-white/[0.01] select-none">
+                <h4 className="font-bold text-xs tracking-wider flex items-center gap-2 uppercase text-white/90">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#3b82f6]"></span>
+                  Recent Security Audit Trail
                 </h4>
-                <div className="flex gap-2">
-                  {/* Dropdown Filters inside the Table Header */}
-                  <div className="flex items-center gap-4 mr-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px] uppercase tracking-wider text-outline">User:</span>
+                
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-4 text-xs font-semibold">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-outline text-white/40 uppercase text-[10px]">User:</span>
                       <select
                         value={userFilter}
-                        onChange={(e) => setUserFilter(e.target.value)}
-                        className="bg-surface-container-lowest border border-white/10 rounded px-2 py-0.5 text-xs text-on-surface focus:outline-none"
+                        onChange={(e) => { setUserFilter(e.target.value); setCurrentPage(1); }}
+                        className="bg-black/50 border border-white/10 rounded px-2 py-0.5 text-xs text-[#cbd5e1] focus:outline-none"
                       >
-                        <option value="All">All Users</option>
-                        <option value="j.valdes">j.valdes</option>
-                        <option value="s.keller">s.keller</option>
-                        <option value="SYSTEM_SVC">SYSTEM_SVC</option>
-                        <option value="m.chen">m.chen</option>
-                        <option value="d.wright">d.wright</option>
+                        <option value="All">All Operators</option>
+                        {dynamicUsers.map(u => <option key={u} value={u}>{u}</option>)}
                       </select>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px] uppercase tracking-wider text-outline">Status:</span>
+                    
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-outline text-white/40 uppercase text-[10px]">Status:</span>
                       <select
                         value={statusFilter}
-                        onChange={(e) => setStatusFilter(e.target.value)}
-                        className="bg-surface-container-lowest border border-white/10 rounded px-2 py-0.5 text-xs text-on-surface focus:outline-none"
+                        onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
+                        className="bg-black/50 border border-white/10 rounded px-2 py-0.5 text-xs text-[#cbd5e1] focus:outline-none"
                       >
                         <option value="All">All Statuses</option>
                         <option value="Success">Success</option>
@@ -382,117 +640,103 @@ export default function AuditLogs() {
                       </select>
                     </div>
                   </div>
-                  <button className="p-1 hover:bg-white/5 rounded text-outline hover:text-white" title="Refresh trail">
-                    <span className="material-symbols-outlined text-sm">refresh</span>
+                  
+                  <button 
+                    type="button"
+                    onClick={fetchAuditLogs}
+                    className="p-1.5 hover:bg-white/5 rounded text-outline hover:text-white"
+                    title="Refresh data"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? 'animate-spin text-[#47faf3]' : ''}`} />
                   </button>
                 </div>
               </div>
 
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm">
-                  <thead className="bg-surface-container-high/50 text-outline text-[11px] uppercase tracking-[0.15em] border-b border-white/5">
+              {/* Table Body Viewport */}
+              <div className="overflow-x-auto w-full flex-grow">
+                <table className="w-full text-left text-xs border-collapse min-w-[700px]">
+                  <thead className="bg-[#0f1423]/70 text-[#cbd5e1]/50 text-[10px] uppercase font-bold tracking-wider border-b border-white/5 select-none">
                     <tr>
-                      <th className="px-4 py-3 font-semibold">Timestamp (UTC)</th>
-                      <th className="px-4 py-3 font-semibold">User</th>
-                      <th className="px-4 py-3 font-semibold">Action</th>
-                      <th className="px-4 py-3 font-semibold">Module</th>
-                      <th className="px-4 py-3 font-semibold">IP Address</th>
-                      <th className="px-4 py-3 font-semibold">Device</th>
-                      <th className="px-4 py-3 font-semibold">Status</th>
-                      <th className="px-4 py-3 font-semibold">Severity</th>
-                      <th className="px-4 py-3 font-semibold text-right">Details</th>
+                      <th scope="col" className="px-4 py-3">Timestamp (UTC)</th>
+                      <th scope="col" className="px-4 py-3">User</th>
+                      <th scope="col" className="px-4 py-3">Action</th>
+                      <th scope="col" className="px-4 py-3">Module</th>
+                      <th scope="col" className="px-4 py-3">IP Address</th>
+                      <th scope="col" className="px-4 py-3">Device</th>
+                      <th scope="col" className="px-4 py-3">Status</th>
+                      <th scope="col" className="px-4 py-3">Severity</th>
+                      <th scope="col" className="px-4 py-3 text-right pr-4">Details</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-white/5">
-                    {filteredLogs.length > 0 ? (
-                      filteredLogs.map((log) => {
-                        const isExpanded = expandedEvent === log.eventId;
+                  
+                  <tbody className="divide-y divide-white/5 font-medium">
+                    {isFetching ? (
+                      renderSkeletons()
+                    ) : error ? (
+                      <tr>
+                        <td colSpan={9} className="px-4 py-12 text-center text-red-400">
+                          <AlertTriangle className="w-8 h-8 mx-auto mb-2 text-red-400 animate-bounce" />
+                          <span>Error loading audit logs: {error}</span>
+                        </td>
+                      </tr>
+                    ) : logs.length > 0 ? (
+                      logs.map((log) => {
                         const isFailed = log.status.toLowerCase() === 'failed';
+                        const avatarIndex = Math.abs(log.user.charCodeAt(0) || 0) % defaultAvatars.length;
                         return (
-                          <React.Fragment key={log.eventId}>
-                            <tr className={`hover:bg-primary/5 transition-colors group ${isFailed ? 'bg-error-container/5' : ''}`}>
-                              <td className="px-4 py-4 font-code-sm text-xs text-primary-fixed opacity-80">
-                                {log.timestamp}
-                              </td>
-                              <td className="px-4 py-4">
-                                <div className="flex items-center gap-2">
-                                  <div className="w-6 h-6 rounded-full bg-surface-bright border border-white/10 flex items-center justify-center overflow-hidden">
-                                    <img className="w-full h-full object-cover" src={log.avatar} alt={`Avatar of ${log.user}`} />
-                                  </div>
-                                  <div>
-                                    <div className="font-bold text-on-surface text-xs">{log.user}</div>
-                                    <div className="text-[9px] text-outline">{log.role}</div>
-                                  </div>
+                          <tr 
+                            key={log.logId} 
+                            className={`hover:bg-white/[0.02] transition-colors ${isFailed ? 'bg-red-500/[0.02]' : ''}`}
+                          >
+                            <td className="px-4 py-3.5 font-mono text-[#47faf3] opacity-80 whitespace-nowrap">
+                              {formatDate(log.timestamp)}
+                            </td>
+                            <td className="px-4 py-3.5 whitespace-nowrap">
+                              <div className="flex items-center gap-2">
+                                <div className="w-5 h-5 rounded-full bg-slate-800 border border-white/10 flex-shrink-0 flex items-center justify-center overflow-hidden">
+                                  <img className="w-full h-full object-cover select-none" src={defaultAvatars[avatarIndex]} alt={log.user} />
                                 </div>
-                              </td>
-                              <td className="px-4 py-4 font-medium text-xs text-on-surface">
-                                {log.action}
-                              </td>
-                              <td className="px-4 py-4">
-                                <span className="px-2 py-0.5 rounded bg-surface-bright/50 text-[10px] border border-white/10 text-outline font-mono">
-                                  {log.module}
-                                </span>
-                              </td>
-                              <td className="px-4 py-4 font-code-sm text-xs opacity-90 font-mono">
-                                {log.ip}
-                              </td>
-                              <td className="px-4 py-4 text-outline">
-                                <span className="material-symbols-outlined text-sm">{log.device}</span>
-                              </td>
-                              <td className={`px-4 py-4 text-xs font-semibold flex items-center gap-1 ${isFailed ? 'text-error' : 'text-secondary'}`}>
-                                <span className="material-symbols-outlined text-sm">
-                                  {isFailed ? 'cancel' : 'check_circle'}
-                                </span>
+                                <span className="font-bold text-white text-[11px]">{log.user}</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3.5 text-white max-w-[200px] truncate" title={log.action}>
+                              {log.action}
+                            </td>
+                            <td className="px-4 py-3.5">
+                              <span className="px-2 py-0.5 rounded bg-white/5 border border-white/5 font-mono text-[9px] text-[#cbd5e1]/70">
+                                {log.module}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3.5 font-mono text-[#cbd5e1]/70">{log.ipAddress || log.ip}</td>
+                            <td className="px-4 py-3.5 text-outline text-[#cbd5e1]/55 uppercase text-[9px] font-mono">{log.device || 'Web'}</td>
+                            <td className="px-4 py-3.5 whitespace-nowrap">
+                              <span className={`flex items-center gap-1 text-[10px] font-bold ${isFailed ? 'text-[#ffb4ab]' : 'text-[#10b981]'}`}>
+                                <span className={`w-1.5 h-1.5 rounded-full ${isFailed ? 'bg-[#ffb4ab]' : 'bg-[#10b981]'}`} />
                                 {log.status}
-                              </td>
-                              <td className="px-4 py-4">
-                                <span className={severityStyles[log.severity] || severityStyles.LOW}>
-                                  {log.severity}
-                                </span>
-                              </td>
-                              <td className="px-4 py-4 text-right">
-                                <button
-                                  onClick={() => toggleEventDetails(log.eventId)}
-                                  className="trace-audit-row-btn"
-                                >
-                                  {isExpanded ? 'Hide' : 'Details'}
-                                </button>
-                              </td>
-                            </tr>
-
-                            {/* Collapsible Details Drawer */}
-                            {isExpanded && (
-                              <tr className="bg-surface-container-low/40">
-                                <td colSpan={9} className="px-6 py-4">
-                                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 rounded-lg bg-surface-container-lowest/80 border border-white/5 text-xs">
-                                    <div className="space-y-1">
-                                      <span className="text-outline uppercase text-[10px] tracking-wider font-bold">Event ID</span>
-                                      <p className="font-mono text-on-surface">{log.eventId}</p>
-                                    </div>
-                                    <div className="space-y-1">
-                                      <span className="text-outline uppercase text-[10px] tracking-wider font-bold">Module Path</span>
-                                      <p className="font-mono text-primary">{log.module}</p>
-                                    </div>
-                                    <div className="space-y-1">
-                                      <span className="text-outline uppercase text-[10px] tracking-wider font-bold">Investigator Session IP</span>
-                                      <p className="font-mono text-on-surface">{log.ip}</p>
-                                    </div>
-                                    <div className="space-y-1">
-                                      <span className="text-outline uppercase text-[10px] tracking-wider font-bold">Triangulation Scope</span>
-                                      <p className="text-on-surface">SOC2 Compliant Event</p>
-                                    </div>
-                                  </div>
-                                </td>
-                              </tr>
-                            )}
-                          </React.Fragment>
+                              </span>
+                            </td>
+                            <td className="px-4 py-3.5">
+                              <span className={severityStyles[log.severity] || severityStyles.Low}>
+                                {log.severity}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3.5 text-right pr-4">
+                              <button
+                                type="button"
+                                onClick={() => selectLogDetails(log.logId)}
+                                className="trace-audit-row-btn"
+                              >
+                                Details
+                              </button>
+                            </td>
+                          </tr>
                         );
                       })
                     ) : (
                       <tr>
-                        <td colSpan={9} className="px-4 py-12 text-center text-outline">
-                          <span className="material-symbols-outlined text-4xl block mb-2 text-outline/30">shield</span>
-                          No audit entries found matching the query.
+                        <td colSpan={9} className="px-4 py-16 text-center text-outline select-none">
+                          <Shield className="w-12 h-12 mx-auto mb-3 text-white/10" />
+                          <p className="text-xs text-[#cbd5e1]/40 font-bold uppercase tracking-wider">No audit logs indexed matching criteria</p>
                         </td>
                       </tr>
                     )}
@@ -500,72 +744,102 @@ export default function AuditLogs() {
                 </table>
               </div>
 
-              {/* Table Pagination Controller */}
-              <div className="px-6 py-3 bg-surface-container-high/30 border-t border-white/5 flex justify-between items-center text-xs text-outline">
-                <p>Showing 1-{filteredLogs.length} of {filteredLogs.length} results</p>
-                <div className="flex gap-2">
-                  <button className="px-3 py-1 bg-surface-bright rounded border border-white/10 hover:text-white transition-colors" disabled>Previous</button>
-                  <button className="px-3 py-1 bg-primary text-on-primary rounded border border-primary font-bold">1</button>
-                  <button className="px-3 py-1 bg-surface-bright rounded border border-white/10 hover:text-white transition-colors" disabled>Next</button>
+              {/* Table Footer Pagination Controls */}
+              {!error && logs.length > 0 && (
+                <div className="px-6 py-4 bg-white/[0.01] border-t border-white/5 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-[#cbd5e1]/40 select-none">
+                  <span className="font-semibold">
+                    Showing {(currentPage - 1) * limit + 1}-{Math.min(currentPage * limit, totalCount)} of {totalCount} records
+                  </span>
+                  
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                      disabled={currentPage === 1 || isFetching}
+                      className="trace-pagination-btn"
+                    >
+                      Previous
+                    </button>
+                    
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                      <button
+                        key={page}
+                        type="button"
+                        onClick={() => setCurrentPage(page)}
+                        className={`trace-pagination-btn ${currentPage === page ? 'active' : ''}`}
+                        disabled={isFetching}
+                      >
+                        {page}
+                      </button>
+                    ))}
+                    
+                    <button
+                      type="button"
+                      onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                      disabled={currentPage === totalPages || isFetching}
+                      className="trace-pagination-btn"
+                    >
+                      Next
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
             </section>
 
-            {/* Bottom Section: Stream Feed and Analyst Timelines */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Bottom Stream Telemetry logs */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 select-none">
               
-              {/* Live Event Stream Panel */}
-              <section className="glass-panel rounded-xl h-96 flex flex-col overflow-hidden">
-                <div className="p-4 border-b border-white/5 flex items-center justify-between bg-surface-bright/10">
-                  <h4 className="font-bold text-sm tracking-wide flex items-center gap-2">
-                    <span className="material-symbols-outlined text-secondary animate-pulse">broadcast_on_personal</span>
-                    LIVE EVENT TELEMETRY STREAM
+              <section className="glass-panel rounded-xl h-80 flex flex-col overflow-hidden">
+                <div className="p-4 border-b border-white/5 flex items-center justify-between bg-white/[0.02]">
+                  <h4 className="font-bold text-xs tracking-wider text-white/90 flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-secondary animate-ping"></span>
+                    LOG STREAM TELEMETRY
                   </h4>
-                  <span className="text-[9px] font-mono text-outline">WS_CONNECTED : PORT_8080</span>
+                  <span className="text-[8px] font-mono text-outline text-[#47faf3]">SOC_WEBSOCKET_UPLINK</span>
                 </div>
-                <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar font-code-sm text-xs font-mono">
+                <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar font-mono text-[10.5px]">
                   {streamEvents.map((evt, idx) => (
-                    <div key={idx} className={streamEventStyles[evt.type] || streamEventStyles.outline}>
-                      <span className="text-outline shrink-0 font-mono">{evt.time}</span>
-                      <span className="text-on-surface font-mono" dangerouslySetInnerHTML={{ __html: evt.message }} />
+                    <div key={idx} className="flex gap-2.5 items-start text-left">
+                      <span className="text-[#cbd5e1]/40 shrink-0 font-bold">{evt.time}</span>
+                      <span className="text-[#cbd5e1] leading-relaxed break-words">{evt.message}</span>
                     </div>
                   ))}
                 </div>
               </section>
 
-              {/* Analyst Activity Timeline */}
-              <section className="glass-panel rounded-xl h-96 flex flex-col overflow-hidden">
-                <div className="p-4 border-b border-white/5 bg-surface-bright/10">
-                  <h4 className="font-bold text-sm tracking-wide flex items-center gap-2">
-                    <span className="material-symbols-outlined text-primary">timeline</span>
-                    ANALYST ACTIVITY TIMELINE
+              <section className="glass-panel rounded-xl h-80 flex flex-col overflow-hidden">
+                <div className="p-4 border-b border-white/5 bg-white/[0.02]">
+                  <h4 className="font-bold text-xs tracking-wider text-white/90 flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#10b981]"></span>
+                    OPERATIONAL SLA METRICS
                   </h4>
                 </div>
-                <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
-                  <div className="relative border-l border-white/10 ml-3 pl-8 space-y-6 py-2">
-                    <div className="relative">
-                      <span className="absolute -left-[42px] top-0.5 w-5 h-5 rounded-full bg-secondary border-4 border-surface-container flex items-center justify-center"></span>
-                      <div className="flex flex-col">
-                        <span className="text-[9px] text-outline font-bold">14:10 PM</span>
-                        <span className="text-xs font-semibold text-on-surface">Login Detected</span>
-                        <p className="text-[11px] text-outline mt-0.5">Investigator Valdes logged in via MFA (Duo Push).</p>
-                      </div>
+                <div className="flex-1 p-5 flex flex-col gap-4 text-xs">
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between font-bold">
+                      <span>Index Verification Speed</span>
+                      <span className="text-[#47faf3]">99.8%</span>
                     </div>
-                    <div className="relative">
-                      <span className="absolute -left-[42px] top-0.5 w-5 h-5 rounded-full bg-primary border-4 border-surface-container flex items-center justify-center"></span>
-                      <div className="flex flex-col">
-                        <span className="text-[9px] text-outline font-bold">14:15 PM</span>
-                        <span className="text-xs font-semibold text-on-surface">File Upload: investigation_raw_dump.iso</span>
-                        <p className="text-[11px] text-outline mt-0.5">Uploaded to encrypted bucket 'Case-772-evidence'.</p>
-                      </div>
+                    <div className="w-full bg-[#050814] h-1.5 rounded-full overflow-hidden">
+                      <div className="bg-[#47faf3] h-full w-[99.8%]" />
                     </div>
-                    <div className="relative">
-                      <span className="absolute -left-[42px] top-0.5 w-5 h-5 rounded-full bg-outline border-4 border-surface-container flex items-center justify-center"></span>
-                      <div className="flex flex-col">
-                        <span className="text-[9px] text-outline font-bold">14:30 PM</span>
-                        <span className="text-xs font-semibold text-on-surface">Report Generated</span>
-                        <p className="text-[11px] text-outline mt-0.5">Final incident summary exported as PDF/JSON.</p>
-                      </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between font-bold">
+                      <span>Query Response Threshold</span>
+                      <span className="text-secondary">42ms</span>
+                    </div>
+                    <div className="w-full bg-[#050814] h-1.5 rounded-full overflow-hidden">
+                      <div className="bg-secondary h-full w-[85%]" />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between font-bold">
+                      <span>Security Policy Coverage</span>
+                      <span className="text-[#10b981]">100%</span>
+                    </div>
+                    <div className="w-full bg-[#050814] h-1.5 rounded-full overflow-hidden">
+                      <div className="bg-[#10b981] h-full w-[100%]" />
                     </div>
                   </div>
                 </div>
@@ -575,112 +849,42 @@ export default function AuditLogs() {
 
           </div>
 
-          {/* Right Column: AI Insights & System Health */}
-          <aside className="col-span-12 lg:col-span-3 space-y-6">
+          {/* Right Column: AI Risk Scoring */}
+          <aside className="col-span-12 lg:col-span-3 space-y-6 select-none">
             
-            {/* AI Risk Scoring Radial Dial */}
             <section className="glass-panel rounded-xl p-4 border-t-2 border-t-secondary relative overflow-hidden">
-              <div className="relative z-10">
-                <h4 className="text-xs font-bold text-outline uppercase tracking-widest mb-4 flex items-center gap-2">
-                  <span className="material-symbols-outlined text-secondary text-sm">bolt</span>
-                  AI RISK ALERT
-                </h4>
-                <div className="flex items-center justify-center py-4">
-                  <div className="relative w-28 h-28 flex items-center justify-center">
-                    <svg className="w-full h-full -rotate-90">
-                      <circle cx="56" cy="56" fill="transparent" r="48" stroke="rgba(255,255,255,0.05)" strokeWidth="6"></circle>
-                      <circle cx="56" cy="56" fill="transparent" r="48" stroke="#47faf3" strokeDasharray="301" strokeDashoffset="84" strokeLinecap="round" strokeWidth="6"></circle>
-                    </svg>
-                    <div className="absolute inset-0 flex flex-col items-center justify-center">
-                      <span className="text-2xl font-display-lg font-bold text-on-surface">72</span>
-                      <span className="text-[9px] text-outline">RISK SCORE</span>
-                    </div>
+              <h4 className="text-[10px] font-bold text-outline uppercase tracking-wider text-[#cbd5e1]/55 mb-4">
+                AI RISK INDEX
+              </h4>
+              <div className="flex items-center justify-center py-2">
+                <div className="relative w-28 h-28 flex items-center justify-center rounded-full border border-white/5 bg-black/20">
+                  <svg className="absolute inset-0 w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                    <circle cx="50" cy="50" r="42" fill="transparent" stroke="rgba(255, 255, 255, 0.03)" strokeWidth="6" />
+                    <circle cx="50" cy="50" r="42" fill="transparent" stroke="#47faf3" strokeWidth="6" strokeDasharray={263.8} strokeDashoffset={263.8 - (263.8 * 72) / 100} strokeLinecap="round" />
+                  </svg>
+                  <div className="flex flex-col items-center">
+                    <span className="text-3xl font-black text-white font-mono">72</span>
+                    <span className="text-[8px] text-outline text-[#cbd5e1]/40 font-bold mt-0.5">ELEVATED</span>
                   </div>
                 </div>
-                <p className="text-[11px] text-center text-outline leading-relaxed px-2">
-                  Current system risk is <span className="text-secondary font-bold">Elevated</span>. Anomalous configuration attempt flagged in AUTH module.
-                </p>
               </div>
+              <p className="text-[11px] text-center text-[#cbd5e1]/60 leading-relaxed mt-2.5 px-2">
+                Current system risk index is elevated. Multiple login verification failures recorded in module CORE_AUTH.
+              </p>
             </section>
 
-            {/* Suspicious Flagged Anomalies */}
-            <section className="glass-panel rounded-xl p-4">
-              <h4 className="text-xs font-bold text-outline uppercase tracking-widest mb-4 flex items-center gap-2">
-                <span className="material-symbols-outlined text-error text-sm">warning</span>
+            <section className="glass-panel rounded-xl p-5">
+              <h4 className="text-[10px] font-bold text-outline uppercase tracking-wider text-[#cbd5e1]/55 mb-4">
                 ANOMALIES FLAGGED
               </h4>
-              <div className="space-y-3">
-                <div className="bg-error-container/10 border border-error/20 p-3 rounded-lg">
-                  <p className="text-xs font-bold text-error mb-0.5">Multiple Failed Logins</p>
-                  <p className="text-[10px] text-on-surface-variant mb-1.5">IP 45.23.11.90 (Russia) attempted 12 auth changes in 3s.</p>
-                  <button className="text-[9px] uppercase font-bold text-error underline hover:text-error/85 focus:outline-none">Review Evidence</button>
+              <div className="space-y-3.5">
+                <div className="bg-red-500/10 border border-red-500/20 p-3.5 rounded-lg text-left">
+                  <p className="text-[11px] font-bold text-red-400">Multiple Failed Logins</p>
+                  <p className="text-[10.5px] text-[#cbd5e1]/65 mt-1 leading-snug">IP 198.51.100.99 attempted 12 privilege escalate logs in 3s.</p>
                 </div>
-                <div className="bg-surface-bright/20 border border-white/5 p-3 rounded-lg">
-                  <p className="text-xs font-bold text-on-surface mb-0.5">Lateral Movement Check</p>
-                  <p className="text-[10px] text-outline">User 'j.valdes' accessed admin panels at unusual workstation hours.</p>
-                </div>
-              </div>
-            </section>
-
-            {/* Active Sessions Panel */}
-            <section className="glass-panel rounded-xl p-4">
-              <h4 className="text-xs font-bold text-outline uppercase tracking-widest mb-4 flex items-center justify-between">
-                <span className="flex items-center gap-2">
-                  <span className="material-symbols-outlined text-primary text-sm">person_search</span>
-                  ACTIVE CLIENTS
-                </span>
-                <span className="bg-secondary/20 text-secondary px-2 rounded-full text-[8px] font-mono font-bold">24 ONLINE</span>
-              </h4>
-              <div className="space-y-3">
-                <div className="flex items-center gap-3">
-                  <div className="relative">
-                    <img className="w-8 h-8 rounded-full border border-white/10" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCEHLKDfW5_ICUaTDwe0buXxEHlmTw5kgq9uNtVHCOrqiWx4k5bZvESEPVBT8uWQvqyaelKYFWI0KCQKdrcLPSECAtxNtu9FFMl7ZiJkCw9lO0m5evkUqlSqtCNLJLpGF8G4DxXTdMDg5aBPilORCIhS77U6S0t6dUffanedV3FEmHqS9wakzvsTGXB4lkSq_5qvXeOf7oYZCF74WfB-v3DT2NyMSu1tLNsNplpOxS9mhFCtYIjq4SX" alt="m.chen profile" />
-                    <span className="absolute bottom-0 right-0 w-2 h-2 bg-secondary rounded-full border border-surface-container"></span>
-                  </div>
-                  <div className="flex-1 min-width-0">
-                    <p className="text-xs font-bold truncate">m.chen</p>
-                    <p className="text-[9px] text-outline truncate">Investigating Case #821</p>
-                  </div>
-                  <span className="text-[9px] text-outline">2m ago</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="relative">
-                    <img className="w-8 h-8 rounded-full border border-white/10" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDFzj_tdRqzIkKS5c_GZWVwh1FUAqIwIVqHbL8gAU5aFYY71LQeN1c4x3EyNfaP3m6IotZtvwiKYANvuVHBeXKiLbuWOER6TaMCu1iUObBK9iSN4RFUZhwNHWpv2YdGwjZIwLwTXiAs8IZXwCf870KNMvAMnJBRUbUIkt7orwCeArqUU0ZcBTsfnGetnjpDuHnZ7YDypkxVwFQDCezBscQOBxQNO7F0-MqOa42lN6XSRK7GHnmF1v9k" alt="d.wright profile" />
-                    <span className="absolute bottom-0 right-0 w-2 h-2 bg-secondary rounded-full border border-surface-container"></span>
-                  </div>
-                  <div className="flex-1 min-width-0">
-                    <p className="text-xs font-bold truncate">d.wright</p>
-                    <p className="text-[9px] text-outline truncate">Exporting Global Logs</p>
-                  </div>
-                  <span className="text-[9px] text-outline">14m ago</span>
-                </div>
-                <button className="w-full py-2 bg-surface-bright/50 rounded-lg text-[9px] font-bold text-outline uppercase hover:text-white transition-colors">
-                  View All Sessions
-                </button>
-              </div>
-            </section>
-
-            {/* Recent Critical Events Alerts */}
-            <section className="glass-panel rounded-xl p-4">
-              <h4 className="text-xs font-bold text-outline uppercase tracking-widest mb-4 flex items-center gap-2">
-                <span className="material-symbols-outlined text-tertiary text-sm">notifications_active</span>
-                CRITICAL LOG Telemetry
-              </h4>
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-[10px] p-2 hover:bg-white/5 rounded transition-colors group">
-                  <span className="w-1.5 h-1.5 rounded-full bg-error"></span>
-                  <span className="font-semibold text-on-surface truncate">DB Connection Dropped</span>
-                  <span className="text-outline ml-auto text-[9px]">12:04</span>
-                </div>
-                <div className="flex items-center gap-2 text-[10px] p-2 hover:bg-white/5 rounded transition-colors group">
-                  <span className="w-1.5 h-1.5 rounded-full bg-tertiary"></span>
-                  <span className="font-semibold text-on-surface truncate">API Limit Exceeded</span>
-                  <span className="text-outline ml-auto text-[9px]">11:55</span>
-                </div>
-                <div className="flex items-center gap-2 text-[10px] p-2 hover:bg-white/5 rounded transition-colors group">
-                  <span className="w-1.5 h-1.5 rounded-full bg-error"></span>
-                  <span className="font-semibold text-on-surface truncate">Unauthorized Shell Access</span>
-                  <span className="text-outline ml-auto text-[9px]">10:42</span>
+                <div className="bg-white/5 border border-white/5 p-3.5 rounded-lg text-left">
+                  <p className="text-[11px] font-bold text-[#cbd5e1]">Credential Scan Drill</p>
+                  <p className="text-[10.5px] text-[#cbd5e1]/50 mt-1 leading-snug">User 's.keller' adjusted system config keys outside core hours.</p>
                 </div>
               </div>
             </section>
@@ -689,43 +893,116 @@ export default function AuditLogs() {
 
         </div>
 
-        {/* Audit Compliance & Statistics Footer */}
-        <footer className="h-16 glass-panel flex items-center justify-between px-6 bg-surface-container-low/80 rounded-xl">
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-2 text-xs">
-              <span className="material-symbols-outlined text-secondary text-sm">verified</span>
-              <span className="text-outline">Compliance Status:</span>
-              <span className="font-bold text-on-surface">SOC2 TYPE II COMPLIANT</span>
+      </div>
+
+      {/* Details View Modal */}
+      {selectedLog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-filter backdrop-blur-sm select-none p-4">
+          <div className="glass-panel w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden border border-white/10">
+            <div className="px-6 py-4 bg-white/[0.02] border-b border-white/5 flex justify-between items-center text-white">
+              <h3 className="font-bold text-sm uppercase tracking-wider text-[#47faf3] flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#47faf3] animate-pulse"></span>
+                Audit Details: {selectedLog.logId || selectedLog.eventId}
+              </h3>
+              <button 
+                type="button" 
+                onClick={() => { setSelectedLog(null); setDeleteConfirmId(null); }}
+                className="p-1 hover:bg-white/10 rounded-full text-[#cbd5e1] hover:text-white transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
-            <div className="hidden sm:block h-4 w-[1px] bg-white/10"></div>
-            <div className="hidden sm:flex items-center gap-2 text-xs">
-              <span className="material-symbols-outlined text-primary text-sm">history_edu</span>
-              <span className="text-outline">Last Export:</span>
-              <span className="font-bold text-on-surface">2 hours ago (CSV)</span>
-            </div>
-          </div>
-          <div className="flex items-center gap-6">
-            <div className="hidden md:flex gap-4 items-center">
-              <span className="text-[10px] uppercase font-bold tracking-widest text-outline">Audit Volume (24h)</span>
-              <div className="flex gap-0.5 items-end h-6">
-                <div className="w-1.5 bg-secondary/20 h-[30%]"></div>
-                <div className="w-1.5 bg-secondary/30 h-[45%]"></div>
-                <div className="w-1.5 bg-secondary/40 h-[60%]"></div>
-                <div className="w-1.5 bg-secondary/50 h-[80%]"></div>
-                <div className="w-1.5 bg-secondary/30 h-[50%]"></div>
-                <div className="w-1.5 bg-secondary/40 h-[70%]"></div>
-                <div className="w-1.5 bg-secondary/60 h-[95%]"></div>
-                <div className="w-1.5 bg-secondary h-[85%]"></div>
-                <div className="w-1.5 bg-secondary/40 h-[40%]"></div>
+
+            <div className="p-6 space-y-4 text-left text-xs max-h-[450px] overflow-y-auto custom-scrollbar">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <span className="text-[#cbd5e1]/45 text-[9px] uppercase tracking-wider font-bold">Timestamp (UTC)</span>
+                  <p className="text-white font-mono font-semibold">{formatDate(selectedLog.timestamp)}</p>
+                </div>
+                <div className="space-y-1">
+                  <span className="text-[#cbd5e1]/45 text-[9px] uppercase tracking-wider font-bold">Action Event</span>
+                  <p className="text-white font-semibold">{selectedLog.action}</p>
+                </div>
+                <div className="space-y-1">
+                  <span className="text-[#cbd5e1]/45 text-[9px] uppercase tracking-wider font-bold">Operator Profile</span>
+                  <p className="text-white font-bold">{selectedLog.user} ({selectedLog.role})</p>
+                </div>
+                <div className="space-y-1">
+                  <span className="text-[#cbd5e1]/45 text-[9px] uppercase tracking-wider font-bold">Source Session IP</span>
+                  <p className="text-white font-mono font-semibold">{selectedLog.ipAddress || selectedLog.ip}</p>
+                </div>
+                <div className="space-y-1">
+                  <span className="text-[#cbd5e1]/45 text-[9px] uppercase tracking-wider font-bold">Module Path</span>
+                  <p className="text-[#3b82f6] font-mono font-bold">{selectedLog.module}</p>
+                </div>
+                <div className="space-y-1">
+                  <span className="text-[#cbd5e1]/45 text-[9px] uppercase tracking-wider font-bold">Affected Resource</span>
+                  <p className="text-white font-semibold">{selectedLog.resource || 'Global'}</p>
+                </div>
+                <div className="space-y-1">
+                  <span className="text-[#cbd5e1]/45 text-[9px] uppercase tracking-wider font-bold">Client User-Agent</span>
+                  <p className="text-[#cbd5e1] font-mono">{selectedLog.browser || 'Chrome 122'} ({selectedLog.device || 'desktop'})</p>
+                </div>
+                <div className="space-y-1">
+                  <span className="text-[#cbd5e1]/45 text-[9px] uppercase tracking-wider font-bold">Execution Severity</span>
+                  <p className="text-white">
+                    <span className={severityStyles[selectedLog.severity] || severityStyles.Low}>
+                      {selectedLog.severity}
+                    </span>
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-1 border-t border-white/5 pt-3">
+                <span className="text-[#cbd5e1]/45 text-[9px] uppercase tracking-wider font-bold">Action Description</span>
+                <p className="text-[#cbd5e1]/80 leading-relaxed font-semibold bg-black/30 p-3 rounded-lg border border-white/5">
+                  {selectedLog.description || 'No detailed diagnostic description documented for this compliance event.'}
+                </p>
+              </div>
+
+              <div className="border-t border-white/5 pt-4 flex justify-between items-center gap-3">
+                {deleteConfirmId === selectedLog.logId ? (
+                  <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/20 p-2 rounded-lg">
+                    <span className="text-[10px] text-red-400 font-bold">Confirm logs removal?</span>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteLog(selectedLog.logId)}
+                      className="px-2.5 py-1 bg-red-500 hover:bg-red-600 text-white rounded text-[10px] font-bold"
+                    >
+                      Yes, Delete
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDeleteConfirmId(null)}
+                      className="px-2.5 py-1 bg-white/10 hover:bg-white/20 text-white rounded text-[10px] font-bold"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setDeleteConfirmId(selectedLog.logId)}
+                    className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-white border border-red-500/20 hover:border-red-500 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Purge Entry
+                  </button>
+                )}
+                
+                <button
+                  type="button"
+                  onClick={() => { setSelectedLog(null); setDeleteConfirmId(null); }}
+                  className="px-4 py-1.5 bg-white/5 hover:bg-white/10 text-white rounded-lg text-xs font-bold border border-white/5 transition-colors"
+                >
+                  Close panel
+                </button>
               </div>
             </div>
-            <button className="bg-surface-bright px-3 py-1.5 rounded text-[10px] font-bold text-on-surface hover:bg-surface-bright/80 transition-all border border-white/10">
-              Full Statistics
-            </button>
           </div>
-        </footer>
+        </div>
+      )}
 
-      </div>
     </div>
   );
 }

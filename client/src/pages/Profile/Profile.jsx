@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { authService } from '../../services/auth.service';
 
 export default function Profile() {
   const navigate = useNavigate();
@@ -7,15 +8,26 @@ export default function Profile() {
   // Auth Guard check
   const hasSession = localStorage.getItem('isAuthenticated') === 'true';
 
-  useEffect(() => {
-    if (!hasSession) {
-      navigate('/login', { replace: true });
-    }
-  }, [hasSession, navigate]);
+  // Profile settings state inside profile page
+  const [profileTab, setProfileTab] = useState('activity'); // 'activity' | 'settings'
+  const [profileName, setProfileName] = useState(() => localStorage.getItem('operatorName') || 'Agent Sarah Vance');
+  const [profileEmail, setProfileEmail] = useState(() => localStorage.getItem('operatorEmail') || 'analyst@trace.local');
+  const [profileOrg, setProfileOrg] = useState(() => localStorage.getItem('operatorOrg') || 'TRACE Security Team');
+  const [profileRole, setProfileRole] = useState(() => localStorage.getItem('operatorRole') || 'Investigator');
+  const [profileErrors, setProfileErrors] = useState({});
+  const [profileFeedback, setProfileFeedback] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Interactive settings state inside profile page
-  const [twoFaStatus, setTwoFaStatus] = useState(true);
-  const [isDarkMode, setIsDarkMode] = useState(true);
+  // Password fields states
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [passwordErrors, setPasswordErrors] = useState({});
+  const [passwordFeedback, setPasswordFeedback] = useState(false);
+
   const [aiExpanded, setAiExpanded] = useState(false);
   const [copiedCase, setCopiedCase] = useState(null);
 
@@ -29,12 +41,101 @@ export default function Profile() {
   // Action feedback alert
   const [feedback, setFeedback] = useState('');
 
-  if (!hasSession) return null;
-
   // Helper to trigger feedback popups
   const showFeedback = (msg) => {
     setFeedback(msg);
     setTimeout(() => setFeedback(''), 3000);
+  };
+
+  // Fetch operator profile on mount
+  useEffect(() => {
+    if (!hasSession) {
+      navigate('/login', { replace: true });
+      return;
+    }
+
+    const fetchProfile = async () => {
+      try {
+        setIsLoading(true);
+        const data = await authService.getProfile();
+        const user = data.data;
+        if (user) {
+          setProfileName(user.fullName || '');
+          setProfileEmail(user.email || '');
+          setProfileOrg(user.department || '');
+          setProfileRole(user.role || 'Analyst');
+        }
+      } catch (err) {
+        console.error('Failed to load profile:', err);
+        showFeedback('Session expired. Redirecting to login...');
+        setTimeout(() => {
+          navigate('/login', { replace: true });
+        }, 1500);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchProfile();
+  }, [hasSession, navigate]);
+
+  const handleSaveProfile = async (e) => {
+    e.preventDefault();
+    const tempErrors = {};
+    if (!profileName.trim()) tempErrors.name = 'Profile name is required';
+    if (!profileEmail.trim()) {
+      tempErrors.email = 'Email address is required';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(profileEmail.trim())) {
+      tempErrors.email = 'Please provide a valid email format';
+    }
+    if (!profileOrg.trim()) tempErrors.org = 'Organization is required';
+
+    if (Object.keys(tempErrors).length > 0) {
+      setProfileErrors(tempErrors);
+      return;
+    }
+
+    setProfileErrors({});
+    setIsLoading(true);
+    try {
+      await authService.updateProfile(profileName.trim(), profileOrg.trim());
+      setProfileFeedback(true);
+      showFeedback('Profile details updated successfully.');
+      setTimeout(() => setProfileFeedback(false), 2500);
+    } catch (err) {
+      showFeedback(err.message || 'Profile update failed.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSavePassword = (e) => {
+    e.preventDefault();
+    const tempErrors = {};
+    if (!currentPassword) tempErrors.current = 'Current password is required';
+    if (!newPassword) {
+      tempErrors.new = 'New password is required';
+    } else if (newPassword.length < 6) {
+      tempErrors.new = 'Password must contain at least 6 characters';
+    }
+    if (!confirmPassword) {
+      tempErrors.confirm = 'Confirm new password is required';
+    } else if (confirmPassword !== newPassword) {
+      tempErrors.confirm = 'Passwords must match';
+    }
+
+    if (Object.keys(tempErrors).length > 0) {
+      setPasswordErrors(tempErrors);
+      return;
+    }
+
+    setPasswordErrors({});
+    setPasswordFeedback(true);
+    setCurrentPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
+    showFeedback('Clearance key updated successfully.');
+    setTimeout(() => setPasswordFeedback(false), 2500);
   };
 
   const handleCopyCase = (caseId) => {
@@ -122,6 +223,12 @@ export default function Profile() {
       {/* Analyst Workspace Content Container */}
       <div className="p-8 w-full max-w-[1600px] mx-auto grid grid-cols-12 gap-6">
 
+        {/* Page Title Header */}
+        <div className="col-span-12 select-none mb-2 border-b border-white/5 pb-4">
+          <h1 className="font-display-lg text-4xl font-bold text-on-surface tracking-tight">Investigator Profile</h1>
+          <p className="text-on-surface-variant text-sm mt-1">Manage credentials, security clearance key, and monitor system assignments.</p>
+        </div>
+
         {/* COLUMN 1: Profile and Skills */}
         <div className="col-span-12 lg:col-span-4 flex flex-col gap-6">
           
@@ -134,8 +241,8 @@ export default function Profile() {
                 <div className="h-32 w-32 rounded-full border-2 border-secondary p-1 overflow-hidden glow-cyan">
                   <img 
                     className="w-full h-full object-cover rounded-full" 
-                    alt="Agent Sarah Vance" 
-                    src="https://lh3.googleusercontent.com/aida-public/AB6AXuBaXVL3S7rCv8b7YB0foSEEjtRdyUwWv1rgm83MY-3t0LDZ1fpdSf2tGv82_vkVj_3xQ5QRVP6vKqcFx2yO7c-rdc0MzdgiU9_5cuAcuS3_84lPSv40zlgyKE_kEOh-EdJ2vsJ61XQL2QEAxWRwjgga2jm_ZZiOdIH3xIC-3hGTETAA4P5eH6Q19blTNmEB1tzTJvpd1jGBckkkHe4lGNtlPdEq68RQEni7atyer4PgtjtCCIYYwvGW"
+                    alt={profileName} 
+                    src="/male_analyst_avatar.png"
                   />
                 </div>
                 <div className="absolute bottom-0 right-0 h-8 w-8 bg-surface-container-highest border border-white/10 rounded-full flex items-center justify-center text-secondary">
@@ -143,7 +250,7 @@ export default function Profile() {
                 </div>
               </div>
 
-              <h1 className="text-xl font-bold text-on-surface">Agent Sarah Vance</h1>
+              <h1 className="text-xl font-bold text-on-surface">{profileName}</h1>
               <p className="font-label-caps text-xs text-on-surface-variant tracking-[0.2em] mb-4">L4 Lead Investigator</p>
               
               <div className="flex flex-wrap justify-center gap-2">
@@ -222,122 +329,240 @@ export default function Profile() {
 
         </div>
 
-        {/* COLUMN 2: Activity Feed and Security toggles */}
+        {/* COLUMN 2: Activity Feed and Account Settings */}
         <div className="col-span-12 lg:col-span-5 flex flex-col gap-6">
           
-          {/* Timeline Activity Feed */}
-          <div className="glass-card rounded-xl p-6 flex-1 flex flex-col min-h-[420px] max-h-[500px]">
-            <h3 className="font-label-caps text-xs text-on-surface border-b border-white/5 pb-2 mb-4 flex items-center gap-2">
-              <span className="material-symbols-outlined text-[18px]">timeline</span>
-              Incident Activity Feed
-            </h3>
-
-            <div className="flex-1 space-y-6 relative overflow-y-auto custom-scrollbar pr-2 pt-2">
-              <div className="absolute left-[11px] top-2 bottom-2 w-px bg-gradient-to-b from-primary via-primary/20 to-transparent"></div>
-
-              {/* Timeline Item 1 */}
-              <div className="flex gap-4 relative">
-                <div className="h-6 w-6 rounded-full bg-primary-container border-4 border-background z-10 flex items-center justify-center">
-                  <div className="h-1.5 w-1.5 bg-white rounded-full animate-pulse"></div>
-                </div>
-                <div>
-                  <p className="text-on-surface font-semibold text-sm">Incident #TR-8821 Closed</p>
-                  <p className="text-on-surface-variant text-xs mt-0.5">Threat neutralized. Data exfiltration prevented at node 44.</p>
-                  <span className="text-[9px] font-label-caps text-on-surface-variant/50 block mt-1">2 MINS AGO</span>
-                </div>
-              </div>
-
-              {/* Timeline Item 2 */}
-              <div className="flex gap-4 relative">
-                <div className="h-6 w-6 rounded-full bg-surface-container-highest border-4 border-background z-10 flex items-center justify-center">
-                  <div className="h-1.5 w-1.5 bg-on-surface-variant rounded-full"></div>
-                </div>
-                <div>
-                  <p className="text-on-surface font-semibold text-sm">Report Exported</p>
-                  <p className="text-on-surface-variant text-xs mt-0.5">Full forensic chain-of-custody report generated for legal review.</p>
-                  <span className="text-[9px] font-label-caps text-on-surface-variant/50 block mt-1">1 HOUR AGO</span>
-                </div>
-              </div>
-
-              {/* Timeline Item 3 */}
-              <div className="flex gap-4 relative">
-                <div className="h-6 w-6 rounded-full bg-secondary border-4 border-background z-10 flex items-center justify-center">
-                  <div className="h-1.5 w-1.5 bg-on-secondary rounded-full"></div>
-                </div>
-                <div>
-                  <p className="text-on-surface font-semibold text-sm">Evidence Verified</p>
-                  <p className="text-on-surface-variant text-xs mt-0.5">Memory dump hash SHA-256 validated against primary storage.</p>
-                  <span className="text-[9px] font-label-caps text-on-surface-variant/50 block mt-1">4 HOURS AGO</span>
-                </div>
-              </div>
-
-              {/* Timeline Item 4 */}
-              <div className="flex gap-4 relative opacity-60">
-                <div className="h-6 w-6 rounded-full bg-surface-container-highest border-4 border-background z-10 flex items-center justify-center">
-                  <div className="h-1.5 w-1.5 bg-on-surface-variant rounded-full"></div>
-                </div>
-                <div>
-                  <p className="text-on-surface font-semibold text-sm">Security Level Elevate</p>
-                  <p className="text-on-surface-variant text-xs mt-0.5">Regional access control adjusted to DEFCON 3.</p>
-                  <span className="text-[9px] font-label-caps text-on-surface-variant/50 block mt-1">YESTERDAY</span>
-                </div>
-              </div>
-
-            </div>
+          {/* Tab Selection Navigation */}
+          <div className="flex gap-2 border-b border-white/5 pb-2">
+            <button
+              type="button"
+              className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all ${
+                profileTab === 'activity'
+                  ? 'bg-secondary/10 text-[#47FAF3] border border-secondary/30'
+                  : 'text-outline hover:text-white'
+              }`}
+              onClick={() => setProfileTab('activity')}
+            >
+              Incident Activity
+            </button>
+            <button
+              type="button"
+              className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all ${
+                profileTab === 'settings'
+                  ? 'bg-secondary/10 text-[#47FAF3] border border-secondary/30'
+                  : 'text-outline hover:text-white'
+              }`}
+              onClick={() => setProfileTab('settings')}
+            >
+              Account Management
+            </button>
           </div>
 
-          {/* Security & Preferences Widgets */}
-          <div className="grid grid-cols-2 gap-4">
-            
-            {/* 2FA Widget */}
-            <div className="glass-card rounded-xl p-4 flex items-center justify-between hover:border-primary/30 transition-all">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
-                  <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>enhanced_encryption</span>
-                </div>
-                <div>
-                  <h4 className="font-label-caps text-[10px] text-on-surface">2FA STATUS</h4>
-                  <p className="text-secondary text-xs font-bold mt-0.5">{twoFaStatus ? 'Active' : 'Inactive'}</p>
-                </div>
-              </div>
-              <label className="switch-toggle-profile">
-                <input 
-                  type="checkbox" 
-                  checked={twoFaStatus} 
-                  onChange={(e) => {
-                    setTwoFaStatus(e.target.checked);
-                    showFeedback(`2FA status updated to ${e.target.checked ? 'Active' : 'Inactive'}.`);
-                  }} 
-                />
-                <span className="slider-profile"></span>
-              </label>
-            </div>
+          {profileTab === 'activity' ? (
+            /* Timeline Activity Feed */
+            <div className="glass-card rounded-xl p-6 flex-1 flex flex-col min-h-[420px] max-h-[500px]">
+              <h3 className="font-label-caps text-xs text-on-surface border-b border-white/5 pb-2 mb-4 flex items-center gap-2">
+                <span className="material-symbols-outlined text-[18px]">timeline</span>
+                Incident Activity Feed
+              </h3>
 
-            {/* Theme Widget */}
-            <div className="glass-card rounded-xl p-4 flex items-center justify-between hover:border-primary/30 transition-all">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-on-surface-variant/10 flex items-center justify-center text-on-surface-variant">
-                  <span className="material-symbols-outlined">dark_mode</span>
-                </div>
-                <div>
-                  <h4 className="font-label-caps text-[10px] text-on-surface">THEME</h4>
-                  <p className="text-on-surface-variant text-xs font-bold mt-0.5">{isDarkMode ? 'Dark Mode' : 'Light Mode'}</p>
-                </div>
-              </div>
-              <label className="switch-toggle-profile">
-                <input 
-                  type="checkbox" 
-                  checked={isDarkMode} 
-                  onChange={(e) => {
-                    setIsDarkMode(e.target.checked);
-                    showFeedback(`Theme preference updated to ${e.target.checked ? 'Dark' : 'Light'}.`);
-                  }} 
-                />
-                <span className="slider-profile"></span>
-              </label>
-            </div>
+              <div className="flex-1 space-y-6 relative overflow-y-auto custom-scrollbar pr-2 pt-2">
+                <div className="absolute left-[11px] top-2 bottom-2 w-px bg-gradient-to-b from-primary via-primary/20 to-transparent"></div>
 
-          </div>
+                {/* Timeline Item 1 */}
+                <div className="flex gap-4 relative">
+                  <div className="h-6 w-6 rounded-full bg-primary-container border-4 border-background z-10 flex items-center justify-center">
+                    <div className="h-1.5 w-1.5 bg-white rounded-full animate-pulse"></div>
+                  </div>
+                  <div>
+                    <p className="text-on-surface font-semibold text-sm">Incident #TR-8821 Closed</p>
+                    <p className="text-on-surface-variant text-xs mt-0.5">Threat neutralized. Data exfiltration prevented at node 44.</p>
+                    <span className="text-[9px] font-label-caps text-on-surface-variant/50 block mt-1">2 MINS AGO</span>
+                  </div>
+                </div>
+
+                {/* Timeline Item 2 */}
+                <div className="flex gap-4 relative">
+                  <div className="h-6 w-6 rounded-full bg-surface-container-highest border-4 border-background z-10 flex items-center justify-center">
+                    <div className="h-1.5 w-1.5 bg-on-surface-variant rounded-full"></div>
+                  </div>
+                  <div>
+                    <p className="text-on-surface font-semibold text-sm">Report Exported</p>
+                    <p className="text-on-surface-variant text-xs mt-0.5">Full forensic chain-of-custody report generated for legal review.</p>
+                    <span className="text-[9px] font-label-caps text-on-surface-variant/50 block mt-1">1 HOUR AGO</span>
+                  </div>
+                </div>
+
+                {/* Timeline Item 3 */}
+                <div className="flex gap-4 relative">
+                  <div className="h-6 w-6 rounded-full bg-secondary border-4 border-background z-10 flex items-center justify-center">
+                    <div className="h-1.5 w-1.5 bg-on-secondary rounded-full"></div>
+                  </div>
+                  <div>
+                    <p className="text-on-surface font-semibold text-sm">Evidence Verified</p>
+                    <p className="text-on-surface-variant text-xs mt-0.5">Memory dump hash SHA-256 validated against primary storage.</p>
+                    <span className="text-[9px] font-label-caps text-on-surface-variant/50 block mt-1">4 HOURS AGO</span>
+                  </div>
+                </div>
+
+                {/* Timeline Item 4 */}
+                <div className="flex gap-4 relative opacity-60">
+                  <div className="h-6 w-6 rounded-full bg-surface-container-highest border-4 border-background z-10 flex items-center justify-center">
+                    <div className="h-1.5 w-1.5 bg-on-surface-variant rounded-full"></div>
+                  </div>
+                  <div>
+                    <p className="text-on-surface font-semibold text-sm">Security Level Elevate</p>
+                    <p className="text-on-surface-variant text-xs mt-0.5">Regional access control adjusted to DEFCON 3.</p>
+                    <span className="text-[9px] font-label-caps text-on-surface-variant/50 block mt-1">YESTERDAY</span>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          ) : (
+            /* Account Settings Card stack */
+            <div className="flex flex-col gap-6 overflow-y-auto custom-scrollbar max-h-[600px] pr-2">
+              
+              {/* Profile Details Form */}
+              <div className="glass-card rounded-xl p-6 flex flex-col gap-4">
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                  <span className="material-symbols-outlined text-[18px]">account_circle</span>
+                  Profile Information
+                </h3>
+                <form onSubmit={handleSaveProfile} className="space-y-4" noValidate>
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="profile-name" className="text-xs font-semibold text-[#cbd5e1] uppercase tracking-wider">Operator Name</label>
+                    <input
+                      id="profile-name"
+                      type="text"
+                      className="trace-settings-text-input"
+                      value={profileName}
+                      onChange={(e) => setProfileName(e.target.value)}
+                      required
+                    />
+                    {profileErrors.name && <span className="text-xs text-error">{profileErrors.name}</span>}
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="profile-email" className="text-xs font-semibold text-[#cbd5e1] uppercase tracking-wider">Email Address</label>
+                    <input
+                      id="profile-email"
+                      type="email"
+                      className="trace-settings-text-input"
+                      value={profileEmail}
+                      onChange={(e) => setProfileEmail(e.target.value)}
+                      required
+                    />
+                    {profileErrors.email && <span className="text-xs text-error">{profileErrors.email}</span>}
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="profile-org" className="text-xs font-semibold text-[#cbd5e1] uppercase tracking-wider">Organization</label>
+                    <input
+                      id="profile-org"
+                      type="text"
+                      className="trace-settings-text-input"
+                      value={profileOrg}
+                      onChange={(e) => setProfileOrg(e.target.value)}
+                      required
+                    />
+                    {profileErrors.org && <span className="text-xs text-error">{profileErrors.org}</span>}
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-semibold text-[#cbd5e1] uppercase tracking-wider">Clearance Role</label>
+                    <input
+                      type="text"
+                      className="trace-settings-text-input opacity-60 cursor-not-allowed"
+                      value={profileRole}
+                      disabled
+                      readOnly
+                    />
+                  </div>
+                  <button type="submit" className="w-full mt-2 btn-primary">
+                    Save Profile Details
+                  </button>
+                </form>
+              </div>
+
+              {/* Password update form */}
+              <div className="glass-card rounded-xl p-6 flex flex-col gap-4">
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                  <span className="material-symbols-outlined text-[18px]">lock</span>
+                  Update Clearance Key
+                </h3>
+                <form onSubmit={handleSavePassword} className="space-y-4" noValidate>
+                  <div className="flex flex-col gap-1.5 relative">
+                    <label htmlFor="current-pwd" className="text-xs font-semibold text-[#cbd5e1] uppercase tracking-wider">Current Password</label>
+                    <div className="relative flex items-center w-full">
+                      <input
+                        id="current-pwd"
+                        type={showCurrent ? 'text' : 'password'}
+                        className="trace-settings-text-input pr-12"
+                        value={currentPassword}
+                        onChange={(e) => setCurrentPassword(e.target.value)}
+                        required
+                      />
+                      <button
+                        type="button"
+                        className="trace-settings-pwd-toggle-btn"
+                        onClick={() => setShowCurrent(!showCurrent)}
+                      >
+                        {showCurrent ? 'Hide' : 'Show'}
+                      </button>
+                    </div>
+                    {passwordErrors.current && <span className="text-xs text-error">{passwordErrors.current}</span>}
+                  </div>
+                  
+                  <div className="flex flex-col gap-1.5 relative">
+                    <label htmlFor="new-pwd" className="text-xs font-semibold text-[#cbd5e1] uppercase tracking-wider">New Password</label>
+                    <div className="relative flex items-center w-full">
+                      <input
+                        id="new-pwd"
+                        type={showNew ? 'text' : 'password'}
+                        className="trace-settings-text-input pr-12"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        required
+                      />
+                      <button
+                        type="button"
+                        className="trace-settings-pwd-toggle-btn"
+                        onClick={() => setShowNew(!showNew)}
+                      >
+                        {showNew ? 'Hide' : 'Show'}
+                      </button>
+                    </div>
+                    {passwordErrors.new && <span className="text-xs text-error">{passwordErrors.new}</span>}
+                  </div>
+
+                  <div className="flex flex-col gap-1.5 relative">
+                    <label htmlFor="confirm-pwd" className="text-xs font-semibold text-[#cbd5e1] uppercase tracking-wider">Confirm New Password</label>
+                    <div className="relative flex items-center w-full">
+                      <input
+                        id="confirm-pwd"
+                        type={showConfirm ? 'text' : 'password'}
+                        className="trace-settings-text-input pr-12"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        required
+                      />
+                      <button
+                        type="button"
+                        className="trace-settings-pwd-toggle-btn"
+                        onClick={() => setShowConfirm(!showConfirm)}
+                      >
+                        {showConfirm ? 'Hide' : 'Show'}
+                      </button>
+                    </div>
+                    {passwordErrors.confirm && <span className="text-xs text-error">{passwordErrors.confirm}</span>}
+                  </div>
+
+                  <button type="submit" className="w-full mt-2 btn-primary">
+                    Update Clearance Key
+                  </button>
+                </form>
+              </div>
+
+            </div>
+          )}
 
         </div>
 

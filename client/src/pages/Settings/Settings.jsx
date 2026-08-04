@@ -2,6 +2,22 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth } from '../../services/firebase';
 import { signOut } from 'firebase/auth';
+import { settingsService } from '../../services/settings.service';
+import { 
+  Shield, 
+  Loader2, 
+  Save, 
+  RotateCcw,
+  Building,
+  Key,
+  Mail,
+  Brain,
+  Bell,
+  Palette,
+  Eye,
+  Lock,
+  LogOut
+} from 'lucide-react';
 
 export default function Settings() {
   const navigate = useNavigate();
@@ -15,106 +31,110 @@ export default function Settings() {
     }
   }, [hasSession, navigate]);
 
-  // Active Tab state: default is 'Security' matching the Stitch design state
-  const [activeTab, setActiveTab] = useState('Security');
+  // Active Tab state: default matches first category
+  const [activeTab, setActiveTab] = useState('Organization');
 
-  // General Tab - Profile States
-  const [profileName, setProfileName] = useState('Security Analyst');
-  const [profileEmail, setProfileEmail] = useState('analyst@trace.local');
-  const [profileOrg, setProfileOrg] = useState('TRACE Security Team');
-  const profileRole = 'Investigator'; // Read-only
-  const [profileFeedback, setProfileFeedback] = useState(false);
-  const [profileErrors, setProfileErrors] = useState({});
+  // Loading, saving, feedback states
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState(null);
+  const [toastMsg, setToastMsg] = useState('');
 
-  // General Tab - Password fields states
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [showCurrent, setShowCurrent] = useState(false);
-  const [showNew, setShowNew] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
-  const [passwordFeedback, setPasswordFeedback] = useState(false);
-  const [passwordErrors, setPasswordErrors] = useState({});
+  // Local settings state matching Mongoose fields
+  const [settings, setSettings] = useState({
+    organization: { companyName: '', contactEmail: '', timezone: '' },
+    security: { mfaEnabled: true, inactivityTimeout: 45 },
+    authentication: { allowOAuth: false, ssoProvider: 'None' },
+    email: { smtpHost: '', smtpPort: 587, smtpUser: '', useTls: true },
+    aiConfiguration: { aiSensitivity: 8, confidenceThreshold: 92 },
+    notifications: { emailAlerts: true, slackWebhook: '', webPushEnabled: true },
+    theme: { isDark: true, primaryColor: '#0070f3' },
+    appearance: { density: 'Compact', sidebarCollapsed: false },
+    passwordPolicy: { pwSpecial: true, pwNumeric: true, pwHistory: false, minLength: 8 }
+  });
 
-  // Security Tab States
-  const [mfaEnabled, setMfaEnabled] = useState(true);
-  const [inactivityTimeout, setInactivityTimeout] = useState(45);
-  const [pwSpecial, setPwSpecial] = useState(true);
-  const [pwNumeric, setPwNumeric] = useState(true);
-  const [pwHistory, setPwHistory] = useState(false);
-  const [aiSensitivity, setAiSensitivity] = useState(8);
-  const [confidenceThreshold, setConfidenceThreshold] = useState(92);
-  const [settingsFeedback, setSettingsFeedback] = useState(false);
+  const fetchSettings = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const data = await settingsService.getSettings();
+      setSettings(data);
+    } catch (err) {
+      console.error('[Settings] Fetch failure:', err);
+      setError(err.message || 'Failed to download platform configuration.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (hasSession) {
+      fetchSettings();
+    }
+  }, [hasSession]);
 
   if (!hasSession) return null;
 
-  // Save profile information handler
-  const handleSaveProfile = (e) => {
-    e.preventDefault();
-
-    const tempErrors = {};
-    if (!profileName.trim()) tempErrors.name = 'Profile name is required';
-    
-    const emailTrim = profileEmail.trim();
-    if (!emailTrim) {
-      tempErrors.email = 'Email address is required';
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrim)) {
-      tempErrors.email = 'Please provide a valid email format';
-    }
-
-    if (!profileOrg.trim()) tempErrors.org = 'Organization is required';
-
-    if (Object.keys(tempErrors).length > 0) {
-      setProfileErrors(tempErrors);
-      return;
-    }
-
-    setProfileErrors({});
-    setProfileFeedback(true);
-    setTimeout(() => {
-      setProfileFeedback(false);
-    }, 2500);
+  // Safe field update handler for deep nested values
+  const handleFieldChange = (category, field, value) => {
+    setSettings(prev => ({
+      ...prev,
+      [category]: {
+        ...prev[category],
+        [field]: value
+      }
+    }));
   };
 
-  // Change password handler
-  const handleSavePassword = (e) => {
-    e.preventDefault();
-
-    const tempErrors = {};
-    if (!currentPassword) tempErrors.current = 'Current password is required';
-    if (!newPassword) {
-      tempErrors.new = 'New password is required';
-    } else if (newPassword.length < 8) {
-      tempErrors.new = 'New password must contain at least 8 characters';
+  // PUT changes trigger
+  const handleSaveSettings = async () => {
+    try {
+      setIsSaving(true);
+      const data = await settingsService.updateSettings(settings);
+      setSettings(data);
+      triggerToast('Platform configurations successfully persisted.');
+    } catch (err) {
+      console.error('[Settings] Update failure:', err);
+      triggerToast(`Failed to update configurations: ${err.message}`);
+    } finally {
+      setIsSaving(false);
     }
-
-    if (!confirmPassword) {
-      tempErrors.confirm = 'Confirm new password is required';
-    } else if (confirmPassword !== newPassword) {
-      tempErrors.confirm = 'Confirm password must match the new password';
-    }
-
-    if (Object.keys(tempErrors).length > 0) {
-      setPasswordErrors(tempErrors);
-      return;
-    }
-
-    setPasswordErrors({});
-    setPasswordFeedback(true);
-    setCurrentPassword('');
-    setNewPassword('');
-    setConfirmPassword('');
-    setTimeout(() => {
-      setPasswordFeedback(false);
-    }, 2500);
   };
 
-  // Save changes handler for Security Tab settings
-  const handleSaveSecuritySettings = () => {
-    setSettingsFeedback(true);
-    setTimeout(() => {
-      setSettingsFeedback(false);
-    }, 2500);
+  // Restores baseline system defaults
+  const handleResetDefaults = async () => {
+    if (!window.confirm('Reset all security and system categories to default baselines?')) {
+      return;
+    }
+    const defaults = {
+      organization: { companyName: 'TRACE DFIR Labs', contactEmail: 'security@trace.local', timezone: 'UTC' },
+      security: { mfaEnabled: true, inactivityTimeout: 45 },
+      authentication: { allowOAuth: false, ssoProvider: 'None' },
+      email: { smtpHost: 'smtp.trace.local', smtpPort: 587, smtpUser: 'notifications@trace.local', useTls: true },
+      aiConfiguration: { aiSensitivity: 8, confidenceThreshold: 92 },
+      notifications: { emailAlerts: true, slackWebhook: '', webPushEnabled: true },
+      theme: { isDark: true, primaryColor: '#0070f3' },
+      appearance: { density: 'Compact', sidebarCollapsed: false },
+      passwordPolicy: { pwSpecial: true, pwNumeric: true, pwHistory: false, minLength: 8 }
+    };
+
+    try {
+      setIsSaving(true);
+      const data = await settingsService.updateSettings(defaults);
+      setSettings(data);
+      triggerToast('System settings restored to system defaults.');
+    } catch (err) {
+      console.error('[Settings] Reset failure:', err);
+      triggerToast(`Failed to restore defaults: ${err.message}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Trigger transient message toast
+  const triggerToast = (msg) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(''), 3000);
   };
 
   // Logout session trigger
@@ -129,7 +149,7 @@ export default function Settings() {
     }
   };
 
-  // Helper to resolve AI sensitivity level description string
+  // AI sensitivity badge resolver
   const getSensitivityLabel = (val) => {
     if (val > 7) return 'HIGH';
     if (val > 4) return 'MEDIUM';
@@ -138,7 +158,7 @@ export default function Settings() {
 
   return (
     <div className="trace-settings-layout min-h-screen text-on-surface font-body-md grid-bg-settings selection:bg-secondary/30 selection:text-secondary">
-      {/* Component Inline Styles overrides */}
+      {/* Component CSS Overrides */}
       <style dangerouslySetInnerHTML={{
         __html: `
           .glass-panel {
@@ -198,7 +218,7 @@ export default function Settings() {
               transition: .4s;
               border-radius: 50%;
           }
-          input:checked + .slider { background-color: #0070f3; }
+          input:checked + .slider { background-color: #00E5FF; }
           input:checked + .slider:before { transform: translateX(22px); }
 
           .range-slider {
@@ -225,7 +245,7 @@ export default function Settings() {
               align-items: center;
               justify-content: space-between;
               width: 100%;
-              padding: 16px;
+              padding: 14px 16px;
               border-radius: 12px;
               background: transparent;
               border: 1px solid transparent;
@@ -236,10 +256,10 @@ export default function Settings() {
           }
           .trace-settings-sidebar-btn:hover {
               background-color: rgba(38, 42, 55, 0.5);
-              color: var(--primary, #aec6ff);
+              color: #00E5FF;
           }
           .trace-settings-sidebar-btn.active {
-              color: var(--secondary-fixed, #47faf3);
+              color: #47faf3;
               background-color: rgba(71, 250, 243, 0.05);
               border: 1px solid rgba(71, 250, 243, 0.2);
               font-weight: 700;
@@ -250,6 +270,7 @@ export default function Settings() {
               flex-direction: column;
               gap: 6px;
               box-sizing: border-box;
+              text-align: left;
           }
           .trace-settings-label-text {
               font-size: 0.8125rem;
@@ -270,424 +291,209 @@ export default function Settings() {
               transition: border-color 0.2s ease;
           }
           .trace-settings-text-input:focus {
-              border-color: var(--color-primary, #3b82f6);
-              box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.1);
+              border-color: #00E5FF;
+              box-shadow: 0 0 0 1px rgba(0, 229, 255, 0.1);
           }
           .trace-settings-text-input:disabled {
               opacity: 0.6;
               background-color: rgba(255, 255, 255, 0.015);
               cursor: not-allowed;
           }
-          .trace-settings-text-input.error {
-              border-color: var(--status-critical, #ef4444);
-              box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.15);
-          }
           
-          .trace-settings-pwd-toggle-btn {
-              position: absolute;
-              right: 12px;
-              background: transparent;
-              border: none;
-              color: var(--text-muted, #64748b);
-              cursor: pointer;
-              padding: 4px;
-              font-size: 0.725rem;
-              font-weight: 700;
+          .trace-settings-select {
+              width: 100%;
+              background-color: #0a0e1a;
+              border: 1px solid rgba(255, 255, 255, 0.08);
+              border-radius: 4px;
+              padding: 8px 12px;
+              color: #dfe2f3;
+              font-size: 0.875rem;
               outline: none;
-              text-transform: uppercase;
+              height: 38px;
+              cursor: pointer;
           }
-          .trace-settings-pwd-toggle-btn:hover {
-              color: var(--on-surface, #dfe2f3);
+          .trace-settings-select:focus {
+              border-color: #00E5FF;
           }
         `
       }} />
 
-      {/* Workspace Wrapper */}
+      {/* Floating toast notification popup */}
+      {toastMsg && (
+        <div className="fixed top-20 right-6 z-50 bg-[#0f1425] border border-[#47faf3] text-[#47faf3] text-xs px-4 py-2.5 rounded-lg shadow-xl font-bold">
+          {toastMsg}
+        </div>
+      )}
+
+      {/* Workspace wrapper */}
       <div className="p-6 space-y-6">
 
         {/* Page Title Header with Quick Actions */}
-        <div className="flex justify-between items-end mb-6">
+        <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-end gap-4 mb-6 text-left">
           <div>
             <h2 className="text-2xl font-bold text-on-surface">Settings &amp; Administration</h2>
-            <p className="text-sm text-on-surface-variant mt-1">Configure global platform security, AI models, and enterprise integrations.</p>
+            <p className="text-sm text-[#cbd5e1]/60 mt-1">Configure global platform security, email triggers, and AI engines.</p>
           </div>
-          <div className="flex items-center gap-3">
-            {settingsFeedback && (
-              <span className="text-xs text-secondary font-bold mr-2 animate-pulse">
-                Changes saved successfully.
-              </span>
-            )}
+          
+          <div className="flex items-center gap-3 justify-end">
             <button 
-              onClick={() => {
-                setMfaEnabled(true);
-                setInactivityTimeout(45);
-                setPwSpecial(true);
-                setPwNumeric(true);
-                setPwHistory(false);
-                setAiSensitivity(8);
-                setConfidenceThreshold(92);
-              }}
-              className="px-5 py-2 rounded-lg border border-outline/30 text-on-surface font-medium hover:bg-surface-bright transition-all text-sm"
+              onClick={handleResetDefaults}
+              disabled={isLoading || isSaving}
+              className="flex items-center gap-1.5 px-4 py-2 btn-secondary text-xs h-9"
             >
+              <RotateCcw className="w-3.5 h-3.5" />
               Reset Defaults
             </button>
             <button 
-              onClick={handleSaveSecuritySettings}
-              className="px-5 py-2 rounded-lg neo-button text-white font-bold shadow-lg shadow-primary/20 text-sm"
+              onClick={handleSaveSettings}
+              disabled={isLoading || isSaving}
+              className="flex items-center gap-1.5 px-4 py-2 btn-primary text-xs h-9"
             >
+              {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
               Save Changes
             </button>
           </div>
         </div>
 
-        <div className="grid grid-cols-12 gap-6 items-start">
-          
-          {/* Settings Tab Sidebar Navigation */}
-          <nav className="col-span-12 lg:col-span-3 flex flex-col gap-1.5">
-            <button 
-              onClick={() => setActiveTab('General')}
-              className={`trace-settings-sidebar-btn ${activeTab === 'General' ? 'active' : ''}`}
-            >
-              <div className="flex items-center gap-3">
-                <span className="material-symbols-outlined">tune</span>
-                <span className="font-medium text-sm">General Profile</span>
-              </div>
-              <span className="material-symbols-outlined text-sm">chevron_right</span>
+        {/* Loading Skeletons */}
+        {isLoading ? (
+          <div className="grid grid-cols-12 gap-6 items-start animate-pulse">
+            <div className="col-span-12 lg:col-span-3 space-y-2">
+              {Array.from({ length: 9 }).map((_, i) => (
+                <div key={i} className="h-11 bg-white/5 rounded-xl"></div>
+              ))}
+            </div>
+            <div className="col-span-12 lg:col-span-9 h-96 bg-white/5 rounded-2xl"></div>
+          </div>
+        ) : error ? (
+          <div className="glass-panel p-8 text-center text-red-400 rounded-2xl">
+            <p className="text-sm font-semibold">Error retrieving settings: {error}</p>
+            <button onClick={fetchSettings} className="mt-4 px-4 py-2 bg-red-400/20 text-red-400 border border-red-400/30 rounded text-xs">
+              Retry Load
             </button>
-
-            <button 
-              onClick={() => setActiveTab('Appearance')}
-              className={`trace-settings-sidebar-btn ${activeTab === 'Appearance' ? 'active' : ''}`}
-            >
-              <div className="flex items-center gap-3">
-                <span className="material-symbols-outlined">palette</span>
-                <span className="font-medium text-sm">Appearance</span>
-              </div>
-              <span className="material-symbols-outlined text-sm">chevron_right</span>
-            </button>
-
-            <button 
-              onClick={() => setActiveTab('Security')}
-              className={`trace-settings-sidebar-btn ${activeTab === 'Security' ? 'active' : ''}`}
-            >
-              <div className="flex items-center gap-3">
-                <span className="material-symbols-outlined">admin_panel_settings</span>
-                <span className="font-medium text-sm">Security &amp; AI</span>
-              </div>
-              <span className="material-symbols-outlined text-sm">chevron_right</span>
-            </button>
-
-            <button 
-              onClick={() => setActiveTab('UserManagement')}
-              className={`trace-settings-sidebar-btn ${activeTab === 'UserManagement' ? 'active' : ''}`}
-            >
-              <div className="flex items-center gap-3">
-                <span className="material-symbols-outlined">group</span>
-                <span className="font-medium text-sm">User Management</span>
-              </div>
-              <span className="material-symbols-outlined text-sm">chevron_right</span>
-            </button>
-
-            <button 
-              onClick={() => setActiveTab('Notifications')}
-              className={`trace-settings-sidebar-btn ${activeTab === 'Notifications' ? 'active' : ''}`}
-            >
-              <div className="flex items-center gap-3">
-                <span className="material-symbols-outlined">notifications_active</span>
-                <span className="font-medium text-sm">Notifications</span>
-              </div>
-              <span className="material-symbols-outlined text-sm">chevron_right</span>
-            </button>
-
-            <button 
-              onClick={() => setActiveTab('Integrations')}
-              className={`trace-settings-sidebar-btn ${activeTab === 'Integrations' ? 'active' : ''}`}
-            >
-              <div className="flex items-center gap-3">
-                <span className="material-symbols-outlined">hub</span>
-                <span className="font-medium text-sm">Marketplace Integrations</span>
-              </div>
-              <span className="material-symbols-outlined text-sm">chevron_right</span>
-            </button>
-
-            <button 
-              onClick={() => setActiveTab('ApiKeys')}
-              className={`trace-settings-sidebar-btn ${activeTab === 'ApiKeys' ? 'active' : ''}`}
-            >
-              <div className="flex items-center gap-3">
-                <span className="material-symbols-outlined">key</span>
-                <span className="font-medium text-sm">API Keys</span>
-              </div>
-              <span className="material-symbols-outlined text-sm">chevron_right</span>
-            </button>
-          </nav>
-
-          {/* Active Settings Panel Canvas */}
-          <div className="col-span-12 lg:col-span-9 space-y-6 pb-20">
-
-            {/* TAB CONTENT: General tab */}
-            {activeTab === 'General' && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                
-                {/* Profile Information Panel */}
-                <section className="glass-panel p-6 rounded-2xl flex flex-col gap-6">
+          </div>
+        ) : (
+          <div className="grid grid-cols-12 gap-6 items-start">
+            
+            {/* Sidebar Tabs */}
+            <nav className="col-span-12 lg:col-span-3 flex flex-col gap-1.5 select-none">
+              {[
+                { name: 'Organization', icon: <Building className="w-4 h-4" /> },
+                { name: 'Security', icon: <Shield className="w-4 h-4" /> },
+                { name: 'Authentication', icon: <Key className="w-4 h-4" /> },
+                { name: 'Email', icon: <Mail className="w-4 h-4" /> },
+                { name: 'AI Configuration', icon: <Brain className="w-4 h-4" /> },
+                { name: 'Notifications', icon: <Bell className="w-4 h-4" /> },
+                { name: 'Theme', icon: <Palette className="w-4 h-4" /> },
+                { name: 'Appearance', icon: <Eye className="w-4 h-4" /> },
+                { name: 'Password Policy', icon: <Lock className="w-4 h-4" /> }
+              ].map(t => (
+                <button 
+                  key={t.name}
+                  onClick={() => setActiveTab(t.name)}
+                  className={`trace-settings-sidebar-btn ${activeTab === t.name ? 'active' : ''}`}
+                >
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center text-primary">
-                      <span className="material-symbols-outlined">account_circle</span>
-                    </div>
-                    <h3 className="text-lg font-bold">Profile Details</h3>
+                    {t.icon}
+                    <span className="font-medium text-xs">{t.name}</span>
                   </div>
-
-                  <form onSubmit={handleSaveProfile} className="space-y-4" noValidate>
-                    <div className="trace-settings-field-box">
-                      <label htmlFor="trace-profile-name-field" className="trace-settings-label-text">Name</label>
-                      <input
-                        id="trace-profile-name-field"
-                        type="text"
-                        className={`trace-settings-text-input ${profileErrors.name ? 'error' : ''}`}
-                        value={profileName}
-                        onChange={(e) => {
-                          setProfileName(e.target.value);
-                          if (profileErrors.name) setProfileErrors(prev => ({ ...prev, name: null }));
-                        }}
-                        required
-                      />
-                      {profileErrors.name && (
-                        <span className="text-xs text-error mt-0.5" role="alert">{profileErrors.name}</span>
-                      )}
-                    </div>
-
-                    <div className="trace-settings-field-box">
-                      <label htmlFor="trace-profile-email-field" className="trace-settings-label-text">Email</label>
-                      <input
-                        id="trace-profile-email-field"
-                        type="email"
-                        className={`trace-settings-text-input ${profileErrors.email ? 'error' : ''}`}
-                        value={profileEmail}
-                        onChange={(e) => {
-                          setProfileEmail(e.target.value);
-                          if (profileErrors.email) setProfileErrors(prev => ({ ...prev, email: null }));
-                        }}
-                        required
-                      />
-                      {profileErrors.email && (
-                        <span className="text-xs text-error mt-0.5" role="alert">{profileErrors.email}</span>
-                      )}
-                    </div>
-
-                    <div className="trace-settings-field-box">
-                      <label htmlFor="trace-profile-org-field" className="trace-settings-label-text">Organization</label>
-                      <input
-                        id="trace-profile-org-field"
-                        type="text"
-                        className={`trace-settings-text-input ${profileErrors.org ? 'error' : ''}`}
-                        value={profileOrg}
-                        onChange={(e) => {
-                          setProfileOrg(e.target.value);
-                          if (profileErrors.org) setProfileErrors(prev => ({ ...prev, org: null }));
-                        }}
-                        required
-                      />
-                      {profileErrors.org && (
-                        <span className="text-xs text-error mt-0.5" role="alert">{profileErrors.org}</span>
-                      )}
-                    </div>
-
-                    <div className="trace-settings-field-box">
-                      <label htmlFor="trace-profile-role-field" className="trace-settings-label-text">Role</label>
-                      <input
-                        id="trace-profile-role-field"
-                        type="text"
-                        className="trace-settings-text-input"
-                        value={profileRole}
-                        disabled
-                        readOnly
-                      />
-                    </div>
-
-                    <div className="flex items-center gap-4 pt-2">
-                      <button type="submit" className="px-4 py-2 bg-primary text-on-primary font-bold rounded-lg hover:bg-primary/95 text-xs">
-                        Update Profile
-                      </button>
-                      {profileFeedback && (
-                        <span className="text-xs text-secondary font-bold">Profile changes updated.</span>
-                      )}
-                    </div>
-                  </form>
-                </section>
-
-                {/* Password & Session Card */}
-                <div className="space-y-6">
-                  
-                  {/* Change Password Card */}
-                  <section className="glass-panel p-6 rounded-2xl flex flex-col gap-6">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center text-primary">
-                        <span className="material-symbols-outlined">lock</span>
-                      </div>
-                      <h3 className="text-lg font-bold">Change password</h3>
-                    </div>
-
-                    <form onSubmit={handleSavePassword} className="space-y-4" noValidate>
-                      <div className="trace-settings-field-box relative">
-                        <label htmlFor="trace-pwd-current-field" className="trace-settings-label-text">Current Password</label>
-                        <div className="relative flex items-center">
-                          <input
-                            id="trace-pwd-current-field"
-                            type={showCurrent ? 'text' : 'password'}
-                            className={`trace-settings-text-input pr-12 ${passwordErrors.current ? 'error' : ''}`}
-                            value={currentPassword}
-                            onChange={(e) => {
-                              setCurrentPassword(e.target.value);
-                              if (passwordErrors.current) setPasswordErrors(prev => ({ ...prev, current: null }));
-                            }}
-                            required
-                          />
-                          <button
-                            type="button"
-                            className="trace-settings-pwd-toggle-btn"
-                            onClick={() => setShowCurrent(!showCurrent)}
-                          >
-                            {showCurrent ? 'Hide' : 'Show'}
-                          </button>
-                        </div>
-                        {passwordErrors.current && (
-                          <span className="text-xs text-error mt-0.5" role="alert">{passwordErrors.current}</span>
-                        )}
-                      </div>
-
-                      <div className="trace-settings-field-box relative">
-                        <label htmlFor="trace-pwd-new-field" className="trace-settings-label-text">New Password</label>
-                        <div className="relative flex items-center">
-                          <input
-                            id="trace-pwd-new-field"
-                            type={showNew ? 'text' : 'password'}
-                            className={`trace-settings-text-input pr-12 ${passwordErrors.new ? 'error' : ''}`}
-                            value={newPassword}
-                            onChange={(e) => {
-                              setNewPassword(e.target.value);
-                              if (passwordErrors.new) setPasswordErrors(prev => ({ ...prev, new: null }));
-                            }}
-                            required
-                          />
-                          <button
-                            type="button"
-                            className="trace-settings-pwd-toggle-btn"
-                            onClick={() => setShowNew(!showNew)}
-                          >
-                            {showNew ? 'Hide' : 'Show'}
-                          </button>
-                        </div>
-                        {passwordErrors.new && (
-                          <span className="text-xs text-error mt-0.5" role="alert">{passwordErrors.new}</span>
-                        )}
-                      </div>
-
-                      <div className="trace-settings-field-box relative">
-                        <label htmlFor="trace-pwd-confirm-field" className="trace-settings-label-text">Confirm New Password</label>
-                        <div className="relative flex items-center">
-                          <input
-                            id="trace-pwd-confirm-field"
-                            type={showConfirm ? 'text' : 'password'}
-                            className={`trace-settings-text-input pr-12 ${passwordErrors.confirm ? 'error' : ''}`}
-                            value={confirmPassword}
-                            onChange={(e) => {
-                              setConfirmPassword(e.target.value);
-                              if (passwordErrors.confirm) setPasswordErrors(prev => ({ ...prev, confirm: null }));
-                            }}
-                            required
-                          />
-                          <button
-                            type="button"
-                            className="trace-settings-pwd-toggle-btn"
-                            onClick={() => setShowConfirm(!showConfirm)}
-                          >
-                            {showConfirm ? 'Hide' : 'Show'}
-                          </button>
-                        </div>
-                        {passwordErrors.confirm && (
-                          <span className="text-xs text-error mt-0.5" role="alert">{passwordErrors.confirm}</span>
-                        )}
-                      </div>
-
-                      <div className="flex items-center gap-4 pt-2">
-                        <button type="submit" className="px-4 py-2 bg-primary text-on-primary font-bold rounded-lg hover:bg-primary/95 text-xs">
-                          Change Password
-                        </button>
-                        {passwordFeedback && (
-                          <span className="text-xs text-secondary font-bold">Password update successfully.</span>
-                        )}
-                      </div>
-                    </form>
-                  </section>
-
-                  {/* Session Card */}
-                  <section className="glass-panel p-6 rounded-2xl flex flex-col gap-4">
-                    <h3 className="text-sm font-bold text-error uppercase tracking-wider">Danger Zone</h3>
-                    <p className="text-xs text-outline leading-relaxed">
-                      End the current investigator session and return to the operator login.
-                    </p>
-                    <button
-                      onClick={handleLogout}
-                      className="w-full py-2 bg-error/10 hover:bg-error/20 text-error font-bold border border-error/30 rounded-lg text-xs flex items-center justify-center gap-2 transition-colors"
-                    >
-                      <span className="material-symbols-outlined text-sm">logout</span>
-                      Logout Session
-                    </button>
-                  </section>
-
+                </button>
+              ))}
+              
+              <button 
+                onClick={handleLogout}
+                className="trace-settings-sidebar-btn hover:text-red-400 mt-6"
+              >
+                <div className="flex items-center gap-3">
+                  <LogOut className="w-4 h-4" />
+                  <span className="font-medium text-xs">Exit Portal</span>
                 </div>
+              </button>
+            </nav>
 
-              </div>
-            )}
+            {/* Config Panels Canvas */}
+            <div className="col-span-12 lg:col-span-9 space-y-6 pb-20">
 
-            {/* TAB CONTENT: Security & AI configurations */}
-            {activeTab === 'Security' && (
-              <div className="space-y-6">
-                
-                {/* Security Access Control Section */}
-                <section className="glass-panel p-6 rounded-2xl relative overflow-hidden">
-                  <div className="absolute top-0 right-0 p-4 opacity-10">
-                    <span className="material-symbols-outlined text-8xl">verified_user</span>
-                  </div>
-                  <div className="flex items-center gap-3 mb-6">
-                    <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center text-primary">
-                      <span className="material-symbols-outlined">security</span>
-                    </div>
-                    <h3 className="text-lg font-bold">Security &amp; Access Control</h3>
+              {/* 1. ORGANIZATION */}
+              {activeTab === 'Organization' && (
+                <section className="glass-panel p-6 rounded-2xl relative overflow-hidden space-y-6">
+                  <div className="flex items-center gap-3 border-b border-white/5 pb-3">
+                    <Building className="w-5 h-5 text-[#00E5FF]" />
+                    <h3 className="text-sm font-bold text-white uppercase tracking-wider">Organization Settings</h3>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    
-                    {/* MFA Toggle */}
-                    <div className="p-5 bg-surface-container-low rounded-xl border border-white/5 flex flex-col justify-between min-h-[120px]">
+                    <div className="trace-settings-field-box">
+                      <label className="trace-settings-label-text">Company Name</label>
+                      <input 
+                        type="text" 
+                        value={settings.organization.companyName}
+                        onChange={(e) => handleFieldChange('organization', 'companyName', e.target.value)}
+                        className="trace-settings-text-input"
+                      />
+                    </div>
+
+                    <div className="trace-settings-field-box">
+                      <label className="trace-settings-label-text">Contact Email</label>
+                      <input 
+                        type="email" 
+                        value={settings.organization.contactEmail}
+                        onChange={(e) => handleFieldChange('organization', 'contactEmail', e.target.value)}
+                        className="trace-settings-text-input"
+                      />
+                    </div>
+
+                    <div className="trace-settings-field-box">
+                      <label className="trace-settings-label-text">System Timezone</label>
+                      <select 
+                        value={settings.organization.timezone}
+                        onChange={(e) => handleFieldChange('organization', 'timezone', e.target.value)}
+                        className="trace-settings-select"
+                      >
+                        <option value="UTC">UTC (Coordinated Universal Time)</option>
+                        <option value="EST">EST (Eastern Standard Time)</option>
+                        <option value="PST">PST (Pacific Standard Time)</option>
+                        <option value="GMT">GMT (Greenwich Mean Time)</option>
+                        <option value="CET">CET (Central European Time)</option>
+                      </select>
+                    </div>
+                  </div>
+                </section>
+              )}
+
+              {/* 2. SECURITY */}
+              {activeTab === 'Security' && (
+                <section className="glass-panel p-6 rounded-2xl relative overflow-hidden space-y-6">
+                  <div className="flex items-center gap-3 border-b border-white/5 pb-3">
+                    <Shield className="w-5 h-5 text-[#00E5FF]" />
+                    <h3 className="text-sm font-bold text-white uppercase tracking-wider">Access Control</h3>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="p-5 bg-surface-container-low rounded-xl border border-white/5 flex flex-col justify-between min-h-[120px] text-left">
                       <div className="flex justify-between items-start">
                         <div>
                           <h4 className="font-bold text-on-surface text-sm">Two-Factor Authentication</h4>
-                          <p className="text-xs text-on-surface-variant mt-0.5">Require MFA for all administrative accounts.</p>
+                          <p className="text-xs text-[#cbd5e1]/50 mt-0.5">Enforce MFA credentials check for logins.</p>
                         </div>
                         <label className="switch-toggle">
                           <input 
                             type="checkbox" 
-                            checked={mfaEnabled} 
-                            onChange={(e) => setMfaEnabled(e.target.checked)} 
+                            checked={settings.security.mfaEnabled} 
+                            onChange={(e) => handleFieldChange('security', 'mfaEnabled', e.target.checked)} 
                           />
                           <span className="slider"></span>
                         </label>
                       </div>
-                      <div className="flex gap-2 mt-4">
-                        <span className={`px-2 py-0.5 ${mfaEnabled ? 'bg-secondary/10 text-secondary' : 'bg-white/5 text-outline'} text-[10px] font-bold rounded uppercase tracking-tighter`}>
-                          {mfaEnabled ? 'Enforced' : 'Disabled'}
-                        </span>
-                        <span className="px-2 py-0.5 bg-surface-container-highest text-on-surface-variant text-[10px] font-bold rounded uppercase tracking-tighter">SMS/TOTP</span>
-                      </div>
+                      <span className={`px-2 py-0.5 w-fit ${settings.security.mfaEnabled ? 'bg-secondary/10 text-secondary' : 'bg-white/5 text-outline'} text-[10px] font-bold rounded uppercase tracking-wider mt-4`}>
+                        {settings.security.mfaEnabled ? 'Enforced' : 'Disabled'}
+                      </span>
                     </div>
 
-                    {/* Session Timeout Slider */}
-                    <div className="p-5 bg-surface-container-low rounded-xl border border-white/5 flex flex-col justify-between min-h-[120px]">
+                    <div className="p-5 bg-surface-container-low rounded-xl border border-white/5 flex flex-col justify-between min-h-[120px] text-left">
                       <div>
                         <h4 className="font-bold text-on-surface text-sm">Inactivity Timeout</h4>
-                        <p className="text-xs text-on-surface-variant mt-0.5">Log out users after prolonged inactivity.</p>
+                        <p className="text-xs text-[#cbd5e1]/50 mt-0.5">Close analyst session after timeout.</p>
                       </div>
                       <div className="mt-4">
                         <input 
@@ -695,197 +501,375 @@ export default function Settings() {
                           max="120" 
                           min="15" 
                           type="range" 
-                          value={inactivityTimeout}
-                          onChange={(e) => setInactivityTimeout(Number(e.target.value))}
+                          value={settings.security.inactivityTimeout}
+                          onChange={(e) => handleFieldChange('security', 'inactivityTimeout', Number(e.target.value))}
                         />
-                        <div className="flex justify-between mt-2 text-[10px] font-label-caps text-on-surface-variant">
+                        <div className="flex justify-between mt-2 text-[10px] font-mono text-[#cbd5e1]/55">
                           <span>15 MIN</span>
-                          <span className="text-secondary font-bold">{inactivityTimeout} MINUTES</span>
+                          <span className="text-[#00E5FF] font-bold">{settings.security.inactivityTimeout} MINUTES</span>
                           <span>120 MIN</span>
                         </div>
                       </div>
                     </div>
-
-                    {/* Password Policy */}
-                    <div className="p-5 bg-surface-container-low rounded-xl border border-white/5 md:col-span-2">
-                      <h4 className="font-bold text-on-surface text-sm mb-4">Password Complexity Policy</h4>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        <div className="flex items-center gap-3">
-                          <label className="switch-toggle">
-                            <input 
-                              type="checkbox" 
-                              checked={pwSpecial} 
-                              onChange={(e) => setPwSpecial(e.target.checked)} 
-                            />
-                            <span className="slider"></span>
-                          </label>
-                          <span className="text-xs font-semibold">Special Characters</span>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <label className="switch-toggle">
-                            <input 
-                              type="checkbox" 
-                              checked={pwNumeric} 
-                              onChange={(e) => setPwNumeric(e.target.checked)} 
-                            />
-                            <span className="slider"></span>
-                          </label>
-                          <span className="text-xs font-semibold">Numerical Inclusion</span>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <label className="switch-toggle">
-                            <input 
-                              type="checkbox" 
-                              checked={pwHistory} 
-                              onChange={(e) => setPwHistory(e.target.checked)} 
-                            />
-                            <span className="slider"></span>
-                          </label>
-                          <span className="text-xs font-semibold">History Reuse (3)</span>
-                        </div>
-                      </div>
-                    </div>
-
                   </div>
                 </section>
+              )}
 
-                {/* AI Core Configuration */}
-                <section className="glass-panel p-6 rounded-2xl">
-                  <div className="flex items-center gap-3 mb-6">
-                    <div className="w-10 h-10 rounded-lg bg-secondary/20 flex items-center justify-center text-secondary">
-                      <span className="material-symbols-outlined">psychology</span>
-                    </div>
-                    <h3 className="text-lg font-bold">AI Core Configuration</h3>
+              {/* 3. AUTHENTICATION */}
+              {activeTab === 'Authentication' && (
+                <section className="glass-panel p-6 rounded-2xl relative overflow-hidden space-y-6">
+                  <div className="flex items-center gap-3 border-b border-white/5 pb-3">
+                    <Key className="w-5 h-5 text-[#00E5FF]" />
+                    <h3 className="text-sm font-bold text-white uppercase tracking-wider">Authentication</h3>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    
-                    {/* Sensitivity range slider */}
-                    <div className="space-y-4">
+                    <div className="p-5 bg-surface-container-low rounded-xl border border-white/5 flex flex-col justify-between min-h-[120px] text-left">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h4 className="font-bold text-on-surface text-sm">OAuth Integrations</h4>
+                          <p className="text-xs text-[#cbd5e1]/50 mt-0.5">Allow login via social SSO operators.</p>
+                        </div>
+                        <label className="switch-toggle">
+                          <input 
+                            type="checkbox" 
+                            checked={settings.authentication.allowOAuth} 
+                            onChange={(e) => handleFieldChange('authentication', 'allowOAuth', e.target.checked)} 
+                          />
+                          <span className="slider"></span>
+                        </label>
+                      </div>
+                      <span className={`px-2 py-0.5 w-fit ${settings.authentication.allowOAuth ? 'bg-[#00E5FF]/10 text-[#00E5FF]' : 'bg-white/5 text-outline'} text-[10px] font-bold rounded uppercase tracking-wider mt-4`}>
+                        {settings.authentication.allowOAuth ? 'Allowed' : 'Block Local'}
+                      </span>
+                    </div>
+
+                    <div className="trace-settings-field-box">
+                      <label className="trace-settings-label-text">SSO Identity Provider</label>
+                      <select 
+                        value={settings.authentication.ssoProvider}
+                        onChange={(e) => handleFieldChange('authentication', 'ssoProvider', e.target.value)}
+                        className="trace-settings-select"
+                      >
+                        <option value="None">None (Password Authentication)</option>
+                        <option value="Okta">Okta Enterprise ID</option>
+                        <option value="ActiveDirectory">Active Directory Federation</option>
+                        <option value="AzureAD">Microsoft Entra ID (Azure AD)</option>
+                      </select>
+                    </div>
+                  </div>
+                </section>
+              )}
+
+              {/* 4. EMAIL */}
+              {activeTab === 'Email' && (
+                <section className="glass-panel p-6 rounded-2xl relative overflow-hidden space-y-6">
+                  <div className="flex items-center gap-3 border-b border-white/5 pb-3">
+                    <Mail className="w-5 h-5 text-[#00E5FF]" />
+                    <h3 className="text-sm font-bold text-white uppercase tracking-wider">Email SMTP configuration</h3>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="trace-settings-field-box">
+                      <label className="trace-settings-label-text">SMTP Gateway Host</label>
+                      <input 
+                        type="text" 
+                        value={settings.email.smtpHost}
+                        onChange={(e) => handleFieldChange('email', 'smtpHost', e.target.value)}
+                        className="trace-settings-text-input"
+                      />
+                    </div>
+
+                    <div className="trace-settings-field-box">
+                      <label className="trace-settings-label-text">SMTP Gateway Port</label>
+                      <input 
+                        type="number" 
+                        value={settings.email.smtpPort}
+                        onChange={(e) => handleFieldChange('email', 'smtpPort', Number(e.target.value))}
+                        className="trace-settings-text-input"
+                      />
+                    </div>
+
+                    <div className="trace-settings-field-box">
+                      <label className="trace-settings-label-text">SMTP Username</label>
+                      <input 
+                        type="text" 
+                        value={settings.email.smtpUser}
+                        onChange={(e) => handleFieldChange('email', 'smtpUser', e.target.value)}
+                        className="trace-settings-text-input"
+                      />
+                    </div>
+
+                    <div className="p-5 bg-surface-container-low rounded-xl border border-white/5 flex items-center justify-between text-left">
+                      <div>
+                        <h4 className="font-bold text-on-surface text-sm">Force TLS/SSL Encryption</h4>
+                        <p className="text-xs text-[#cbd5e1]/50 mt-0.5">Encrypt outbound traffic sockets.</p>
+                      </div>
+                      <label className="switch-toggle">
+                        <input 
+                          type="checkbox" 
+                          checked={settings.email.useTls} 
+                          onChange={(e) => handleFieldChange('email', 'useTls', e.target.checked)} 
+                        />
+                        <span className="slider"></span>
+                      </label>
+                    </div>
+                  </div>
+                </section>
+              )}
+
+              {/* 5. AI CONFIGURATION */}
+              {activeTab === 'AI Configuration' && (
+                <section className="glass-panel p-6 rounded-2xl relative overflow-hidden space-y-6">
+                  <div className="flex items-center gap-3 border-b border-white/5 pb-3">
+                    <Brain className="w-5 h-5 text-[#00E5FF]" />
+                    <h3 className="text-sm font-bold text-white uppercase tracking-wider">AI Heuristics Engine</h3>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-4 text-left">
                       <div className="flex justify-between items-center">
                         <label className="font-bold text-on-surface text-xs">Analysis Sensitivity</label>
-                        <span className="text-secondary text-xs font-bold font-mono">{getSensitivityLabel(aiSensitivity)}</span>
+                        <span className="text-secondary text-xs font-bold font-mono">{getSensitivityLabel(settings.aiConfiguration.aiSensitivity)}</span>
                       </div>
                       <input 
                         className="range-slider" 
                         max="10" 
                         min="1" 
                         type="range" 
-                        value={aiSensitivity}
-                        onChange={(e) => setAiSensitivity(Number(e.target.value))}
+                        value={settings.aiConfiguration.aiSensitivity}
+                        onChange={(e) => handleFieldChange('aiConfiguration', 'aiSensitivity', Number(e.target.value))}
                       />
-                      <p className="text-[10px] text-on-surface-variant leading-relaxed italic mt-1">
-                        Higher sensitivity increases deep scanning of obfuscated indicators but may yield more false positives.
+                      <p className="text-[10px] text-[#cbd5e1]/50 italic leading-relaxed">
+                        Adjust scanning deep heuristic models. Higher levels flags more anomalies but can generate more alerts.
                       </p>
                     </div>
 
-                    {/* Confidence Threshold */}
-                    <div className="space-y-4">
+                    <div className="space-y-4 text-left">
                       <div className="flex justify-between items-center">
                         <label className="font-bold text-on-surface text-xs">Confidence Threshold</label>
-                        <span className="text-secondary text-xs font-bold font-mono">{confidenceThreshold}%</span>
+                        <span className="text-secondary text-xs font-bold font-mono">{settings.aiConfiguration.confidenceThreshold}%</span>
                       </div>
                       <input 
                         className="range-slider" 
                         max="100" 
                         min="50" 
                         type="range" 
-                        value={confidenceThreshold}
-                        onChange={(e) => setConfidenceThreshold(Number(e.target.value))}
+                        value={settings.aiConfiguration.confidenceThreshold}
+                        onChange={(e) => handleFieldChange('aiConfiguration', 'confidenceThreshold', Number(e.target.value))}
                       />
-                      <p className="text-[10px] text-on-surface-variant leading-relaxed italic mt-1">
-                        Auto-suppress alerts that do not meet the minimum confidence score assigned by the model.
+                      <p className="text-[10px] text-[#cbd5e1]/50 italic leading-relaxed">
+                        Suppress EDR correlation cases that fall below this threat probability limit.
                       </p>
                     </div>
-
                   </div>
                 </section>
+              )}
 
-                {/* Marketplace Connected Integrations */}
-                <section className="glass-panel p-6 rounded-2xl">
-                  <div className="flex items-center justify-between mb-6">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-tertiary/20 flex items-center justify-center text-tertiary">
-                        <span className="material-symbols-outlined">hub</span>
-                      </div>
-                      <h3 className="text-lg font-bold">Connected Integrations</h3>
-                    </div>
-                    <button className="text-secondary hover:underline text-xs font-bold" onClick={() => setActiveTab('Integrations')}>
-                      Browse Marketplace
-                    </button>
+              {/* 6. NOTIFICATIONS */}
+              {activeTab === 'Notifications' && (
+                <section className="glass-panel p-6 rounded-2xl relative overflow-hidden space-y-6">
+                  <div className="flex items-center gap-3 border-b border-white/5 pb-3">
+                    <Bell className="w-5 h-5 text-[#00E5FF]" />
+                    <h3 className="text-sm font-bold text-white uppercase tracking-wider">Alerting Triggers</h3>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    
-                    {/* VirusTotal */}
-                    <div className="p-5 bg-surface-container-low rounded-xl border border-white/5 hover:border-secondary/30 transition-all cursor-pointer">
-                      <div className="flex justify-between mb-4">
-                        <div className="w-10 h-10 bg-white/5 rounded-lg flex items-center justify-center">
-                          <span className="material-symbols-outlined text-2xl text-primary">shield_with_heart</span>
-                        </div>
-                        <span className="px-2 py-0.5 bg-secondary/10 text-secondary text-[9px] font-bold rounded-full h-fit">CONNECTED</span>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="p-5 bg-surface-container-low rounded-xl border border-white/5 flex items-center justify-between text-left">
+                      <div>
+                        <h4 className="font-bold text-on-surface text-sm">Send Email Alerts</h4>
+                        <p className="text-xs text-[#cbd5e1]/50 mt-0.5">Dispatches emails on Critical alarms.</p>
                       </div>
-                      <h4 className="font-bold text-on-surface text-sm">VirusTotal</h4>
-                      <p className="text-[11px] text-on-surface-variant mt-1 leading-relaxed">Unified threat intelligence and file hashes analysis.</p>
+                      <label className="switch-toggle">
+                        <input 
+                          type="checkbox" 
+                          checked={settings.notifications.emailAlerts} 
+                          onChange={(e) => handleFieldChange('notifications', 'emailAlerts', e.target.checked)} 
+                        />
+                        <span className="slider"></span>
+                      </label>
                     </div>
 
-                    {/* Splunk */}
-                    <div className="p-5 bg-surface-container-low rounded-xl border border-white/5 hover:border-secondary/30 transition-all cursor-pointer">
-                      <div className="flex justify-between mb-4">
-                        <div className="w-10 h-10 bg-white/5 rounded-lg flex items-center justify-center">
-                          <span className="material-symbols-outlined text-2xl text-secondary">monitoring</span>
-                        </div>
-                        <span className="px-2 py-0.5 bg-secondary/10 text-secondary text-[9px] font-bold rounded-full h-fit">CONNECTED</span>
+                    <div className="p-5 bg-surface-container-low rounded-xl border border-white/5 flex items-center justify-between text-left">
+                      <div>
+                        <h4 className="font-bold text-on-surface text-sm">Web Push Notifications</h4>
+                        <p className="text-xs text-[#cbd5e1]/50 mt-0.5">Enables browser-level visual alerts.</p>
                       </div>
-                      <h4 className="font-bold text-on-surface text-sm">Splunk Cloud</h4>
-                      <p className="text-[11px] text-on-surface-variant mt-1 leading-relaxed">SIEM telemetry logs ingestion and correlation analysis.</p>
+                      <label className="switch-toggle">
+                        <input 
+                          type="checkbox" 
+                          checked={settings.notifications.webPushEnabled} 
+                          onChange={(e) => handleFieldChange('notifications', 'webPushEnabled', e.target.checked)} 
+                        />
+                        <span className="slider"></span>
+                      </label>
                     </div>
 
-                    {/* Slack */}
-                    <div className="p-5 bg-surface-container-low rounded-xl border border-white/5 hover:border-secondary/30 transition-all cursor-pointer">
-                      <div className="flex justify-between mb-4">
-                        <div className="w-10 h-10 bg-white/5 rounded-lg flex items-center justify-center">
-                          <span className="material-symbols-outlined text-2xl text-tertiary">forum</span>
-                        </div>
-                        <span className="px-2 py-0.5 bg-secondary/10 text-secondary text-[9px] font-bold rounded-full h-fit">CONNECTED</span>
-                      </div>
-                      <h4 className="font-bold text-on-surface text-sm">Slack Enterprise</h4>
-                      <p className="text-[11px] text-on-surface-variant mt-1 leading-relaxed">Real-time incident response alerting and messaging.</p>
+                    <div className="trace-settings-field-box md:col-span-2">
+                      <label className="trace-settings-label-text">Slack Hook URL</label>
+                      <input 
+                        type="text" 
+                        value={settings.notifications.slackWebhook}
+                        onChange={(e) => handleFieldChange('notifications', 'slackWebhook', e.target.value)}
+                        placeholder="https://hooks.slack.com/services/..."
+                        className="trace-settings-text-input font-mono"
+                      />
                     </div>
-
                   </div>
                 </section>
+              )}
 
-              </div>
-            )}
+              {/* 7. THEME */}
+              {activeTab === 'Theme' && (
+                <section className="glass-panel p-6 rounded-2xl relative overflow-hidden space-y-6">
+                  <div className="flex items-center gap-3 border-b border-white/5 pb-3">
+                    <Palette className="w-5 h-5 text-[#00E5FF]" />
+                    <h3 className="text-sm font-bold text-white uppercase tracking-wider">Color Themes</h3>
+                  </div>
 
-            {/* TAB CONTENT: Placeholder page for other tabs */}
-            {activeTab !== 'General' && activeTab !== 'Security' && (
-              <section className="glass-panel p-12 rounded-2xl text-center text-outline">
-                <span className="material-symbols-outlined text-5xl text-outline/30 mb-2">settings_suggest</span>
-                <h3 className="text-on-surface font-bold text-base mb-1">{activeTab} Panel</h3>
-                <p className="text-xs">
-                  This administrative settings panel is currently locked or stubbed for local security developer testing.
-                </p>
-              </section>
-            )}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="p-5 bg-surface-container-low rounded-xl border border-white/5 flex items-center justify-between text-left">
+                      <div>
+                        <h4 className="font-bold text-on-surface text-sm">Force Dark Mode Grid</h4>
+                        <p className="text-xs text-[#cbd5e1]/50 mt-0.5">Sets dark aesthetics as system baseline.</p>
+                      </div>
+                      <label className="switch-toggle">
+                        <input 
+                          type="checkbox" 
+                          checked={settings.theme.isDark} 
+                          onChange={(e) => handleFieldChange('theme', 'isDark', e.target.checked)} 
+                        />
+                        <span className="slider"></span>
+                      </label>
+                    </div>
 
+                    <div className="trace-settings-field-box">
+                      <label className="trace-settings-label-text">Primary Cyan/Blue Accent (Hex)</label>
+                      <input 
+                        type="text" 
+                        value={settings.theme.primaryColor}
+                        onChange={(e) => handleFieldChange('theme', 'primaryColor', e.target.value)}
+                        className="trace-settings-text-input font-mono"
+                      />
+                    </div>
+                  </div>
+                </section>
+              )}
+
+              {/* 8. APPEARANCE */}
+              {activeTab === 'Appearance' && (
+                <section className="glass-panel p-6 rounded-2xl relative overflow-hidden space-y-6">
+                  <div className="flex items-center gap-3 border-b border-white/5 pb-3">
+                    <Eye className="w-5 h-5 text-[#00E5FF]" />
+                    <h3 className="text-sm font-bold text-white uppercase tracking-wider">Appearance density</h3>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="trace-settings-field-box">
+                      <label className="trace-settings-label-text">Grid Padding Density</label>
+                      <select 
+                        value={settings.appearance.density}
+                        onChange={(e) => handleFieldChange('appearance', 'density', e.target.value)}
+                        className="trace-settings-select"
+                      >
+                        <option value="Comfortable">Comfortable (Wide Spacings)</option>
+                        <option value="Cozy">Cozy (Standard Padding)</option>
+                        <option value="Compact">Compact (Miniature Layouts)</option>
+                      </select>
+                    </div>
+
+                    <div className="p-5 bg-surface-container-low rounded-xl border border-white/5 flex items-center justify-between text-left">
+                      <div>
+                        <h4 className="font-bold text-on-surface text-sm">Collapse Sidebar Left</h4>
+                        <p className="text-xs text-[#cbd5e1]/50 mt-0.5">Maximize dashboard canvas width.</p>
+                      </div>
+                      <label className="switch-toggle">
+                        <input 
+                          type="checkbox" 
+                          checked={settings.appearance.sidebarCollapsed} 
+                          onChange={(e) => handleFieldChange('appearance', 'sidebarCollapsed', e.target.checked)} 
+                        />
+                        <span className="slider"></span>
+                      </label>
+                    </div>
+                  </div>
+                </section>
+              )}
+
+              {/* 9. PASSWORD POLICY */}
+              {activeTab === 'Password Policy' && (
+                <section className="glass-panel p-6 rounded-2xl relative overflow-hidden space-y-6">
+                  <div className="flex items-center gap-3 border-b border-white/5 pb-3">
+                    <Lock className="w-5 h-5 text-[#00E5FF]" />
+                    <h3 className="text-sm font-bold text-white uppercase tracking-wider">Clearance Password constraints</h3>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="p-5 bg-surface-container-low rounded-xl border border-white/5 flex items-center justify-between text-left">
+                      <div>
+                        <h4 className="font-bold text-on-surface text-sm">Inclusion of Special Characters</h4>
+                        <p className="text-xs text-[#cbd5e1]/50 mt-0.5">Requires symbols (e.g., @, #, $).</p>
+                      </div>
+                      <label className="switch-toggle">
+                        <input 
+                          type="checkbox" 
+                          checked={settings.passwordPolicy.pwSpecial} 
+                          onChange={(e) => handleFieldChange('passwordPolicy', 'pwSpecial', e.target.checked)} 
+                        />
+                        <span className="slider"></span>
+                      </label>
+                    </div>
+
+                    <div className="p-5 bg-surface-container-low rounded-xl border border-white/5 flex items-center justify-between text-left">
+                      <div>
+                        <h4 className="font-bold text-on-surface text-sm">Inclusion of Numerical Digits</h4>
+                        <p className="text-xs text-[#cbd5e1]/50 mt-0.5">Requires digits (e.g., 0-9).</p>
+                      </div>
+                      <label className="switch-toggle">
+                        <input 
+                          type="checkbox" 
+                          checked={settings.passwordPolicy.pwNumeric} 
+                          onChange={(e) => handleFieldChange('passwordPolicy', 'pwNumeric', e.target.checked)} 
+                        />
+                        <span className="slider"></span>
+                      </label>
+                    </div>
+
+                    <div className="p-5 bg-surface-container-low rounded-xl border border-white/5 flex items-center justify-between text-left">
+                      <div>
+                        <h4 className="font-bold text-on-surface text-sm">Restrict Passwords Reuse</h4>
+                        <p className="text-xs text-[#cbd5e1]/50 mt-0.5">Block recent history passwords.</p>
+                      </div>
+                      <label className="switch-toggle">
+                        <input 
+                          type="checkbox" 
+                          checked={settings.passwordPolicy.pwHistory} 
+                          onChange={(e) => handleFieldChange('passwordPolicy', 'pwHistory', e.target.checked)} 
+                        />
+                        <span className="slider"></span>
+                      </label>
+                    </div>
+
+                    <div className="trace-settings-field-box">
+                      <label className="trace-settings-label-text">Minimum Character Length</label>
+                      <input 
+                        type="number" 
+                        min="6"
+                        max="32"
+                        value={settings.passwordPolicy.minLength}
+                        onChange={(e) => handleFieldChange('passwordPolicy', 'minLength', Number(e.target.value))}
+                        className="trace-settings-text-input"
+                      />
+                    </div>
+                  </div>
+                </section>
+              )}
+
+            </div>
           </div>
-
-        </div>
+        )}
 
       </div>
-
-      {/* Floating Action Quick Help Button */}
-      <div className="fixed bottom-10 right-10">
-        <button className="w-14 h-14 rounded-full neo-button flex items-center justify-center shadow-2xl text-white group relative">
-          <span className="material-symbols-outlined text-2xl transition-transform group-hover:rotate-45">bolt</span>
-          <span className="absolute -top-12 right-0 bg-surface-container border border-secondary/30 text-secondary px-3 py-1 rounded text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">
-            Quick Help
-          </span>
-        </button>
-      </div>
-
     </div>
   );
 }
