@@ -1,18 +1,28 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Shield, User, Mail, Globe, Lock, Eye, EyeOff, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
-import { authService } from '../../services/auth.service';
-import { createUserWithEmailAndPassword, sendEmailVerification, signOut, updateProfile } from 'firebase/auth';
+import { createUserWithEmailAndPassword, updateProfile, sendEmailVerification, signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../../services/firebase';
 
 const mapFirebaseError = (error) => {
-  if (error.code === 'auth/email-already-in-use') {
-    return 'An operator account with this email address already exists in Firebase.';
+  switch (error.code) {
+    case 'auth/email-already-in-use':
+      return 'Email already exists in the system database.';
+    case 'auth/invalid-email':
+      return 'Invalid email address formatting.';
+    case 'auth/weak-password':
+      return 'Clearance key does not meet required strength criteria.';
+    case 'auth/wrong-password':
+      return 'Invalid operator clearance key.';
+    case 'auth/user-not-found':
+      return 'No operator record found with these credentials.';
+    case 'auth/too-many-requests':
+      return 'Access blocked due to excessive attempts. Please try again later.';
+    case 'auth/operation-not-allowed':
+      return 'Email/Password provider is disabled in your Firebase console. Please go to Authentication > Sign-in method in Firebase Console to enable it.';
+    default:
+      return error.message || 'An unexpected authentication error occurred.';
   }
-  if (error.code === 'auth/weak-password') {
-    return 'Clearance key is too weak for Firebase policy.';
-  }
-  return error.message || 'An unexpected registration error occurred.';
 };
 
 /**
@@ -91,7 +101,7 @@ export default function Register() {
     return Object.keys(tempErrors).length === 0;
   };
 
-  // Submit handler with Backend user registration
+  // Submit handler with Firebase user registration
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (isSubmitting) return;
@@ -102,46 +112,60 @@ export default function Register() {
       setSuccessMessage('');
 
       try {
-        // 1. Register user on the backend
-        await authService.register(
-          name.trim(),
-          email.trim(),
-          password,
-          'Analyst',
-          organization.trim()
-        );
-
-        // 2. Create user in Firebase
+        console.log('[Register] Starting createUserWithEmailAndPassword for email:', email.trim());
         const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
+        console.log('[Register] createUserWithEmailAndPassword Success. User UID:', userCredential.user?.uid);
         
-        // 3. Set displayName in Firebase
-        await updateProfile(userCredential.user, { displayName: name.trim() });
+        console.log('[Register] Starting updateProfile for name:', name.trim());
+        await updateProfile(userCredential.user, {
+          displayName: name.trim(),
+        });
+        console.log('[Register] updateProfile Success');
 
-        // 4. Send verification email
+        localStorage.setItem('operatorName', name.trim());
+        localStorage.setItem('operatorEmail', email.trim());
+        if (!localStorage.getItem('operatorRole')) {
+          localStorage.setItem('operatorRole', 'Investigator');
+        }
+
+        console.log('[Register] Starting sendEmailVerification');
         await sendEmailVerification(userCredential.user);
+        console.log('[Register] sendEmailVerification Success');
 
-        // 5. Sign out user immediately
-        await signOut(auth);
-
-        setSuccessMessage('Account created successfully. Dispatching verification link...');
+        setSuccessMessage('Verification email has been sent. Redirecting to Verification Center...');
         
         setTimeout(() => {
           setIsSubmitting(false);
-          navigate('/verification-center', { state: { email: email.trim() } });
+          navigate('/verify');
         }, 1500);
       } catch (error) {
-        console.log('[Register] Detailed registration error:', {
-          message: error.message,
-          code: error.code,
-          stack: error.stack,
-          raw: error
-        });
-        setIsSubmitting(false);
-        let errorMsg = mapFirebaseError(error);
-        if (error.message && error.message.includes('Failed to fetch')) {
-          errorMsg = `Failed to fetch: Connection to backend API [${import.meta.env.VITE_API_URL}] failed. Verify the backend server is running and accessible.`;
+        console.error('[Register] Error occurred:', error);
+        if (error.code === 'auth/email-already-in-use') {
+          try {
+            console.log('[Register] Email already in use. Checking credentials verification sign-in...');
+            const loginResult = await signInWithEmailAndPassword(auth, email.trim(), password);
+            
+            if (loginResult.user.emailVerified) {
+              console.log('[Register] Existing user is verified. Logging in...');
+              localStorage.setItem('isAuthenticated', 'true');
+              localStorage.setItem('operatorName', loginResult.user.displayName || name.trim() || 'Investigator');
+              localStorage.setItem('operatorEmail', loginResult.user.email || email.trim());
+              localStorage.setItem('operatorAvatar', loginResult.user.photoURL || '');
+              navigate('/dashboard', { replace: true });
+            } else {
+              console.log('[Register] Existing user is not verified. Redirecting to Verification Center...');
+              navigate('/verify', { state: { existsUnverified: true } });
+            }
+            setIsSubmitting(false);
+            return;
+          } catch (loginErr) {
+            console.error('[Register] Existing credentials verification sign-in failed:', loginErr);
+            // Fall through to show the duplicate email error
+          }
         }
-        setErrors({ auth: errorMsg });
+        setIsSubmitting(false);
+        const userFriendlyMessage = mapFirebaseError(error);
+        setErrors({ auth: `${userFriendlyMessage} (Debug Code: ${error.code || 'unknown'})` });
       }
     }
   };
@@ -396,25 +420,23 @@ export default function Register() {
             z-index: 10;
           }
 
-          .trace-register-input-container input.trace-register-input {
-            width: 100% !important;
-            background: transparent !important;
-            background-color: transparent !important;
-            border: none !important;
+          .trace-register-input {
+            width: 100%;
+            background: transparent;
+            border: none;
             padding-left: 52px !important;
-            padding-right: 40px !important;
-            padding-top: 0 !important;
-            padding-bottom: 0 !important;
-            color: #F8FAFC !important;
-            font-size: 14px !important;
-            outline: none !important;
-            height: 100% !important;
-            box-sizing: border-box !important;
-            box-shadow: none !important;
+            padding-right: 40px;
+            padding-top: 0;
+            padding-bottom: 0;
+            color: #F8FAFC;
+            font-size: 14px;
+            outline: none;
+            height: 100%;
+            box-sizing: border-box;
           }
 
-          .trace-register-input-container input.trace-register-input::placeholder {
-            color: #94A3B8 !important;
+          .trace-register-input::placeholder {
+            color: #94A3B8;
           }
 
           .trace-register-password-toggle {
@@ -575,7 +597,7 @@ export default function Register() {
         <div className="trace-register-left-content">
           <div className="trace-register-brand">
             <div className="trace-register-brand-icon" aria-hidden="true">
-              <img src="/logo-white.svg" alt="TRACE AI Logo" className="w-9 h-9" />
+              <Shield className="w-9 h-9 text-[#47FAF3]" />
             </div>
             <div className="trace-register-brand-text">
               <span className="trace-register-brand-name">TRACE AI</span>
@@ -639,7 +661,6 @@ export default function Register() {
                   id="trace-name-input"
                   type="text"
                   className="trace-register-input"
-                  style={{ paddingLeft: '52px', paddingRight: '16px' }}
                   placeholder="Akash C"
                   autoComplete="name"
                   value={name}
@@ -679,7 +700,6 @@ export default function Register() {
                   id="trace-email-input"
                   type="email"
                   className="trace-register-input"
-                  style={{ paddingLeft: '52px', paddingRight: '16px' }}
                   placeholder="akashcshanthi@gmail.com"
                   autoComplete="email"
                   value={email}
@@ -719,7 +739,6 @@ export default function Register() {
                   id="trace-org-input"
                   type="text"
                   className="trace-register-input"
-                  style={{ paddingLeft: '52px', paddingRight: '16px' }}
                   placeholder="Mazharul Uloom College (Autonomous), Ambur"
                   autoComplete="organization"
                   value={organization}
@@ -759,7 +778,6 @@ export default function Register() {
                   id="trace-password-input"
                   type={showPassword ? 'text' : 'password'}
                   className="trace-register-input"
-                  style={{ paddingLeft: '52px', paddingRight: '48px' }}
                   placeholder="Minimum 8 characters"
                   autoComplete="new-password"
                   value={password}
@@ -825,7 +843,6 @@ export default function Register() {
                   id="trace-confirm-password-input"
                   type={showConfirmPassword ? 'text' : 'password'}
                   className="trace-register-input"
-                  style={{ paddingLeft: '52px', paddingRight: '48px' }}
                   placeholder="Re-enter password"
                   autoComplete="new-password"
                   value={confirmPassword}

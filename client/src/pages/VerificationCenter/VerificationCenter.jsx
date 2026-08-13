@@ -156,9 +156,11 @@ export default function VerificationCenter() {
     stopPolling();
     stopCountdown();
 
+    const resolvedName = getResolvedUserName(verifiedUser, verifiedUser.displayName);
+
     // Store local storage auth keys
     localStorage.setItem('isAuthenticated', 'true');
-    localStorage.setItem('operatorName', verifiedUser.displayName || 'Security Analyst');
+    localStorage.setItem('operatorName', resolvedName);
     localStorage.setItem('operatorEmail', verifiedUser.email || '');
     localStorage.setItem('operatorAvatar', verifiedUser.photoURL || '');
 

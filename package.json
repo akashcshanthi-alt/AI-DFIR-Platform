@@ -1,4 +1,10 @@
 {
+  "name": "ai-dfir-platform",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "npm run dev --prefix client",
+    "server": "node server/server.js"
+  },
   "dependencies": {
     "lucide-react": "^1.28.0"
   }

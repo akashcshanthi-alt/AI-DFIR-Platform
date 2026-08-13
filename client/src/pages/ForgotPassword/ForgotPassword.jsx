@@ -1,12 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Shield, Mail, ArrowLeft, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
-import { authService } from '../../services/auth.service';
+import { sendPasswordResetEmail } from 'firebase/auth';
+import { auth } from '../../services/firebase';
 
 /**
  * ForgotPassword Component
  * Allows security analysts to request password reset instructions.
- * Renders a professional split layout matching Login.jsx and handles local simulations.
+ * Renders a professional split layout matching Login.jsx with resend capabilities.
  */
 export default function ForgotPassword() {
   // Form and interface states
@@ -14,6 +15,24 @@ export default function ForgotPassword() {
   const [errors, setErrors] = useState({});
   const [isLoading, setIsLoading] = useState(false);
   const [isSent, setIsSent] = useState(false);
+
+  // Resend email state management
+  const [countdown, setCountdown] = useState(0);
+  const [isResending, setIsResending] = useState(false);
+  const [resendToast, setResendToast] = useState(null);
+
+  // Countdown timer effect
+  useEffect(() => {
+    let timer = null;
+    if (countdown > 0) {
+      timer = setInterval(() => {
+        setCountdown((prev) => prev - 1);
+      }, 1000);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [countdown]);
 
   // Validate basic email format
   const validateForm = () => {
@@ -30,7 +49,20 @@ export default function ForgotPassword() {
     return Object.keys(tempErrors).length === 0;
   };
 
-  // Backend forgot-password submit handler
+  const mapFirebaseError = (error) => {
+    switch (error.code) {
+      case 'auth/user-not-found':
+        return 'No operator record found with this email address.';
+      case 'auth/invalid-email':
+        return 'Please enter a valid operator email address.';
+      case 'auth/too-many-requests':
+        return 'Access blocked due to excessive attempts. Please try again later.';
+      default:
+        return error.message || 'An unexpected error occurred. Please try again.';
+    }
+  };
+
+  // Firebase sendPasswordResetEmail submit handler
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (isLoading || isSent) return;
@@ -40,14 +72,34 @@ export default function ForgotPassword() {
       setErrors({});
 
       try {
-        await authService.forgotPassword(email.trim());
+        await sendPasswordResetEmail(auth, email.trim());
         setIsLoading(false);
         setIsSent(true);
       } catch (error) {
         console.error('[ForgotPassword] Error occurred:', error);
         setIsLoading(false);
-        setErrors({ auth: error.message || 'An unexpected error occurred. Please try again.' });
+        const userFriendlyMessage = mapFirebaseError(error);
+        setErrors({ auth: userFriendlyMessage });
       }
+    }
+  };
+
+  // Resend Email Handler
+  const handleResendEmail = async () => {
+    if (isResending || countdown > 0) return;
+    setIsResending(true);
+    setResendToast(null);
+
+    try {
+      await sendPasswordResetEmail(auth, email.trim());
+      setResendToast({ type: 'success', text: 'Password reset email sent again successfully.' });
+      setCountdown(30);
+    } catch (error) {
+      console.error('[ForgotPassword] Resend Error:', error);
+      const userFriendlyMessage = mapFirebaseError(error);
+      setResendToast({ type: 'error', text: userFriendlyMessage });
+    } finally {
+      setIsResending(false);
     }
   };
 
@@ -298,25 +350,23 @@ export default function ForgotPassword() {
             z-index: 10;
           }
 
-          .trace-forgot-input-container input.trace-forgot-input {
-            width: 100% !important;
-            background: transparent !important;
-            background-color: transparent !important;
-            border: none !important;
+          .trace-forgot-input {
+            width: 100%;
+            background: transparent;
+            border: none;
             padding-left: 52px !important;
-            padding-right: 18px !important;
-            padding-top: 0 !important;
-            padding-bottom: 0 !important;
-            color: #F8FAFC !important;
-            font-size: 14px !important;
-            outline: none !important;
-            height: 100% !important;
-            box-sizing: border-box !important;
-            box-shadow: none !important;
+            padding-right: 18px;
+            padding-top: 0;
+            padding-bottom: 0;
+            color: #F8FAFC;
+            font-size: 14px;
+            outline: none;
+            height: 100%;
+            box-sizing: border-box;
           }
 
-          .trace-forgot-input-container input.trace-forgot-input::placeholder {
-            color: #94A3B8 !important;
+          .trace-forgot-input::placeholder {
+            color: #94A3B8;
           }
 
           .trace-forgot-validation-feedback {
@@ -368,6 +418,43 @@ export default function ForgotPassword() {
           .trace-forgot-submit-btn:disabled {
             opacity: 0.4;
             cursor: not-allowed;
+          }
+
+          /* Secondary Outlined Resend Email Button */
+          .trace-forgot-resend-btn {
+            background: transparent;
+            color: #39E6FF;
+            border: 1px solid #39E6FF;
+            border-radius: 14px;
+            padding: 0 24px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 250ms ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            width: 100%;
+            height: 54px;
+            box-sizing: border-box;
+          }
+
+          .trace-forgot-resend-btn:hover:not(:disabled) {
+            background: rgba(57, 230, 255, 0.08);
+            box-shadow: 0 0 15px rgba(57, 230, 255, 0.2);
+            transform: translateY(-1px);
+          }
+
+          .trace-forgot-resend-btn:active:not(:disabled) {
+            transform: scale(.98);
+          }
+
+          .trace-forgot-resend-btn:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+            border-color: rgba(57, 230, 255, 0.3);
+            color: rgba(57, 230, 255, 0.6);
           }
 
           /* Card Footer Links */
@@ -457,7 +544,7 @@ export default function ForgotPassword() {
         <div className="trace-forgot-left-content">
           <div className="trace-forgot-brand">
             <div className="trace-forgot-brand-icon" aria-hidden="true">
-              <img src="/logo-white.svg" alt="TRACE AI Logo" className="w-9 h-9" />
+              <Shield className="w-9 h-9 text-[#47FAF3]" />
             </div>
             <div className="trace-forgot-brand-text">
               <span className="trace-forgot-brand-name">TRACE AI</span>
@@ -590,19 +677,64 @@ export default function ForgotPassword() {
           <div className="trace-forgot-card" role="status" aria-live="polite">
             <div className="trace-forgot-card-header">
               <h1 className="trace-forgot-title" style={{ color: '#10B981', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <CheckCircle2 className="w-6 h-6" />
+                <CheckCircle2 className="w-6 h-6 text-[#10B981]" />
                 <span>Instructions sent</span>
               </h1>
               <p className="trace-forgot-support-text" style={{ marginTop: '8px' }}>
-                If an account exists for this email, password reset instructions have been sent.
+                If an account exists for {email ? <strong style={{ color: '#F8FAFC' }}>{email}</strong> : 'this email'}, password reset instructions have been sent.
               </p>
             </div>
 
-            <div className="trace-forgot-card-footer" style={{ borderTop: '1px solid rgba(255, 255, 255, 0.08)', paddingTop: '16px', marginTop: '12px' }}>
-              <Link to="/login" className="trace-forgot-login-link">
-                <ArrowLeft className="w-4 h-4" aria-hidden="true" />
-                <span>Back to Login</span>
-              </Link>
+            {resendToast && (
+              <div
+                className={`trace-forgot-validation-feedback ${resendToast.type === 'success' ? 'success' : 'error'}`}
+                role="status"
+                style={{
+                  padding: '12px 16px',
+                  borderRadius: '12px',
+                  backgroundColor: resendToast.type === 'success' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                  border: `1px solid ${resendToast.type === 'success' ? 'rgba(16, 185, 129, 0.4)' : 'rgba(239, 68, 68, 0.4)'}`,
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px'
+                }}
+              >
+                {resendToast.type === 'success' ? (
+                  <CheckCircle2 className="w-4 h-4 text-[#10B981] flex-shrink-0" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 text-[#EF4444] flex-shrink-0" />
+                )}
+                <span style={{ fontSize: '13px', lineHeight: '1.4' }}>{resendToast.text}</span>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%', borderTop: '1px solid rgba(255, 255, 255, 0.08)', paddingTop: '20px' }}>
+              {/* Preserved Back to Login Link */}
+              <div className="trace-forgot-card-footer" style={{ marginTop: 0 }}>
+                <Link to="/login" className="trace-forgot-login-link">
+                  <ArrowLeft className="w-4 h-4" aria-hidden="true" />
+                  <span>Back to Login</span>
+                </Link>
+              </div>
+
+              {/* Secondary Outlined Resend Email Button below Back to Login */}
+              <button
+                type="button"
+                className="trace-forgot-resend-btn"
+                onClick={handleResendEmail}
+                disabled={isResending || countdown > 0}
+              >
+                {isResending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-[#39E6FF]" aria-hidden="true" />
+                    <span>Resending Email...</span>
+                  </>
+                ) : (
+                  <span>{countdown > 0 ? `Resend Email (${countdown}s)` : 'Resend Email'}</span>
+                )}
+              </button>
             </div>
           </div>
         )}
