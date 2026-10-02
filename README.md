@@ -470,7 +470,7 @@ Copy-Item server/.env.example server/.env -ErrorAction SilentlyContinue
 Configure `server/.env` with your local settings.
 
 > **SECURITY NOTICE:**  
-> Never commit real cryptographic keys, passwords, or production tokens to source control. Generate secure, random strings for all secrets.
+> Never commit real cryptographic keys, passwords, or production tokens to source control. Generate secure, random strings for all secrets (e.g., using `openssl rand -hex 32`). All values in this documentation are non-operational placeholders.
 
 Example development `server/.env` template:
 ```env
