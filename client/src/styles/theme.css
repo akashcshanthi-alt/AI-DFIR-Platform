@@ -155,8 +155,26 @@ img, picture, video, canvas, svg {
 }
 
 /* Input, button reset */
-input, button, textarea, select {
+button {
+  background-color: transparent;
+  color: inherit;
+  border: none;
   font: inherit;
+  cursor: pointer;
+}
+
+input, textarea, select {
+  font: inherit;
+}
+
+select {
+  background-color: var(--bg-surface, #0b1220);
+  color: var(--text-primary, #f8fafc);
+}
+
+select option {
+  background-color: #0b1220 !important;
+  color: #f8fafc !important;
 }
 
 /* Selection Styling (Custom Accent Highlight) */
@@ -570,5 +588,727 @@ th,
   height: 2px !important;
   background-color: var(--color-primary, #3b82f6) !important;
   border-radius: 2px !important;
+}
+
+/* 8. Evidence Tab Forensic Styling Pass */
+.trace-evidence-workspace {
+  display: grid;
+  grid-template-columns: 360px 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+@media (max-width: 1024px) {
+  .trace-evidence-workspace {
+    grid-template-columns: 1fr;
+  }
+}
+
+.trace-evidence-upload-card {
+  background-color: #0B1220;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 22px;
+  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  backdrop-filter: blur(12px);
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.trace-evidence-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 14px;
+}
+
+.trace-evidence-upload-title {
+  color: #FFFFFF;
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  margin: 0;
+}
+
+.trace-evidence-intake-badge {
+  font-size: 0.6875rem;
+  font-family: monospace;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #00E5FF;
+  background: rgba(0, 229, 255, 0.08);
+  border: 1px solid rgba(0, 229, 255, 0.22);
+  border-radius: 6px;
+  padding: 2.5px 8px;
+  letter-spacing: 0.04em;
+}
+
+.trace-evidence-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.trace-evidence-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+}
+
+.trace-evidence-label {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #94A3B8;
+}
+
+/* Hidden File Inputs (Prevents native browser buttons from ever showing) */
+.trace-evidence-hidden-input {
+  display: none !important;
+  position: absolute !important;
+  width: 0 !important;
+  height: 0 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* Glassmorphism Upload Dropzone */
+.trace-evidence-dropzone {
+  background: rgba(7, 12, 22, 0.85);
+  border: 1.5px dashed rgba(0, 229, 255, 0.28);
+  border-radius: 14px;
+  padding: 22px 16px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  outline: none;
+  user-select: none;
+}
+
+.trace-evidence-dropzone:hover,
+.trace-evidence-dropzone.active {
+  background: rgba(0, 229, 255, 0.04);
+  border-color: #00E5FF;
+  box-shadow: 0 0 20px rgba(0, 229, 255, 0.15);
+}
+
+.trace-evidence-dropzone-icon-wrapper {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: rgba(0, 229, 255, 0.08);
+  border: 1px solid rgba(0, 229, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #00E5FF;
+  font-size: 20px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.trace-evidence-dropzone:hover .trace-evidence-dropzone-icon-wrapper {
+  transform: translateY(-2px);
+  box-shadow: 0 0 14px rgba(0, 229, 255, 0.35);
+}
+
+.trace-evidence-dropzone-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+}
+
+.trace-evidence-dropzone-heading {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #F8FAFC;
+  letter-spacing: 0.01em;
+}
+
+.trace-evidence-dropzone-subheading {
+  font-size: 0.75rem;
+  color: #94A3B8;
+  margin-bottom: 4px;
+}
+
+.trace-evidence-dropzone-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  margin: 4px 0;
+}
+
+.trace-evidence-picker-btn {
+  background: rgba(15, 23, 42, 0.85) !important;
+  border: 1px solid rgba(0, 229, 255, 0.3) !important;
+  color: #F8FAFC !important;
+  font-size: 0.75rem !important;
+  font-weight: 600 !important;
+  padding: 6px 14px !important;
+  border-radius: 8px !important;
+  cursor: pointer !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  transition: all 0.15s ease !important;
+}
+
+.trace-evidence-picker-btn:hover {
+  background: rgba(0, 229, 255, 0.15) !important;
+  border-color: #00E5FF !important;
+  color: #00E5FF !important;
+  box-shadow: 0 0 10px rgba(0, 229, 255, 0.25) !important;
+}
+
+.trace-evidence-picker-btn.folder {
+  border-color: rgba(56, 189, 248, 0.3) !important;
+}
+
+.trace-evidence-picker-btn.folder:hover {
+  background: rgba(56, 189, 248, 0.15) !important;
+  border-color: #38BDF8 !important;
+  color: #38BDF8 !important;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.25) !important;
+}
+
+.trace-evidence-formats-line {
+  font-size: 0.6875rem;
+  color: #64748B;
+  font-family: monospace;
+  letter-spacing: 0.02em;
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+/* Staged / Queued Files List */
+.trace-evidence-queue-container {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.trace-evidence-queue-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 2px;
+}
+
+.trace-evidence-queue-pill {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: #00E5FF;
+  background: rgba(0, 229, 255, 0.1);
+  border: 1px solid rgba(0, 229, 255, 0.2);
+  border-radius: 6px;
+  padding: 2px 7px;
+  font-family: monospace;
+}
+
+.trace-evidence-clear-btn {
+  background: transparent !important;
+  border: none !important;
+  color: #EF4444 !important;
+  font-size: 0.6875rem !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  padding: 2px 6px !important;
+  border-radius: 4px !important;
+  transition: all 0.15s ease !important;
+}
+
+.trace-evidence-clear-btn:hover {
+  background: rgba(239, 68, 68, 0.1) !important;
+  text-decoration: underline !important;
+}
+
+.trace-evidence-queue-list {
+  background: #070C16;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  max-height: 160px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+}
+
+.trace-evidence-selected-file {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  transition: background 0.15s;
+}
+
+.trace-evidence-selected-file:hover {
+  background: rgba(15, 23, 42, 0.9);
+}
+
+.trace-evidence-file-icon {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.trace-evidence-file-info {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+
+.trace-evidence-file-name {
+  font-size: 0.75rem;
+  color: #F8FAFC;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+}
+
+.trace-evidence-file-dir {
+  color: #38BDF8;
+  font-family: monospace;
+  font-size: 0.6875rem;
+  margin-right: 4px;
+}
+
+.trace-evidence-file-basename {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.trace-evidence-file-meta {
+  font-size: 0.6875rem;
+  color: #94A3B8;
+  font-family: monospace;
+}
+
+.trace-evidence-remove-file-btn {
+  background: transparent !important;
+  border: none !important;
+  color: #94A3B8 !important;
+  cursor: pointer !important;
+  padding: 4px !important;
+  border-radius: 4px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transition: all 0.15s ease !important;
+  flex-shrink: 0 !important;
+}
+
+.trace-evidence-remove-file-btn:hover {
+  color: #EF4444 !important;
+  background: rgba(239, 68, 68, 0.12) !important;
+}
+
+/* Evidence Form Controls (Classification, Tags, Custody Notes) */
+.trace-evidence-select-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.trace-evidence-select {
+  background-color: #070C16 !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 8px !important;
+  color: #F8FAFC !important;
+  height: 40px !important;
+  padding: 0 34px 0 12px !important;
+  font-size: 0.8125rem !important;
+  outline: none !important;
+  transition: all 150ms ease !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  appearance: none !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2300E5FF' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 12px center !important;
+  cursor: pointer !important;
+}
+
+.trace-evidence-select:focus {
+  border-color: #00E5FF !important;
+  box-shadow: 0 0 0 2px rgba(0, 229, 255, 0.2) !important;
+}
+
+.trace-evidence-select option {
+  background-color: #0B1220 !important;
+  color: #F8FAFC !important;
+  padding: 8px 12px !important;
+}
+
+.trace-evidence-input {
+  background-color: #070C16 !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 8px !important;
+  color: #FFFFFF !important;
+  height: 40px !important;
+  padding: 0 12px !important;
+  font-size: 0.8125rem !important;
+  outline: none !important;
+  transition: all 150ms ease !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+.trace-evidence-input:focus {
+  border-color: #00E5FF !important;
+  box-shadow: 0 0 0 2px rgba(0, 229, 255, 0.2) !important;
+}
+
+.trace-evidence-input::placeholder {
+  color: rgba(148, 163, 184, 0.5) !important;
+}
+
+.trace-evidence-textarea {
+  background-color: #070C16 !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 8px !important;
+  color: #FFFFFF !important;
+  min-height: 76px !important;
+  padding: 10px 12px !important;
+  font-size: 0.8125rem !important;
+  line-height: 1.5 !important;
+  resize: vertical !important;
+  outline: none !important;
+  transition: all 150ms ease !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+.trace-evidence-textarea:focus {
+  border-color: #00E5FF !important;
+  box-shadow: 0 0 0 2px rgba(0, 229, 255, 0.2) !important;
+}
+
+.trace-evidence-textarea::placeholder {
+  color: rgba(148, 163, 184, 0.5) !important;
+}
+
+.trace-evidence-validation-error {
+  color: #EF4444;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+/* Ingest Action CTA */
+.trace-evidence-submit-btn {
+  background: linear-gradient(135deg, #00E5FF 0%, #2563EB 100%) !important;
+  color: #050814 !important;
+  font-weight: 700 !important;
+  font-size: 0.85rem !important;
+  letter-spacing: 0.02em !important;
+  border-radius: 10px !important;
+  padding: 11px 18px !important;
+  height: 42px !important;
+  cursor: pointer !important;
+  border: none !important;
+  transition: all 200ms ease !important;
+  box-shadow: 0 0 16px rgba(0, 229, 255, 0.25) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  width: 100% !important;
+}
+
+.trace-evidence-submit-btn:hover:not(:disabled) {
+  filter: brightness(1.1) !important;
+  box-shadow: 0 0 24px rgba(0, 229, 255, 0.4) !important;
+  transform: translateY(-1px);
+}
+
+.trace-evidence-submit-btn:disabled {
+  opacity: 0.4 !important;
+  cursor: not-allowed !important;
+  box-shadow: none !important;
+  transform: none !important;
+  filter: grayscale(0.4);
+}
+
+/* Upload Progress Tracker */
+.trace-evidence-progress-container {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: rgba(7, 12, 22, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.trace-evidence-progress-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.trace-evidence-progress-status {
+  font-size: 0.75rem;
+  color: #00E5FF;
+  font-weight: 600;
+}
+
+.trace-evidence-progress-percent {
+  font-size: 0.75rem;
+  color: #94A3B8;
+  font-family: monospace;
+}
+
+.trace-evidence-progress-track {
+  width: 100%;
+  height: 6px;
+  background-color: rgba(255, 255, 255, 0.08);
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+.trace-evidence-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #00E5FF, #3B82F6);
+  border-radius: 9999px;
+  transition: width 200ms ease;
+}
+
+.trace-evidence-progress-fill.verified {
+  background: #10B981;
+}
+
+/* Right Side: Case Evidence Catalog Card */
+.trace-evidence-list-card {
+  background-color: #0B1220;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 22px;
+  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  backdrop-filter: blur(12px);
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.trace-evidence-search-input {
+  background-color: #070C16 !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 8px !important;
+  color: #FFFFFF !important;
+  padding: 8px 12px 8px 34px !important;
+  font-size: 0.75rem !important;
+  width: 100% !important;
+  outline: none !important;
+  transition: all 150ms ease !important;
+  box-sizing: border-box !important;
+}
+
+.trace-evidence-search-input:focus {
+  border-color: #00E5FF !important;
+  box-shadow: 0 0 0 2px rgba(0, 229, 255, 0.2) !important;
+}
+
+.trace-evidence-search-input::placeholder {
+  color: rgba(148, 163, 184, 0.5) !important;
+}
+
+.trace-evidence-filter-select {
+  background-color: #070C16 !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 8px !important;
+  color: #FFFFFF !important;
+  padding: 8px 30px 8px 12px !important;
+  font-size: 0.75rem !important;
+  outline: none !important;
+  cursor: pointer !important;
+  appearance: none !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%2300E5FF' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 10px center !important;
+}
+
+.trace-evidence-filter-select:focus {
+  border-color: #00E5FF !important;
+  box-shadow: 0 0 0 2px rgba(0, 229, 255, 0.2) !important;
+}
+
+.trace-evidence-filter-select option {
+  background-color: #0B1220 !important;
+  color: #FFFFFF !important;
+  padding: 6px 10px !important;
+}
+
+/* Catalog Empty State */
+.trace-evidence-empty-state {
+  padding: 48px 24px;
+  text-align: center;
+  background: rgba(7, 12, 22, 0.45);
+  border: 1px dashed rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  margin: 12px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.trace-evidence-empty-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  background: rgba(0, 229, 255, 0.08);
+  border: 1px solid rgba(0, 229, 255, 0.2);
+  color: #00E5FF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 14px;
+  font-size: 22px;
+}
+
+.trace-evidence-empty-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #FFFFFF;
+  margin: 0 0 6px;
+}
+
+.trace-evidence-empty-desc {
+  font-size: 0.8125rem;
+  color: #94A3B8;
+  max-width: 420px;
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* Evidence Table Container */
+.trace-evidence-table-container {
+  background-color: #070C16;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  overflow-x: auto;
+  box-shadow: 0 8px 20px -4px rgba(0, 0, 0, 0.4);
+}
+
+.trace-evidence-table {
+  width: 100% !important;
+  border-collapse: collapse !important;
+  text-align: left !important;
+}
+
+.trace-evidence-table th {
+  background-color: #0B1220 !important;
+  color: #94A3B8 !important;
+  font-size: 0.6875rem !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.06em !important;
+  padding: 12px 16px !important;
+  border-bottom: 1.5px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+.trace-evidence-table td {
+  padding: 12px 16px !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04) !important;
+  color: #CBD5E1 !important;
+  font-size: 0.75rem !important;
+}
+
+.trace-evidence-row:hover {
+  background-color: rgba(255, 255, 255, 0.02) !important;
+}
+
+.trace-evidence-row-btn {
+  background-color: #0F172A !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 8px !important;
+  color: #CBD5E1 !important;
+  padding: 5px 12px !important;
+  font-size: 0.6875rem !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  transition: all 150ms ease !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+}
+
+.trace-evidence-row-btn:hover {
+  background-color: #1E293B !important;
+  border-color: rgba(0, 229, 255, 0.4) !important;
+  color: #00E5FF !important;
+}
+
+.trace-evidence-copy-btn {
+  background: transparent !important;
+  color: #94A3B8 !important;
+  border: none !important;
+  cursor: pointer !important;
+  padding: 2px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  transition: color 150ms ease !important;
+}
+
+.trace-evidence-copy-btn:hover {
+  color: #00E5FF !important;
+}
+
+.trace-evidence-inline-btn {
+  padding: 6px 14px !important;
+  border-radius: 6px !important;
+  font-size: 0.75rem !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  transition: all 150ms ease !important;
+  border: 1px solid transparent !important;
+}
+
+.trace-evidence-inline-btn.cancel {
+  background-color: #0F172A !important;
+  color: #94A3B8 !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.trace-evidence-inline-btn.cancel:hover {
+  background-color: #1E293B !important;
+  color: #FFFFFF !important;
+}
+
+.trace-evidence-inline-btn.save {
+  background: #00E5FF !important;
+  color: #0A0F1E !important;
+}
+
+.trace-evidence-inline-btn.save:hover {
+  filter: brightness(1.1) !important;
 }
 

@@ -233,7 +233,6 @@ async function runUserManagementTests() {
   }
 
   console.log('\n=== [ALL USER MANAGEMENT & RBAC INTEGRATION TESTS SUCCESSFUL] ===');
-  process.exit(0);
 }
 
 runUserManagementTests();

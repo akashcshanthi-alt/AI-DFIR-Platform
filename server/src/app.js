@@ -2,11 +2,14 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
+const path = require('path');
 const dotenv = require('dotenv');
 const rateLimit = require('express-rate-limit');
+const mongoose = require('mongoose');
 
-// Load environment variables
+// Load environment variables (supports running from root or server directory)
 dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 // Middlewares
 const logger = require('./middleware/logger');
@@ -23,13 +26,16 @@ const notificationRoutes = require('./routes/notification.routes');
 const settingsRoutes = require('./routes/settings.routes');
 const evidenceRoutes = require('./routes/evidence.routes');
 const aiRoutes = require('./routes/ai.routes');
+const iocRoutes = require('./routes/ioc.routes');
+const timelineRoutes = require('./routes/timeline.routes');
+const mitreRoutes = require('./routes/mitre.routes');
 
 const app = express();
 
 // Security rate limiter configs
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per 15 minutes
+  max: process.env.NODE_ENV === 'development' ? 2000 : 100, // Allow higher limit in development/testing
   message: {
     success: false,
     error: {
@@ -71,9 +77,22 @@ app.use(logger);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
+  const dbStateMap = {
+    0: 'disconnected',
+    1: 'connected',
+    2: 'connecting',
+    3: 'disconnecting'
+  };
+  const dbState = mongoose.connection.readyState;
   res.status(200).json({
     success: true,
     status: 'UP',
+    database: {
+      status: dbStateMap[dbState] || 'unknown',
+      name: mongoose.connection.name || null,
+      host: mongoose.connection.host || null,
+      port: mongoose.connection.port || null
+    },
     timestamp: new Date().toISOString(),
     uptime: process.uptime()
   });
@@ -91,6 +110,9 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/evidence', evidenceRoutes);
 app.use('/api/ai', aiRoutes);
+app.use('/api/ioc', iocRoutes);
+app.use('/api/timeline', timelineRoutes);
+app.use('/api/mitre', mitreRoutes);
 
 // Catch 404
 app.use((req, res, next) => {

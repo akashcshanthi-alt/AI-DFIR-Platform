@@ -1,724 +1,559 @@
-import React, { useState } from 'react';
-import { 
-  FiActivity, 
-  FiLock, 
-  FiCpu, 
-  FiGlobe, 
-  FiAlertTriangle, 
-  FiChevronRight 
-} from 'react-icons/fi';
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  Clock,
+  Calendar,
+  Filter,
+  Search,
+  RefreshCw,
+  AlertTriangle,
+  AlertOctagon,
+  Info,
+  CheckCircle2,
+  XCircle,
+  FileText,
+  ChevronDown,
+  ChevronUp,
+  Layers,
+  ShieldAlert,
+  SlidersHorizontal,
+  ArrowDownUp,
+  ExternalLink,
+  Lock,
+  Globe,
+  Cpu,
+  FolderOpen
+} from 'lucide-react';
+import { timelineService } from '../../services/timeline.service';
 
-import StatusBadge from '../../components/common/StatusBadge';
+export default function TimelineTab({ caseId }) {
+  const [events, setEvents] = useState([]);
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState(null);
+  const [actionSuccess, setActionSuccess] = useState(null);
 
-// Coherent mock timeline events list
-const TIMELINE_EVENTS = [
-  {
-    time: '10:29:48',
-    type: 'Authentication',
-    title: 'Repeated Login Failures',
-    severity: 'Medium',
-    evidence: 'security.evtx',
-    description: 'Multiple failed authentication attempts were recorded for the target account within a short period.',
-    icon: FiLock,
-    isCorrelated: false,
-  },
-  {
-    time: '10:31:14',
-    type: 'Authentication',
-    title: 'Authentication Anomaly',
-    severity: 'High',
-    evidence: 'security.evtx',
-    description: 'A successful login occurred from an unusual source shortly after repeated authentication failures.',
-    icon: FiLock,
-    isCorrelated: true,
-  },
-  {
-    time: '10:34:27',
-    type: 'Process',
-    title: 'Suspicious Process Execution',
-    severity: 'Critical',
-    evidence: 'memory.raw',
-    description: 'An unusual PowerShell process pattern was identified during memory evidence review.',
-    icon: FiCpu,
-    isCorrelated: true,
-  },
-  {
-    time: '10:36:52',
-    type: 'Network',
-    title: 'External Network Connection',
-    severity: 'Medium',
-    evidence: 'network.pcap',
-    description: 'An outbound connection to an uncommon external destination was observed after the suspicious process event.',
-    icon: FiGlobe,
-    isCorrelated: true,
-  },
-  {
-    time: '10:38:10',
-    type: 'Alert',
-    title: 'Threat Correlation Triggered',
-    severity: 'High',
-    evidence: 'Correlated Findings',
-    description: 'TRACE AI correlated the authentication, process, and network findings into a single investigation sequence.',
-    icon: FiAlertTriangle,
-    isCorrelated: true,
-  },
-];
+  // Filters
+  const [searchQuery, setSearchQuery] = useState('');
+  const [eventTypeFilter, setEventTypeFilter] = useState('all');
+  const [severityFilter, setSeverityFilter] = useState('all');
+  const [includeUndated, setIncludeUndated] = useState(false);
+  const [sortOrder, setSortOrder] = useState('asc'); // 'asc' = oldest first
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
 
-/**
- * TimelineTab Component
- * Renders the chronological investigation event timeline for security analysts.
- * Features inline event type categorizations, collapsible row details,
- * attack progression indicators, and multi-value local filters.
- *
- * @param {Object} props
- * @param {string} [props.caseId] - Parent case unique identifier
- */
-export default function TimelineTab({ caseId = 'TRC-2026-0042' }) {
-  // Local state managers
-  const [activeFilter, setActiveFilter] = useState('All');
-  const [expandedEvents, setExpandedEvents] = useState([]);
+  // Row expansion for deep provenance
+  const [expandedEventId, setExpandedEventId] = useState(null);
 
-  // Expand / collapse single event toggle
-  const toggleEventExpanded = (time) => {
-    setExpandedEvents((prev) => 
-      prev.includes(time) ? prev.filter((t) => t !== time) : [...prev, time]
-    );
+  const fetchTimelineData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const [timelineRes, statsRes] = await Promise.all([
+        timelineService.getTimelineEvents({
+          caseId,
+          from: fromDate || undefined,
+          to: toDate || undefined,
+          eventType: eventTypeFilter !== 'all' ? eventTypeFilter : undefined,
+          severity: severityFilter !== 'all' ? severityFilter : undefined,
+          includeUndated: includeUndated ? 'true' : 'false',
+          sortOrder,
+          limit: 200
+        }),
+        timelineService.getTimelineStats(caseId)
+      ]);
+
+      setEvents(timelineRes.items || []);
+      setStats(statsRes);
+    } catch (err) {
+      console.error('Timeline fetch error:', err);
+      setError(err.message || 'Failed to load forensic timeline events.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Local filtering engine
-  const filteredEvents = TIMELINE_EVENTS.filter((item) => {
-    if (activeFilter === 'All') return true;
-    return item.type.toLowerCase() === activeFilter.toLowerCase();
-  });
+  useEffect(() => {
+    if (caseId) {
+      fetchTimelineData();
+    }
+  }, [caseId, eventTypeFilter, severityFilter, includeUndated, sortOrder]);
+
+  const handleGenerateTimeline = async () => {
+    try {
+      setGenerating(true);
+      setError(null);
+      const res = await timelineService.generateTimeline(caseId);
+      setActionSuccess(`Timeline generated: ${res.totalEvents} events reconstructed (${res.datedEvents} chronological, ${res.undatedEvents} undated).`);
+      setTimeout(() => setActionSuccess(null), 5000);
+      await fetchTimelineData();
+    } catch (err) {
+      console.error('Timeline generation error:', err);
+      setError(err.message || 'Failed to generate timeline from evidence.');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  // Local text search
+  const filteredEvents = useMemo(() => {
+    if (!searchQuery.trim()) return events;
+    const q = searchQuery.toLowerCase().trim();
+    return events.filter(e => {
+      const matchDesc = e.description?.toLowerCase().includes(q);
+      const matchExcerpt = e.rawExcerpt?.toLowerCase().includes(q);
+      const matchFile = e.source?.fileName?.toLowerCase().includes(q);
+      const matchRel = e.source?.relativePath?.toLowerCase().includes(q);
+      const matchId = e.eventId?.toLowerCase().includes(q);
+      const matchIoc = e.relatedIocs?.some(i => i.normalizedValue?.toLowerCase().includes(q));
+      return matchDesc || matchExcerpt || matchFile || matchRel || matchId || matchIoc;
+    });
+  }, [events, searchQuery]);
+
+  // Helpers for Badges & Icons
+  const getEventTypeIcon = (type) => {
+    switch (type) {
+      case 'AUTH':
+        return <Lock className="w-3.5 h-3.5 text-amber-400" />;
+      case 'NETWORK':
+        return <Globe className="w-3.5 h-3.5 text-cyan-400" />;
+      case 'PROCESS':
+        return <Cpu className="w-3.5 h-3.5 text-purple-400" />;
+      case 'FILE':
+        return <FileText className="w-3.5 h-3.5 text-blue-400" />;
+      case 'ALERT':
+        return <AlertOctagon className="w-3.5 h-3.5 text-red-400" />;
+      case 'EVIDENCE_INGESTED':
+        return <FolderOpen className="w-3.5 h-3.5 text-emerald-400" />;
+      case 'SYSTEM':
+      default:
+        return <Clock className="w-3.5 h-3.5 text-slate-400" />;
+    }
+  };
+
+  const getSeverityBadge = (sev) => {
+    switch (sev) {
+      case 'Critical':
+        return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-red-500/15 text-red-400 border border-red-500/30"><AlertOctagon className="w-2.5 h-2.5" /> Critical</span>;
+      case 'High':
+        return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-orange-500/15 text-orange-400 border border-orange-500/30"><AlertTriangle className="w-2.5 h-2.5" /> High</span>;
+      case 'Medium':
+        return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30">Medium</span>;
+      case 'Low':
+        return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-500/15 text-blue-400 border border-blue-500/30">Low</span>;
+      case 'Informational':
+      default:
+        return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-500/15 text-slate-300 border border-slate-500/30">Info</span>;
+    }
+  };
+
+  const getTimezoneBadge = (tzStatus) => {
+    switch (tzStatus) {
+      case 'explicit_utc':
+        return <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">UTC (Z)</span>;
+      case 'offset_provided':
+        return <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">Offset Preserved</span>;
+      case 'timezone_unknown':
+        return <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">TZ Unverified</span>;
+      case 'undated':
+      default:
+        return <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20">Undated</span>;
+    }
+  };
 
   return (
-    <div className="trace-timeline-tab">
-      {/* Component styles module */}
-      <style dangerouslySetInnerHTML={{
-        __html: `
-          .trace-timeline-tab {
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-            width: 100%;
-            box-sizing: border-box;
-          }
-
-          /* Header & Stats segment */
-          .trace-timeline-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 16px;
-            flex-wrap: wrap;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
-            padding-bottom: 16px;
-            box-sizing: border-box;
-          }
-
-          .trace-timeline-title-group {
-            display: flex;
-            flex-direction: column;
-          }
-
-          .trace-timeline-title {
-            font-size: 1.25rem;
-            font-weight: 700;
-            color: var(--text-primary, #f8fafc);
-            margin: 0;
-            line-height: 1.2;
-          }
-
-          .trace-timeline-subtitle {
-            font-size: 0.8125rem;
-            color: var(--text-secondary, #cbd5e1);
-            margin: 4px 0 0 0;
-            line-height: 1.4;
-          }
-
-          .trace-timeline-summary-row {
-            display: flex;
-            gap: 12px;
-            flex-wrap: wrap;
-            user-select: none;
-          }
-
-          .trace-timeline-summary-pill {
-            background-color: var(--bg-surface, #0e1626);
-            border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
-            border-radius: var(--radius-sm, 4px);
-            padding: 6px 12px;
-            font-size: 0.75rem;
-            font-weight: 600;
-            color: var(--text-secondary, #cbd5e1);
-            box-sizing: border-box;
-          }
-
-          .trace-timeline-summary-pill strong {
-            color: var(--text-primary, #f8fafc);
-            margin-left: 4px;
-          }
-
-          /* Attack Progression indicator */
-          .trace-timeline-progression {
-            background-color: var(--bg-surface, #0e1626);
-            border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
-            border-radius: var(--radius-sm, 4px);
-            padding: 10px 16px;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            font-size: 0.8125rem;
-            font-weight: 600;
-            color: var(--text-secondary, #cbd5e1);
-            flex-wrap: wrap;
-            user-select: none;
-            box-sizing: border-box;
-          }
-
-          .trace-progression-step {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            color: var(--text-muted, #64748b);
-          }
-
-          .trace-progression-step.active {
-            color: var(--color-secondary, #06b6d4);
-          }
-
-          .trace-progression-arrow {
-            color: var(--text-muted, #64748b);
-            opacity: 0.6;
-            display: flex;
-            align-items: center;
-          }
-
-          /* Filtering Toolbar */
-          .trace-timeline-toolbar {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 16px;
-            flex-wrap: wrap;
-            box-sizing: border-box;
-          }
-
-          .trace-timeline-filters {
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-          }
-
-          .trace-timeline-filter-btn {
-            background-color: var(--bg-surface, #0e1626);
-            border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
-            border-radius: var(--radius-sm, 4px);
-            color: var(--text-secondary, #cbd5e1);
-            padding: 6px 12px;
-            font-size: 0.78rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all var(--transition-speed, 200ms) ease;
-            outline: none;
-            box-sizing: border-box;
-          }
-
-          .trace-timeline-filter-btn:hover {
-            background-color: rgba(255, 255, 255, 0.02);
-            color: var(--text-primary, #f8fafc);
-          }
-
-          .trace-timeline-filter-btn.active {
-            background-color: var(--color-primary-light, rgba(59, 130, 246, 0.1));
-            border-color: var(--color-primary, #3b82f6);
-            color: var(--text-primary, #f8fafc);
-          }
-
-          .trace-timeline-filter-btn:focus-visible {
-            outline: 2px solid var(--color-primary, #3b82f6);
-          }
-
-          /* Chronological Timeline feed layout */
-          .trace-timeline-container {
-            position: relative;
-            padding: 10px 0 32px 0;
-            display: flex;
-            flex-direction: column;
-            gap: 24px;
-            box-sizing: border-box;
-          }
-
-          /* Central visual vertical connecting line */
-          .trace-timeline-line {
-            position: absolute;
-            left: 108px;
-            top: 24px;
-            bottom: 24px;
-            width: 2px;
-            background-color: var(--border-color, rgba(255, 255, 255, 0.08));
-            z-index: 1;
-          }
-
-          .trace-timeline-event-item {
-            display: flex;
-            align-items: flex-start;
-            position: relative;
-            z-index: 2;
-            box-sizing: border-box;
-          }
-
-          /* Column 1: Time (Monospaced alignment) */
-          .trace-timeline-time-col {
-            width: 80px;
-            font-family: 'SFMono-Regular', Consolas, monospace;
-            font-size: 0.8125rem;
-            font-weight: 700;
-            color: var(--text-muted, #64748b);
-            text-align: right;
-            padding-top: 10px;
-            flex-shrink: 0;
-            user-select: none;
-          }
-
-          /* Column 2: Visual Indicator Ring */
-          .trace-timeline-icon-col {
-            width: 58px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            flex-shrink: 0;
-            padding-top: 6px;
-          }
-
-          .trace-timeline-icon-dot {
-            width: 30px;
-            height: 30px;
-            border-radius: 50%;
-            background-color: var(--bg-surface, #0e1626);
-            border: 2px solid var(--border-color, rgba(255, 255, 255, 0.08));
-            color: var(--text-secondary, #cbd5e1);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 0.9rem;
-            z-index: 3;
-            transition: all var(--transition-speed, 200ms) ease;
-            box-sizing: border-box;
-          }
-
-          .trace-timeline-event-item:hover .trace-timeline-icon-dot {
-            border-color: var(--color-primary, #3b82f6);
-            color: var(--color-primary, #3b82f6);
-          }
-
-          .trace-timeline-icon-dot.critical {
-            border-color: var(--status-critical, #ef4444);
-            color: var(--status-critical, #ef4444);
-            background-color: var(--status-critical-bg, rgba(239, 68, 68, 0.05));
-          }
-
-          .trace-timeline-icon-dot.high {
-            border-color: var(--status-high, #f97316);
-            color: var(--status-high, #f97316);
-            background-color: var(--status-high-bg, rgba(249, 115, 22, 0.05));
-          }
-
-          /* Column 3: Event profile Card content */
-          .trace-timeline-card-col {
-            flex-grow: 1;
-            min-width: 0;
-          }
-
-          .trace-timeline-event-card {
-            background-color: var(--bg-surface, #0e1626);
-            border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
-            border-radius: var(--radius-md, 8px);
-            padding: 16px;
-            box-shadow: var(--shadow-sm);
-            cursor: pointer;
-            transition: all var(--transition-speed, 200ms) ease;
-            outline: none;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            box-sizing: border-box;
-            text-align: left;
-            width: 100%;
-            border-style: solid;
-          }
-
-          .trace-timeline-event-card:hover {
-            border-color: var(--border-color-hover, rgba(255, 255, 255, 0.15));
-            background-color: rgba(255, 255, 255, 0.005);
-          }
-
-          .trace-timeline-event-card:focus-visible {
-            outline: 2px solid var(--color-primary, #3b82f6);
-            outline-offset: -1px;
-          }
-
-          .trace-timeline-card-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 12px;
-            flex-wrap: wrap;
-          }
-
-          .trace-timeline-event-title {
-            font-size: 0.9rem;
-            font-weight: 600;
-            color: var(--text-primary, #f8fafc);
-            margin: 0;
-          }
-
-          .trace-timeline-card-meta {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 0.725rem;
-            color: var(--text-muted, #64748b);
-            text-transform: uppercase;
-            font-weight: 600;
-            letter-spacing: 0.04em;
-          }
-
-          .trace-timeline-meta-type {
-            color: var(--color-secondary, #06b6d4);
-          }
-
-          .trace-timeline-meta-evidence {
-            font-family: monospace;
-            background-color: rgba(255, 255, 255, 0.04);
-            padding: 1px 5px;
-            border-radius: 3px;
-            color: var(--text-secondary, #cbd5e1);
-            text-transform: none;
-          }
-
-          .trace-timeline-event-desc {
-            font-size: 0.8125rem;
-            line-height: 1.45;
-            color: var(--text-secondary, #cbd5e1);
-            margin: 0;
-          }
-
-          /* Collapsible Details Panel */
-          .trace-timeline-card-details {
-            border-top: 1px solid rgba(255, 255, 255, 0.03);
-            padding-top: 12px;
-            margin-top: 4px;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            font-size: 0.8125rem;
-            animation: trace-timeline-slideDown 200ms ease;
-            box-sizing: border-box;
-          }
-
-          .trace-timeline-details-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 8px 16px;
-            box-sizing: border-box;
-          }
-
-          .trace-timeline-details-item {
-            display: flex;
-            gap: 6px;
-            line-height: 1.4;
-          }
-
-          .trace-timeline-details-label {
-            font-weight: 600;
-            color: var(--text-muted, #64748b);
-            width: 100px;
-            flex-shrink: 0;
-          }
-
-          .trace-timeline-details-val {
-            color: var(--text-secondary, #cbd5e1);
-          }
-
-          .trace-timeline-details-val.monospace {
-            font-family: monospace;
-            color: var(--color-secondary, #06b6d4);
-            font-size: 0.75rem;
-          }
-
-          .trace-timeline-correlated-badge {
-            background-color: rgba(59, 130, 246, 0.1);
-            border: 1px solid rgba(59, 130, 246, 0.15);
-            color: var(--color-primary, #3b82f6);
-            font-size: 0.65rem;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            padding: 2px 6px;
-            border-radius: 3px;
-            width: fit-content;
-            align-self: flex-start;
-            margin-top: 4px;
-            user-select: none;
-          }
-
-          /* Empty State placeholder card */
-          .trace-timeline-empty-state {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 48px 24px;
-            text-align: center;
-            gap: 12px;
-            background-color: var(--bg-surface, #0e1626);
-            border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
-            border-radius: var(--radius-md, 8px);
-            box-sizing: border-box;
-            user-select: none;
-          }
-
-          .trace-timeline-empty-icon {
-            font-size: 2.5rem;
-            color: var(--text-muted, #64748b);
-            opacity: 0.5;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-          }
-
-          .trace-timeline-empty-text {
-            font-size: 0.95rem;
-            font-weight: 500;
-            color: var(--text-secondary, #cbd5e1);
-            margin: 0;
-            line-height: 1.4;
-          }
-
-          @keyframes trace-timeline-slideDown {
-            from { opacity: 0; transform: translateY(-4px); }
-            to { opacity: 1; transform: translateY(0); }
-          }
-
-          /* Responsive Layout */
-          @media (max-width: 768px) {
-            .trace-timeline-header {
-              flex-direction: column;
-              align-items: flex-start;
-              gap: 12px;
-            }
-            .trace-timeline-line {
-              left: 24px;
-            }
-            .trace-timeline-event-item {
-              flex-direction: column;
-              padding-left: 48px;
-              width: 100%;
-            }
-            .trace-timeline-time-col {
-              width: auto;
-              text-align: left;
-              font-size: 0.75rem;
-              padding-top: 0;
-              margin-bottom: 6px;
-              order: 2;
-            }
-            .trace-timeline-card-col {
-              order: 3;
-              width: 100%;
-            }
-            .trace-timeline-icon-col {
-              position: absolute;
-              left: 0;
-              top: 0;
-              width: 48px;
-              padding-top: 0;
-              order: 1;
-            }
-            .trace-timeline-details-grid {
-              grid-template-columns: 1fr;
-              gap: 8px;
-            }
-          }
-        `
-      }} />
-
-      {/* Header Summary Telemetry area */}
-      <div className="trace-timeline-header" role="region" aria-label="Timeline stats overview">
-        <div className="trace-timeline-title-group">
-          <h3 className="trace-timeline-title">Investigation Timeline</h3>
-          <p className="trace-timeline-subtitle">
-            Chronological sequence of correlated investigation events.
-          </p>
-        </div>
-        <div className="trace-timeline-summary-row">
-          <span className="trace-timeline-summary-pill">
-            Events: <strong>5</strong>
-          </span>
-          <span className="trace-timeline-summary-pill">
-            Critical Events: <strong>1</strong>
-          </span>
-          <span className="trace-timeline-summary-pill">
-            First Activity: <strong>10:29:48</strong>
-          </span>
-          <span className="trace-timeline-summary-pill">
-            Last Activity: <strong>10:38:10</strong>
-          </span>
-        </div>
-      </div>
-
-      {/* Breadcrumb-style Attack Progression summary */}
-      <div className="trace-timeline-progression" role="region" aria-label="Incident attack progression path">
-        <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-          Progression:
-        </span>
-        <div className="trace-progression-step active">
-          <span>Authentication</span>
-        </div>
-        <span className="trace-progression-arrow" aria-hidden="true">&rarr;</span>
-        <div className="trace-progression-step active">
-          <span>Process Execution</span>
-        </div>
-        <span className="trace-progression-arrow" aria-hidden="true">&rarr;</span>
-        <div className="trace-progression-step active">
-          <span>External Connection</span>
-        </div>
-        <span className="trace-progression-arrow" aria-hidden="true">&rarr;</span>
-        <div className="trace-progression-step active">
-          <span>Threat Correlation</span>
-        </div>
-      </div>
-
-      {/* Filters Toolbar */}
-      <div className="trace-timeline-toolbar">
-        <div className="trace-timeline-filters" role="group" aria-label="Filter events by category">
-          {[
-            { id: 'All', label: 'All Events' },
-            { id: 'Authentication', label: 'Authentication' },
-            { id: 'Process', label: 'Process' },
-            { id: 'Network', label: 'Network' },
-            { id: 'Alert', label: 'Alert' }
-          ].map((btn) => {
-            const isActive = activeFilter === btn.id;
-            return (
-              <button
-                key={btn.id}
-                type="button"
-                className={`trace-timeline-filter-btn ${isActive ? 'active' : ''}`}
-                onClick={() => setActiveFilter(btn.id)}
-                aria-pressed={isActive}
-              >
-                {btn.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Vertical Timeline container */}
-      {filteredEvents.length > 0 ? (
-        <ol className="trace-timeline-container" aria-label="Incident timeline list">
-          {/* Vertical line connector */}
-          <div className="trace-timeline-line" aria-hidden="true" />
-
-          {filteredEvents.map((item) => {
-            const Icon = item.icon;
-            const isExpanded = expandedEvents.includes(item.time);
-            
-            // Adjust center dot border colors according to severity levels
-            let severityClass = 'normal';
-            if (item.severity.toLowerCase() === 'critical') severityClass = 'critical';
-            else if (item.severity.toLowerCase() === 'high') severityClass = 'high';
-
-            return (
-              <li key={item.time} className="trace-timeline-event-item">
-                
-                {/* Column 1: Time */}
-                <div className="trace-timeline-time-col">
-                  <time>{item.time}</time>
-                </div>
-
-                {/* Column 2: Visual icon node */}
-                <div className="trace-timeline-icon-col">
-                  <div 
-                    className={`trace-timeline-icon-dot ${severityClass}`} 
-                    aria-label={`Event category: ${item.type}`}
-                  >
-                    <Icon aria-hidden="true" />
-                  </div>
-                </div>
-
-                {/* Column 3: Event card content */}
-                <div className="trace-timeline-card-col">
-                  <button
-                    type="button"
-                    className="trace-timeline-event-card"
-                    onClick={() => toggleEventExpanded(item.time)}
-                    aria-expanded={isExpanded}
-                    aria-label={`Event at ${item.time}: ${item.title}. Severity: ${item.severity}. Click to toggle details.`}
-                  >
-                    <div className="trace-timeline-card-header">
-                      <h4 className="trace-timeline-event-title">{item.title}</h4>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <div className="trace-timeline-card-meta">
-                          <span className="trace-timeline-meta-type">{item.type}</span>
-                          <span className="trace-timeline-meta-evidence">{item.evidence}</span>
-                        </div>
-                        <StatusBadge status={item.severity} />
-                      </div>
-                    </div>
-
-                    {/* Standard compact preview description */}
-                    <p className="trace-timeline-event-desc">
-                      {item.description}
-                    </p>
-
-                    {/* Collapsible Details Drawer */}
-                    {isExpanded && (
-                      <div className="trace-timeline-card-details">
-                        <div className="trace-timeline-details-grid">
-                          <div className="trace-timeline-details-item">
-                            <span className="trace-timeline-details-label">Event Type:</span>
-                            <span className="trace-timeline-details-val">{item.type}</span>
-                          </div>
-                          <div className="trace-timeline-details-item">
-                            <span className="trace-timeline-details-label">Timestamp:</span>
-                            <span className="trace-timeline-details-val monospace">{item.time}</span>
-                          </div>
-                          <div className="trace-timeline-details-item">
-                            <span className="trace-timeline-details-label">Evidence Source:</span>
-                            <span className="trace-timeline-details-val monospace">{item.evidence}</span>
-                          </div>
-                          <div className="trace-timeline-details-item">
-                            <span className="trace-timeline-details-label">Severity Level:</span>
-                            <span className="trace-timeline-details-val">{item.severity}</span>
-                          </div>
-                        </div>
-
-                        {item.isCorrelated && (
-                          <span className="trace-timeline-correlated-badge">
-                            Correlated Event
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </button>
-                </div>
-
-              </li>
-            );
-          })}
-        </ol>
-      ) : (
-        /* Empty State block if filter results are empty */
-        <div className="trace-timeline-empty-state" role="region" aria-label="No matching events found">
-          <div className="trace-timeline-empty-icon" aria-hidden="true">
-            <FiActivity />
-          </div>
-          <p className="trace-timeline-empty-text">No timeline events match this filter.</p>
+    <div className="space-y-6 pb-12">
+      
+      {/* Toast notifications */}
+      {actionSuccess && (
+        <div className="flex items-center gap-3 p-3.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-lg text-xs animate-in fade-in duration-200">
+          <CheckCircle2 className="w-4 h-4 shrink-0" />
+          <span>{actionSuccess}</span>
         </div>
       )}
+
+      {error && (
+        <div className="flex items-center gap-3 p-3.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs animate-in fade-in duration-200">
+          <XCircle className="w-4 h-4 shrink-0" />
+          <span className="flex-grow">{error}</span>
+          <button type="button" onClick={() => setError(null)} className="text-red-400 hover:text-white">&times;</button>
+        </div>
+      )}
+
+      {/* Header Banner */}
+      <div className="glass-panel p-5 rounded-xl border border-white/5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <Clock className="w-5 h-5 text-[#00E5FF]" />
+            <h2 className="text-base font-bold text-white tracking-wide">Forensic Timeline Engine</h2>
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">Phase 4</span>
+          </div>
+          <p className="text-xs text-[#8b90a0]">
+            Deterministic event chronology synthesized from parsed evidence logs, acquisition timestamps, and correlated threat indicators.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleGenerateTimeline}
+          disabled={generating}
+          className={`w-full md:w-auto px-4 py-2 rounded-lg font-semibold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-lg ${
+            generating
+              ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 cursor-not-allowed'
+              : 'bg-[#00E5FF] hover:bg-[#00E5FF]/90 text-black shadow-cyan-500/20'
+          }`}
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${generating ? 'animate-spin' : ''}`} />
+          <span>{generating ? 'Reconstructing Sequence...' : 'Generate Timeline'}</span>
+        </button>
+      </div>
+
+      {/* Metrics Row */}
+      {stats && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="glass-panel p-3.5 rounded-lg border border-white/5">
+            <span className="text-[10px] font-mono text-[#8b90a0] uppercase tracking-wider block">Total Timeline Events</span>
+            <div className="text-xl font-bold text-white mt-1">{stats.total || 0}</div>
+          </div>
+          <div className="glass-panel p-3.5 rounded-lg border border-emerald-500/20 bg-emerald-500/5">
+            <span className="text-[10px] font-mono text-emerald-400 uppercase tracking-wider block">Dated Chronological</span>
+            <div className="text-xl font-bold text-emerald-400 mt-1">{stats.dated || 0}</div>
+          </div>
+          <div className="glass-panel p-3.5 rounded-lg border border-red-500/20 bg-red-500/5">
+            <span className="text-[10px] font-mono text-red-400 uppercase tracking-wider block">High / Critical Alerts</span>
+            <div className="text-xl font-bold text-red-400 mt-1">
+              {(stats.severity?.Critical || 0) + (stats.severity?.High || 0)}
+            </div>
+          </div>
+          <div className="glass-panel p-3.5 rounded-lg border border-amber-500/20 bg-amber-500/5">
+            <span className="text-[10px] font-mono text-amber-400 uppercase tracking-wider block">Undated / Excluded</span>
+            <div className="text-xl font-bold text-amber-400 mt-1">{stats.undated || 0}</div>
+          </div>
+        </div>
+      )}
+
+      {/* Filters and Controls */}
+      <div className="glass-panel p-4 rounded-xl border border-white/5 space-y-3">
+        <div className="flex flex-col sm:flex-row gap-3">
+          
+          {/* Search Box */}
+          <div className="relative flex-grow">
+            <Search className="w-4 h-4 text-[#8b90a0] absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search timeline by description, file name, indicator, line text..."
+              className="w-full bg-black/40 border border-white/10 rounded-lg pl-9 pr-4 py-2 text-xs text-white placeholder-[#8b90a0] focus:outline-none focus:border-[#00E5FF]/50 transition-colors"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[#8b90a0] hover:text-white"
+              >
+                &times;
+              </button>
+            )}
+          </div>
+
+          {/* Chronological Sort Toggle */}
+          <button
+            type="button"
+            onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+            title="Toggle Chronological Direction"
+            className="px-3 py-2 bg-white/5 hover:bg-white/10 border border-white/10 text-white rounded-lg text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+          >
+            <ArrowDownUp className="w-3.5 h-3.5 text-[#00E5FF]" />
+            <span>{sortOrder === 'asc' ? 'Oldest First' : 'Newest First'}</span>
+          </button>
+
+          {/* Quick Refresh */}
+          <button
+            type="button"
+            onClick={fetchTimelineData}
+            title="Refresh Timeline"
+            className="px-3 py-2 bg-white/5 hover:bg-white/10 border border-white/10 text-white rounded-lg text-xs flex items-center justify-center transition-colors cursor-pointer"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
+
+        {/* Filters Grid */}
+        <div className="flex flex-wrap items-center gap-3 pt-1 text-xs">
+          <span className="text-[#8b90a0] text-[11px] flex items-center gap-1">
+            <SlidersHorizontal className="w-3 h-3" /> Filters:
+          </span>
+
+          {/* Event Type Filter */}
+          <select
+            value={eventTypeFilter}
+            onChange={(e) => setEventTypeFilter(e.target.value)}
+            className="bg-black/40 border border-white/10 rounded px-2.5 py-1 text-xs text-white focus:outline-none focus:border-[#00E5FF]/50 cursor-pointer"
+          >
+            <option value="all">All Event Types</option>
+            <option value="AUTH">Authentication (AUTH)</option>
+            <option value="NETWORK">Network Flow (NETWORK)</option>
+            <option value="PROCESS">Process Execution (PROCESS)</option>
+            <option value="FILE">Filesystem I/O (FILE)</option>
+            <option value="ALERT">Threat Alert (ALERT)</option>
+            <option value="EVIDENCE_INGESTED">Evidence Acquisition</option>
+            <option value="SYSTEM">System Telemetry</option>
+          </select>
+
+          {/* Severity Filter */}
+          <select
+            value={severityFilter}
+            onChange={(e) => setSeverityFilter(e.target.value)}
+            className="bg-black/40 border border-white/10 rounded px-2.5 py-1 text-xs text-white focus:outline-none focus:border-[#00E5FF]/50 cursor-pointer"
+          >
+            <option value="all">All Severities</option>
+            <option value="Critical">Critical</option>
+            <option value="High">High</option>
+            <option value="Medium">Medium</option>
+            <option value="Low">Low</option>
+            <option value="Informational">Informational</option>
+          </select>
+
+          {/* Include Undated Events Toggle */}
+          <label className="flex items-center gap-1.5 cursor-pointer select-none text-[#8b90a0] hover:text-white">
+            <input
+              type="checkbox"
+              checked={includeUndated}
+              onChange={(e) => setIncludeUndated(e.target.checked)}
+              className="rounded bg-black/40 border-white/20 text-[#00E5FF] focus:ring-0 cursor-pointer"
+            />
+            <span className="text-[11px]">Include Undated Records</span>
+          </label>
+
+          {/* Reset Filters */}
+          {(eventTypeFilter !== 'all' || severityFilter !== 'all' || includeUndated || searchQuery || fromDate || toDate) && (
+            <button
+              type="button"
+              onClick={() => {
+                setEventTypeFilter('all');
+                setSeverityFilter('all');
+                setIncludeUndated(false);
+                setSearchQuery('');
+                setFromDate('');
+                setToDate('');
+              }}
+              className="text-[#00E5FF] hover:underline text-[11px] ml-auto"
+            >
+              Reset filters
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Main Timeline Stream */}
+      <div className="glass-panel rounded-xl border border-white/5 p-4 sm:p-6">
+        
+        {loading ? (
+          <div className="p-12 text-center text-[#8b90a0] flex flex-col items-center justify-center gap-3">
+            <RefreshCw className="w-8 h-8 text-[#00E5FF] animate-spin" />
+            <p className="text-xs">Loading forensic timeline events...</p>
+          </div>
+        ) : filteredEvents.length === 0 ? (
+          <div className="p-12 text-center text-[#8b90a0] flex flex-col items-center justify-center gap-3 max-w-md mx-auto">
+            <Clock className="w-12 h-12 text-[#8b90a0]/60 mb-1" />
+            <h3 className="font-semibold text-white text-base">No Timeline Events</h3>
+            <p className="text-xs leading-relaxed">
+              {events.length === 0
+                ? "No forensic timeline has been generated for this case yet. Click 'Generate Timeline' to reconstruct event chronology from evidence records."
+                : "No events match the current filter criteria."}
+            </p>
+            {events.length === 0 && (
+              <button
+                type="button"
+                onClick={handleGenerateTimeline}
+                disabled={generating}
+                className="mt-2 px-4 py-2 rounded-lg bg-[#00E5FF] text-black font-semibold text-xs hover:bg-[#00E5FF]/90 transition-all cursor-pointer"
+              >
+                {generating ? 'Reconstructing...' : 'Generate Timeline Now'}
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="relative pl-6 sm:pl-8 border-l border-white/10 space-y-6">
+            {filteredEvents.map((evt) => {
+              const isExpanded = expandedEventId === (evt.eventId || evt._id);
+              const hasWarnings = evt.provenanceWarnings && evt.provenanceWarnings.length > 0;
+              const hasIocs = evt.relatedIocs && evt.relatedIocs.length > 0;
+
+              return (
+                <div key={evt.eventId || evt._id} className="relative group">
+                  
+                  {/* Timeline Node Dot */}
+                  <div className={`absolute -left-[31px] sm:-left-[39px] top-1.5 w-4 h-4 rounded-full border-2 border-[#10141d] flex items-center justify-center transition-transform group-hover:scale-110 ${
+                    evt.severity === 'Critical' ? 'bg-red-400 shadow-lg shadow-red-500/50' :
+                    evt.severity === 'High' ? 'bg-orange-400 shadow-lg shadow-orange-500/50' :
+                    evt.severity === 'Medium' ? 'bg-amber-400' :
+                    evt.severity === 'Informational' ? 'bg-slate-400' : 'bg-cyan-400'
+                  }`} />
+
+                  {/* Event Card Container */}
+                  <div className={`glass-card p-4 rounded-xl border border-white/5 hover:border-white/15 transition-all ${
+                    isExpanded ? 'bg-white/[0.03] ring-1 ring-[#00E5FF]/30' : ''
+                  }`}>
+                    
+                    {/* Header Row */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-white/5">
+                      
+                      {/* Left: Timestamp & Timezone Status */}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-mono text-white text-xs font-semibold flex items-center gap-1.5">
+                          <Clock className="w-3.5 h-3.5 text-[#00E5FF]" />
+                          {evt.timestamp ? (
+                            <>
+                              <span>{new Date(evt.timestamp).toISOString().replace('T', ' ').slice(0, 19)} UTC</span>
+                              {evt.originalTimestamp && evt.originalTimestamp !== new Date(evt.timestamp).toISOString() && (
+                                <span className="text-[10px] text-[#8b90a0] font-normal" title="Original Evidence Timestamp">
+                                  ({evt.originalTimestamp})
+                                </span>
+                              )}
+                            </>
+                          ) : (
+                            <span className="text-red-400 italic">Undated Record</span>
+                          )}
+                        </span>
+                        {getTimezoneBadge(evt.timezoneStatus)}
+                      </div>
+
+                      {/* Right: Badges & Severity */}
+                      <div className="flex items-center gap-2">
+                        {getSeverityBadge(evt.severity)}
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-white/5 text-[#8b90a0] border border-white/10 flex items-center gap-1">
+                          {getEventTypeIcon(evt.eventType)}
+                          <span>{evt.eventType}</span>
+                        </span>
+                        <span className="text-[10px] font-mono text-[#8b90a0]">{evt.eventId}</span>
+                      </div>
+
+                    </div>
+
+                    {/* Content Row */}
+                    <div className="pt-2.5 space-y-2">
+                      <div className="flex items-start justify-between gap-4">
+                        <p className="text-xs text-white/95 font-medium leading-relaxed">
+                          {evt.description}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setExpandedEventId(isExpanded ? null : (evt.eventId || evt._id))}
+                          className="shrink-0 p-1 hover:bg-white/10 rounded text-[#8b90a0] hover:text-white transition-colors cursor-pointer"
+                          title={isExpanded ? 'Collapse Details' : 'Expand Evidence Provenance'}
+                        >
+                          {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                        </button>
+                      </div>
+
+                      {/* Provenance Pills & Related IOCs */}
+                      <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px]">
+                        
+                        {/* Source file */}
+                        <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-black/40 text-cyan-400 border border-white/10 font-mono text-[10px]">
+                          <FileText className="w-3 h-3" />
+                          <span>{evt.source?.relativePath || evt.source?.fileName}</span>
+                          {evt.source?.lineNumber && (
+                            <span className="text-[#8b90a0]">:L{evt.source.lineNumber}</span>
+                          )}
+                        </div>
+
+                        {/* Correlated IOCs */}
+                        {hasIocs && (
+                          <div className="flex flex-wrap items-center gap-1">
+                            {evt.relatedIocs.map((ioc, iIdx) => (
+                              <span
+                                key={iIdx}
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20 font-mono text-[10px]"
+                                title={`Linked IOC: ${ioc.normalizedValue} (${ioc.severity})`}
+                              >
+                                <ShieldAlert className="w-2.5 h-2.5 text-purple-400" />
+                                <span>{ioc.normalizedValue}</span>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Provenance Warning Tag */}
+                        {hasWarnings && (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px]">
+                            <AlertTriangle className="w-2.5 h-2.5" />
+                            <span>Warning</span>
+                          </span>
+                        )}
+
+                      </div>
+
+                    </div>
+
+                    {/* Expandable Deep Provenance & Rule Drawer */}
+                    {isExpanded && (
+                      <div className="mt-3 pt-3 border-t border-white/5 space-y-3 bg-black/30 p-3 rounded-lg text-xs animate-in fade-in duration-150">
+                        
+                        {/* Warnings if any */}
+                        {hasWarnings && (
+                          <div className="p-2.5 bg-amber-500/10 border border-amber-500/20 rounded text-amber-300 space-y-1">
+                            <span className="font-mono text-[10px] uppercase font-bold flex items-center gap-1">
+                              <AlertTriangle className="w-3 h-3" /> Timestamp Provenance Warning
+                            </span>
+                            {evt.provenanceWarnings.map((w, wIdx) => (
+                              <p key={wIdx} className="text-[11px] leading-relaxed">{w}</p>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Raw Evidence Excerpt */}
+                        <div>
+                          <span className="text-[10px] font-mono text-[#8b90a0] uppercase tracking-wider block mb-1">
+                            Original Evidence Context Excerpt
+                          </span>
+                          <pre className="font-mono text-[11px] text-white/90 bg-black/60 p-2.5 rounded border border-white/5 whitespace-pre-wrap select-all overflow-x-auto">
+                            {evt.rawExcerpt || 'No raw snippet captured.'}
+                          </pre>
+                        </div>
+
+                        {/* Rule Matches */}
+                        {evt.ruleMatches && evt.ruleMatches.length > 0 && (
+                          <div>
+                            <span className="text-[10px] font-mono text-[#00E5FF] uppercase tracking-wider block mb-1">
+                              Applied Detection Rules
+                            </span>
+                            <div className="space-y-1.5">
+                              {evt.ruleMatches.map((rule, rIdx) => (
+                                <div key={rIdx} className="p-2 bg-white/[0.02] border border-white/5 rounded text-[11px]">
+                                  <div className="font-semibold text-white flex items-center gap-2">
+                                    <span>{rule.ruleName}</span>
+                                    <span className="text-[9px] font-mono text-[#8b90a0]">({rule.ruleId})</span>
+                                  </div>
+                                  <p className="text-[#8b90a0] mt-0.5">{rule.rationale}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Provenance Metadata footer */}
+                        <div className="pt-1 flex flex-wrap items-center justify-between text-[10px] font-mono text-[#8b90a0] border-t border-white/5">
+                          <span>Evidence ID: {evt.source?.evidenceId}</span>
+                          <span>Precision: {evt.timestampPrecision}</span>
+                          <span>Confidence: {evt.confidence} ({evt.confidenceScore || 50}%)</span>
+                        </div>
+
+                      </div>
+                    )}
+
+                  </div>
+
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+      </div>
 
     </div>
   );

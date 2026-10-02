@@ -6,7 +6,6 @@ import {
   FiCpu,
   FiFileText,
   FiLayers,
-  FiSettings,
   FiLogOut,
   FiShield,
   FiChevronLeft,
@@ -23,7 +22,6 @@ const NAV_ITEMS = [
   { id: 'reports', label: 'Reports', path: '/reports', icon: FiFileText },
   { id: 'audit-logs', label: 'Audit Logs', path: '/audit-logs', icon: FiLayers },
   { id: 'profile', label: 'Profile', path: '/profile', icon: FiUser },
-  { id: 'settings', label: 'Settings', path: '/settings', icon: FiSettings },
 ];
 
 /**

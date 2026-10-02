@@ -1,99 +1,126 @@
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
-const getHeaders = () => {
+const getAuthHeaders = () => {
   const token = localStorage.getItem('token');
   return {
     'Content-Type': 'application/json',
-    'Authorization': token ? `Bearer ${token}` : ''
+    ...(token ? { Authorization: `Bearer ${token}` } : {})
   };
 };
 
 export const aiService = {
   /**
-   * Run full AI incident correlation analysis
-   * @param {string} caseId - Sequential case ID
+   * Check Ollama connectivity, model availability, and readiness status
    */
-  async analyzeCase(caseId) {
-    const response = await fetch(`${API_URL}/ai/analyze`, {
-      method: 'POST',
-      headers: getHeaders(),
-      body: JSON.stringify({ caseId })
+  async getReadiness() {
+    const res = await fetch(`${API_URL}/ai/readiness`, {
+      method: 'GET',
+      headers: getAuthHeaders()
     });
-
-    const data = await response.json();
-    if (!response.ok || !data.success) {
-      throw new Error(data.error?.message || 'Failed to complete AI Incident Correlation.');
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error?.message || data.message || 'Failed to check AI readiness.');
     }
-    return data.data; // Returns full analysis payload
+    return data.data;
   },
 
   /**
-   * Send chat message prompt to the AI security assistant
-   * @param {string} caseId - Sequential case ID
-   * @param {Array} messages - Chat logs history
+   * Start a LangGraph multi-stage forensic investigation workflow
+   */
+  async startInvestigation(caseId, options = {}) {
+    const res = await fetch(`${API_URL}/ai/investigate`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ caseId, ...options })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error?.message || data.message || 'Investigation run failed.');
+    }
+    return data.data;
+  },
+
+  /**
+   * List previous investigation runs for a case
+   */
+  async getInvestigationRuns(params = {}) {
+    const query = new URLSearchParams();
+    Object.entries(params).forEach(([key, val]) => {
+      if (val !== undefined && val !== null && val !== '') {
+        query.append(key, val);
+      }
+    });
+
+    const res = await fetch(`${API_URL}/ai/runs?${query.toString()}`, {
+      method: 'GET',
+      headers: getAuthHeaders()
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error?.message || data.message || 'Failed to fetch investigation runs.');
+    }
+    return data.data;
+  },
+
+  /**
+   * Retrieve single investigation run with full hypothesis validation details
+   */
+  async getInvestigationRun(runId) {
+    const res = await fetch(`${API_URL}/ai/runs/${encodeURIComponent(runId)}`, {
+      method: 'GET',
+      headers: getAuthHeaders()
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error?.message || data.message || 'Failed to fetch investigation run.');
+    }
+    return data.data;
+  },
+
+  /**
+   * Retrieve granular evidence records referenced by a run
+   */
+  async getReferencedEvidence(runId) {
+    const res = await fetch(`${API_URL}/ai/runs/${encodeURIComponent(runId)}/evidence`, {
+      method: 'GET',
+      headers: getAuthHeaders()
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error?.message || data.message || 'Failed to fetch referenced evidence.');
+    }
+    return data.data;
+  },
+
+  /**
+   * Interactive AI Copilot chat for a case
    */
   async chatCopilot(caseId, messages) {
-    const response = await fetch(`${API_URL}/ai/chat`, {
+    const res = await fetch(`${API_URL}/ai/chat`, {
       method: 'POST',
-      headers: getHeaders(),
+      headers: getAuthHeaders(),
       body: JSON.stringify({ caseId, messages })
     });
-
-    const data = await response.json();
-    if (!response.ok || !data.success) {
-      throw new Error(data.error?.message || 'Failed to generate chat response.');
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error?.message || data.message || 'AI Chat request failed.');
     }
-    return data.data.message; // Returns assistant message { role, content, timestamp }
+    return data.data?.message;
   },
 
   /**
-   * Get executive summary summary
+   * Run structured AI case analysis
    */
-  async summarizeCase(caseId) {
-    const response = await fetch(`${API_URL}/ai/summarize`, {
+  async analyzeCase(caseId) {
+    const res = await fetch(`${API_URL}/ai/analyze`, {
       method: 'POST',
-      headers: getHeaders(),
+      headers: getAuthHeaders(),
       body: JSON.stringify({ caseId })
     });
-
-    const data = await response.json();
-    if (!response.ok || !data.success) {
-      throw new Error(data.error?.message || 'Failed to retrieve quick summary.');
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error?.message || data.message || 'Case analysis failed.');
     }
-    return data.data.summary;
-  },
-
-  /**
-   * Get recommended response actions mitigations
-   */
-  async recommendMitigations(caseId) {
-    const response = await fetch(`${API_URL}/ai/recommendations`, {
-      method: 'POST',
-      headers: getHeaders(),
-      body: JSON.stringify({ caseId })
-    });
-
-    const data = await response.json();
-    if (!response.ok || !data.success) {
-      throw new Error(data.error?.message || 'Failed to fetch recommendations.');
-    }
-    return data.data.recommendations;
-  },
-
-  /**
-   * Extract indicators of compromise (IOCs)
-   */
-  async detectIOCs(caseId) {
-    const response = await fetch(`${API_URL}/ai/ioc-detection`, {
-      method: 'POST',
-      headers: getHeaders(),
-      body: JSON.stringify({ caseId })
-    });
-
-    const data = await response.json();
-    if (!response.ok || !data.success) {
-      throw new Error(data.error?.message || 'Failed to run IOC detection.');
-    }
-    return data.data.iocs;
+    return data.data;
   }
 };

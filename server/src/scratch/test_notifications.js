@@ -1,4 +1,6 @@
 const ioClient = require('socket.io-client');
+const mongoose = require('mongoose');
+const User = require('../models/User');
 
 const PORT = process.env.PORT || 5000;
 const BASE_URL = `http://localhost:${PORT}/api`;
@@ -21,7 +23,7 @@ async function runTests() {
       body: JSON.stringify({
         fullName: 'Notification Tester',
         email: testEmail,
-        password: 'clearancepassword123',
+        password: 'ClearancePassword123',
         role: 'Analyst',
         department: 'SOC-Testing'
       })
@@ -35,13 +37,19 @@ async function runTests() {
     registeredUserId = regData.data.id;
     console.log(`[PASS] 1. Registered test operator successfully. ID: ${registeredUserId}`);
 
+    // Verify email directly in MongoDB so login succeeds
+    if (mongoose.connection.readyState === 0) {
+      await mongoose.connect(process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/arclight_dfir');
+    }
+    await User.updateOne({ email: testEmail }, { emailVerified: true });
+
     // 2. Login to obtain JWT token
     const loginRes = await fetch(`${BASE_URL}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         email: testEmail,
-        password: 'clearancepassword123'
+        password: 'ClearancePassword123'
       })
     });
 

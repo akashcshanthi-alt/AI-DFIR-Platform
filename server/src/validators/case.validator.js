@@ -8,6 +8,10 @@ const validateCreateCase = [
     .trim()
     .notEmpty().withMessage('Incident/Case title is required')
     .isLength({ max: 100 }).withMessage('Case title must not exceed 100 characters'),
+  body('incidentType')
+    .optional()
+    .trim()
+    .isLength({ max: 100 }).withMessage('Incident type must not exceed 100 characters'),
   body('severity')
     .isIn(['Low', 'Medium', 'High', 'Critical']).withMessage('Severity level must be one of: Low, Medium, High, Critical'),
   body('status')
@@ -39,6 +43,10 @@ const validateUpdateCase = [
     .trim()
     .notEmpty().withMessage('Incident/Case title cannot be empty')
     .isLength({ max: 100 }).withMessage('Case title must not exceed 100 characters'),
+  body('incidentType')
+    .optional()
+    .trim()
+    .isLength({ max: 100 }).withMessage('Incident type must not exceed 100 characters'),
   body('severity')
     .optional()
     .isIn(['Low', 'Medium', 'High', 'Critical']).withMessage('Severity level must be one of: Low, Medium, High, Critical'),

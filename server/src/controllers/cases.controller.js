@@ -1,9 +1,17 @@
 const Case = require('../models/Case');
+const AuditLog = require('../models/AuditLog');
 const response = require('../utils/response');
 const mongoose = require('mongoose');
 
 /**
+ * Resolve the authenticated user's ObjectId string from req.user.
+ * JWT payload may carry either `id` or `_id`.
+ */
+const getUserId = (req) => req.user?.id || req.user?._id;
+
+/**
  * Get cases list with search, filter, pagination, and sorting features.
+ * Results are always scoped to the authenticated user (createdBy).
  */
 const getCases = async (req, res, next) => {
   try {
@@ -19,7 +27,8 @@ const getCases = async (req, res, next) => {
       sortOrder = 'desc'
     } = req.query;
 
-    const query = {};
+    // Mandatory ownership filter — never omitted
+    const query = { createdBy: getUserId(req) };
 
     // Filters
     if (status && status !== 'All' && status !== 'Status') {
@@ -39,6 +48,7 @@ const getCases = async (req, res, next) => {
       query.$or = [
         { caseId: searchRegex },
         { title: searchRegex },
+        { incidentType: searchRegex },
         { description: searchRegex },
         { assignedAnalyst: searchRegex },
         { sourceIP: searchRegex },
@@ -84,14 +94,19 @@ const getCases = async (req, res, next) => {
 
 /**
  * Get single Case by MongoDB _id or sequential caseId.
+ * Enforces ownership — a user can only read their own cases (prevents IDOR).
  */
 const getCaseById = async (req, res, next) => {
   try {
     const { id } = req.params;
-    
-    const query = mongoose.Types.ObjectId.isValid(id)
+    const userId = getUserId(req);
+
+    const idFilter = mongoose.Types.ObjectId.isValid(id)
       ? { $or: [{ _id: id }, { caseId: id }] }
       : { caseId: id };
+
+    // Merge ownership filter — user MUST own this case
+    const query = { ...idFilter, createdBy: userId };
 
     const caseObj = await Case.findOne(query)
       .populate('createdBy', 'fullName email role')
@@ -115,12 +130,14 @@ const getCaseById = async (req, res, next) => {
 
 /**
  * Initiate a new Incident Case workspace.
+ * createdBy is always set from the verified JWT — never from the request body.
  */
 const createCase = async (req, res, next) => {
   try {
     const {
       title,
-      description,
+      incidentType = 'General Security Incident',
+      description = '',
       severity = 'High',
       status = 'Open',
       assignedAnalyst = 'Unassigned',
@@ -132,6 +149,7 @@ const createCase = async (req, res, next) => {
 
     const newCase = new Case({
       title,
+      incidentType,
       description,
       severity,
       status,
@@ -140,12 +158,30 @@ const createCase = async (req, res, next) => {
       destinationIP,
       evidenceCount,
       targetHost,
-      createdBy: req.user.id || req.user._id
+      // Always use the authenticated user's ID — never trust request body for ownership
+      createdBy: getUserId(req)
     });
 
     await newCase.save();
-    
+
     const populated = await newCase.populate('createdBy', 'fullName email role');
+
+    try {
+      const actorEmail = populated.createdBy?.email || req.user?.email || 'Operator';
+      await AuditLog.create({
+        user: actorEmail,
+        role: populated.createdBy?.role || req.user?.role || 'Investigator',
+        action: 'CREATE_CASE',
+        module: 'CASE_MANAGEMENT',
+        resource: `Case ${newCase.caseId}`,
+        ipAddress: req.ip || req.headers['x-forwarded-for'] || '127.0.0.1',
+        status: 'Success',
+        severity: 'Low',
+        description: `Investigation Case [${newCase.caseId}] "${newCase.title}" created.`
+      });
+    } catch (auditErr) {
+      console.warn('[Audit Log Warning] Failed to log case creation:', auditErr.message);
+    }
 
     return response.success(res, populated, 'Investigation Case successfully initiated', 201);
   } catch (error) {
@@ -155,21 +191,26 @@ const createCase = async (req, res, next) => {
 
 /**
  * Update case parameters.
+ * Enforces ownership — a user can only update their own cases (prevents IDOR).
  */
 const updateCase = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const updateData = req.body;
+    const userId = getUserId(req);
+    const updateData = { ...req.body };
 
-    const query = mongoose.Types.ObjectId.isValid(id)
+    const idFilter = mongoose.Types.ObjectId.isValid(id)
       ? { $or: [{ _id: id }, { caseId: id }] }
       : { caseId: id };
 
-    // Sanitization: restrict system parameters
+    // Sanitization: restrict immutable / privileged system parameters
     delete updateData.createdBy;
     delete updateData.caseId;
     delete updateData.createdAt;
     delete updateData.updatedAt;
+
+    // Merge ownership filter — user MUST own this case to update it
+    const query = { ...idFilter, createdBy: userId };
 
     const updatedCase = await Case.findOneAndUpdate(query, updateData, { new: true, runValidators: true })
       .populate('createdBy', 'fullName email role')
@@ -185,6 +226,23 @@ const updateCase = async (req, res, next) => {
       });
     }
 
+    try {
+      const actorEmail = req.user?.email || updatedCase.createdBy?.email || 'Operator';
+      await AuditLog.create({
+        user: actorEmail,
+        role: req.user?.role || 'Investigator',
+        action: 'UPDATE_CASE',
+        module: 'CASE_MANAGEMENT',
+        resource: `Case ${updatedCase.caseId}`,
+        ipAddress: req.ip || req.headers['x-forwarded-for'] || '127.0.0.1',
+        status: 'Success',
+        severity: 'Low',
+        description: `Case [${updatedCase.caseId}] details updated.`
+      });
+    } catch (auditErr) {
+      console.warn('[Audit Log Warning] Failed to log case update:', auditErr.message);
+    }
+
     return response.success(res, updatedCase, 'Case details successfully updated');
   } catch (error) {
     next(error);
@@ -193,14 +251,19 @@ const updateCase = async (req, res, next) => {
 
 /**
  * Delete a Case workspace.
+ * Enforces ownership — a user can only delete their own cases (prevents IDOR).
  */
 const deleteCase = async (req, res, next) => {
   try {
     const { id } = req.params;
+    const userId = getUserId(req);
 
-    const query = mongoose.Types.ObjectId.isValid(id)
+    const idFilter = mongoose.Types.ObjectId.isValid(id)
       ? { $or: [{ _id: id }, { caseId: id }] }
       : { caseId: id };
+
+    // Merge ownership filter — user MUST own this case to delete it
+    const query = { ...idFilter, createdBy: userId };
 
     const deletedCase = await Case.findOneAndDelete(query).exec();
 
@@ -212,6 +275,23 @@ const deleteCase = async (req, res, next) => {
           status: 404
         }
       });
+    }
+
+    try {
+      const actorEmail = req.user?.email || 'Operator';
+      await AuditLog.create({
+        user: actorEmail,
+        role: req.user?.role || 'Investigator',
+        action: 'DELETE_CASE',
+        module: 'CASE_MANAGEMENT',
+        resource: `Case ${deletedCase.caseId}`,
+        ipAddress: req.ip || req.headers['x-forwarded-for'] || '127.0.0.1',
+        status: 'Success',
+        severity: 'Medium',
+        description: `Case [${deletedCase.caseId}] archived/deleted.`
+      });
+    } catch (auditErr) {
+      console.warn('[Audit Log Warning] Failed to log case deletion:', auditErr.message);
     }
 
     return response.success(res, null, `Investigation case [${deletedCase.caseId}] successfully archived.`);
@@ -227,4 +307,3 @@ module.exports = {
   updateCase,
   deleteCase
 };
-

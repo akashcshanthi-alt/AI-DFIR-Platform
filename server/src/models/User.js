@@ -52,13 +52,47 @@ const UserSchema = new mongoose.Schema({
     default: 'Active'
   },
   resetPasswordToken: {
-    type: String
+    type: String,
+    index: true
   },
   resetPasswordExpires: {
     type: Date
+  },
+  verificationToken: {
+    type: String,
+    index: true
+  },
+  verificationTokenExpires: {
+    type: Date
+  },
+  lastVerificationResend: {
+    type: Date
+  },
+  lastPasswordResetRequest: {
+    type: Date
   }
 }, {
-  timestamps: true
+  timestamps: true,
+  toJSON: {
+    transform: function (doc, ret) {
+      delete ret.password;
+      delete ret.resetPasswordToken;
+      delete ret.resetPasswordExpires;
+      delete ret.verificationToken;
+      delete ret.verificationTokenExpires;
+      return ret;
+    }
+  },
+  toObject: {
+    transform: function (doc, ret) {
+      delete ret.password;
+      delete ret.resetPasswordToken;
+      delete ret.resetPasswordExpires;
+      delete ret.verificationToken;
+      delete ret.verificationTokenExpires;
+      return ret;
+    }
+  }
 });
 
 /**

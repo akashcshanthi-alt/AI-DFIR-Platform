@@ -2,15 +2,13 @@ const PORT = process.env.PORT || 5000;
 const BASE_URL = `http://localhost:${PORT}/api`;
 
 async function runGoogleAuthTests() {
-  console.log('=== [TRACE GOOGLE OAUTH INTEGRATION TESTS] ===');
+  console.log('=== [TRACE GOOGLE OAUTH SECURITY REGRESSION TESTS] ===');
   console.log(`Targeting base API URL: ${BASE_URL}\n`);
 
-  const testEmail = `google.analyst.${Date.now()}@trace.ai`;
-  const testName = 'Google SSO Analyst';
+  const testEmail = `attacker.${Date.now()}@trace.ai`;
+  const testName = 'Arbitrary Email Attacker';
 
-  let testUserId = '';
-
-  // 1. POST /api/auth/google (User does not exist - should auto-create)
+  // 1. Insecure arbitrary email login attempt must be REJECTED (400)
   try {
     const res = await fetch(`${BASE_URL}/auth/google`, {
       method: 'POST',
@@ -23,134 +21,59 @@ async function runGoogleAuthTests() {
     });
 
     const body = await res.json();
-    if (res.ok && body.success && body.token) {
-      testUserId = body.user.userId;
-      console.log('[PASS] 1. New Google user auto-created on-the-fly:');
-      console.log(`     - User ID: ${body.user.userId}`);
-      console.log(`     - Email: ${body.user.email}`);
-      console.log(`     - Role: ${body.user.role}`);
-      console.log(`     - Department: ${body.user.department}`);
-      console.log(`     - Verified Status: ${body.user.emailVerified}`);
-      
-      const checkDetails = body.user.role === 'Analyst' && body.user.department === 'Google SSO' && body.user.emailVerified === true;
-      if (checkDetails) {
-        console.log('[PASS] 1.1 Mongoose model properties mapped successfully.');
-      } else {
-        throw new Error('Default properties mismatch.');
-      }
+    if (res.status === 400 && !body.success && body.error?.message?.includes('idToken')) {
+      console.log('[PASS] 1. Arbitrary email-only authentication rejected with 400 Bad Request:');
+      console.log(`     - Response message: "${body.error.message}"`);
     } else {
-      throw new Error(JSON.stringify(body));
+      throw new Error(`Insecure arbitrary email bypass succeeded or did not return 400. Status: ${res.status}, Body: ${JSON.stringify(body)}`);
     }
   } catch (err) {
-    console.error(`[FAIL] User auto-creation test failed: ${err.message}`);
+    console.error(`[FAIL] Arbitrary email rejection test failed: ${err.message}`);
     process.exit(1);
   }
 
-  // 2. POST /api/auth/google (User already exists - should login automatically)
+  // 2. Missing token payload must be REJECTED (400)
   try {
     const res = await fetch(`${BASE_URL}/auth/google`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: testEmail,
-        fullName: testName
-      })
-    });
-
-    const body = await res.json();
-    if (res.ok && body.success && body.token) {
-      console.log(`[PASS] 2. Existing Google user logged in automatically: ${body.user.userId}`);
-    } else {
-      throw new Error(JSON.stringify(body));
-    }
-  } catch (err) {
-    console.error(`[FAIL] Auto-login test failed: ${err.message}`);
-    process.exit(1);
-  }
-
-  // 3. Validation test (missing email)
-  try {
-    const res = await fetch(`${BASE_URL}/auth/google`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        fullName: testName
-      })
+      body: JSON.stringify({})
     });
 
     const body = await res.json();
     if (res.status === 400 && !body.success) {
-      console.log('[PASS] 3. Missing email validated and rejected with 400.');
+      console.log('[PASS] 2. Empty payload rejected with 400 Bad Request.');
     } else {
-      throw new Error(`Unexpected response code: ${res.status}`);
+      throw new Error(`Unexpected response code for empty payload: ${res.status}`);
     }
   } catch (err) {
-    console.error(`[FAIL] Email validation test failed: ${err.message}`);
+    console.error(`[FAIL] Empty payload rejection test failed: ${err.message}`);
     process.exit(1);
   }
 
-  // 4. Suspend User validation test (GET token block check)
-  // Retrieve Super Admin token to suspend user
-  let adminToken = '';
-  const adminEmail = `admin.${Date.now()}@trace.ai`;
+  // 3. Unconfigured Firebase provider fails closed with 401 Unauthorized
   try {
-    const regRes = await fetch(`${BASE_URL}/auth/register`, {
+    const res = await fetch(`${BASE_URL}/auth/google`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        fullName: 'Admin User',
-        email: adminEmail,
-        password: 'adminpassword123',
-        role: 'Admin',
-        department: 'TRACE Security Command'
+        idToken: 'mock-google-id-token-unverified'
       })
     });
-    const regData = await regRes.json();
-    
-    const loginRes = await fetch(`${BASE_URL}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: adminEmail, password: 'adminpassword123' })
-    });
-    const loginData = await loginRes.json();
-    adminToken = loginData.token;
 
-    // Suspend the Google user
-    const suspRes = await fetch(`${BASE_URL}/users/${testUserId}/status`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${adminToken}`
-      },
-      body: JSON.stringify({ status: 'Suspended' })
-    });
-    const suspData = await suspRes.json();
-    if (!suspRes.ok || !suspData.success) {
-      throw new Error(`Suspension failed: ${JSON.stringify(suspData)}`);
-    }
-
-    console.log('[PASS] 4. Google user status changed to Suspended.');
-
-    // Attempt Google Login for Suspended user - should block with 403
-    const blockedRes = await fetch(`${BASE_URL}/auth/google`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: testEmail, fullName: testName })
-    });
-
-    const blockedBody = await blockedRes.json();
-    if (blockedRes.status === 403 && !blockedBody.success) {
-      console.log('[PASS] 4.1 Suspended Google user blocked from logging in with 403.');
+    const body = await res.json();
+    if (res.status === 401 && !body.success) {
+      console.log('[PASS] 3. Unconfigured identity provider fails closed with 401 Unauthorized:');
+      console.log(`     - Response message: "${body.error?.message}"`);
     } else {
-      throw new Error(`Unexpected login bypass. Code: ${blockedRes.status}`);
+      throw new Error(`Did not fail closed with 401. Status: ${res.status}, Body: ${JSON.stringify(body)}`);
     }
   } catch (err) {
-    console.error(`[FAIL] Suspension guard verification failed: ${err.message}`);
+    console.error(`[FAIL] Fail-closed test failed: ${err.message}`);
     process.exit(1);
   }
 
-  console.log('\n=== [ALL GOOGLE OAUTH INTEGRATION TESTS SUCCESSFUL] ===');
-  process.exit(0);
+  console.log('\n=== [ALL GOOGLE AUTH SECURITY TESTS PASSED CLEANLY] ===');
 }
 
 runGoogleAuthTests();

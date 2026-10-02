@@ -54,3 +54,25 @@
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: rgba(71, 250, 243, 0.4);
 }
+
+/* Guarantee no button inside Case Investigation defaults to white buttonface */
+.trace-details-layout button {
+  font-family: inherit;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Native select & options in Case Details */
+.trace-details-layout select,
+.trace-details-layout select option {
+  background-color: #0b1220 !important;
+  color: #f8fafc !important;
+}
+
+/* Case tab transitions and glow */
+.trace-details-layout .scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.trace-details-layout .scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

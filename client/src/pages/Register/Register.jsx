@@ -1,29 +1,8 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Shield, User, Mail, Globe, Lock, Eye, EyeOff, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
-import { createUserWithEmailAndPassword, updateProfile, sendEmailVerification, signInWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '../../services/firebase';
-
-const mapFirebaseError = (error) => {
-  switch (error.code) {
-    case 'auth/email-already-in-use':
-      return 'Email already exists in the system database.';
-    case 'auth/invalid-email':
-      return 'Invalid email address formatting.';
-    case 'auth/weak-password':
-      return 'Clearance key does not meet required strength criteria.';
-    case 'auth/wrong-password':
-      return 'Invalid operator clearance key.';
-    case 'auth/user-not-found':
-      return 'No operator record found with these credentials.';
-    case 'auth/too-many-requests':
-      return 'Access blocked due to excessive attempts. Please try again later.';
-    case 'auth/operation-not-allowed':
-      return 'Email/Password provider is disabled in your Firebase console. Please go to Authentication > Sign-in method in Firebase Console to enable it.';
-    default:
-      return error.message || 'An unexpected authentication error occurred.';
-  }
-};
+import { auth, googleProvider, signInWithPopup } from '../../services/firebase';
+import { authService } from '../../services/auth.service';
 
 /**
  * Register Component
@@ -49,6 +28,8 @@ export default function Register() {
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [googleError, setGoogleError] = useState('');
 
   // Password strength logic
   const getPasswordStrength = (val) => {
@@ -101,7 +82,44 @@ export default function Register() {
     return Object.keys(tempErrors).length === 0;
   };
 
-  // Submit handler with Firebase user registration
+  // Google SSO Federated registration
+  const handleGoogleSignUp = async () => {
+    if (googleLoading) return;
+    setGoogleLoading(true);
+    setGoogleError('');
+
+    try {
+      let user = null;
+      let idToken = null;
+      try {
+        const result = await signInWithPopup(auth, googleProvider);
+        user = result.user;
+        idToken = await user.getIdToken();
+      } catch (popupError) {
+        if (popupError.code === 'auth/popup-closed-by-user' || popupError.code === 'auth/cancelled-popup-request') {
+          console.log('[Register] Google Auth popup closed by user.');
+          setGoogleLoading(false);
+          return;
+        }
+        throw new Error(popupError.message || 'Google identity provider authentication failed.', { cause: popupError });
+      }
+
+      if (!idToken) {
+        throw new Error('Failed to retrieve cryptographic identity token from Google.');
+      }
+
+      await authService.googleLogin(idToken);
+      navigate('/dashboard', { replace: true });
+    } catch (error) {
+      console.error('[Register] Google sign-up failed:', error);
+      setGoogleError(error.message || 'Google Federated Authentication failed.');
+      setTimeout(() => setGoogleError(''), 7000);
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
+  // Submit handler using enterprise backend API
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (isSubmitting) return;
@@ -112,60 +130,29 @@ export default function Register() {
       setSuccessMessage('');
 
       try {
-        console.log('[Register] Starting createUserWithEmailAndPassword for email:', email.trim());
-        const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
-        console.log('[Register] createUserWithEmailAndPassword Success. User UID:', userCredential.user?.uid);
-        
-        console.log('[Register] Starting updateProfile for name:', name.trim());
-        await updateProfile(userCredential.user, {
-          displayName: name.trim(),
-        });
-        console.log('[Register] updateProfile Success');
+        await authService.register(
+          name.trim(),
+          email.trim(),
+          password,
+          'Investigator',
+          organization.trim()
+        );
 
         localStorage.setItem('operatorName', name.trim());
         localStorage.setItem('operatorEmail', email.trim());
-        if (!localStorage.getItem('operatorRole')) {
-          localStorage.setItem('operatorRole', 'Investigator');
-        }
+        localStorage.setItem('operatorRole', 'Investigator');
 
-        console.log('[Register] Starting sendEmailVerification');
-        await sendEmailVerification(userCredential.user);
-        console.log('[Register] sendEmailVerification Success');
+        setSuccessMessage('Clearance verification email dispatched. Redirecting to Verification Center...');
 
-        setSuccessMessage('Verification email has been sent. Redirecting to Verification Center...');
-        
         setTimeout(() => {
           setIsSubmitting(false);
-          navigate('/verify');
-        }, 1500);
+          navigate('/verify', { state: { email: email.trim(), name: name.trim() } });
+        }, 1200);
       } catch (error) {
         console.error('[Register] Error occurred:', error);
-        if (error.code === 'auth/email-already-in-use') {
-          try {
-            console.log('[Register] Email already in use. Checking credentials verification sign-in...');
-            const loginResult = await signInWithEmailAndPassword(auth, email.trim(), password);
-            
-            if (loginResult.user.emailVerified) {
-              console.log('[Register] Existing user is verified. Logging in...');
-              localStorage.setItem('isAuthenticated', 'true');
-              localStorage.setItem('operatorName', loginResult.user.displayName || name.trim() || 'Investigator');
-              localStorage.setItem('operatorEmail', loginResult.user.email || email.trim());
-              localStorage.setItem('operatorAvatar', loginResult.user.photoURL || '');
-              navigate('/dashboard', { replace: true });
-            } else {
-              console.log('[Register] Existing user is not verified. Redirecting to Verification Center...');
-              navigate('/verify', { state: { existsUnverified: true } });
-            }
-            setIsSubmitting(false);
-            return;
-          } catch (loginErr) {
-            console.error('[Register] Existing credentials verification sign-in failed:', loginErr);
-            // Fall through to show the duplicate email error
-          }
-        }
         setIsSubmitting(false);
-        const userFriendlyMessage = mapFirebaseError(error);
-        setErrors({ auth: `${userFriendlyMessage} (Debug Code: ${error.code || 'unknown'})` });
+        const errMsg = error.message || 'An unexpected registration error occurred.';
+        setErrors({ auth: errMsg });
       }
     }
   };
@@ -182,6 +169,11 @@ export default function Register() {
       {successMessage && (
         <div className="fixed top-20 right-6 z-50 bg-[#10b981]/15 border border-[#10b981] text-[#10b981] text-xs px-4 py-2.5 rounded-lg shadow-xl font-bold">
           ✓ {successMessage}
+        </div>
+      )}
+      {googleError && (
+        <div className="fixed top-20 right-6 z-50 bg-[#0f1425] border border-[#ef4444] text-[#ef4444] text-xs px-4 py-2.5 rounded-lg shadow-xl font-bold">
+          ✕ {googleError}
         </div>
       )}
       {/* Self-contained style block for premium register styling matching Login.jsx */}
@@ -880,8 +872,13 @@ export default function Register() {
 
             {errors.auth && (
               <div className="trace-register-validation-feedback error" role="alert" style={{ alignSelf: 'center', margin: '4px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <AlertCircle className="w-3.5 h-3.5" />
+                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
                 <span>✕ {errors.auth}</span>
+                {errors.auth.toLowerCase().includes('already registered') && (
+                  <Link to="/login" style={{ color: '#47FAF3', textDecoration: 'underline', marginLeft: '6px', whiteSpace: 'nowrap' }}>
+                    Sign in here
+                  </Link>
+                )}
               </div>
             )}
 
@@ -901,6 +898,47 @@ export default function Register() {
               )}
             </button>
           </form>
+
+          {/* Divider */}
+          <div style={{ display: 'flex', alignItems: 'center', margin: '16px 0', width: '100%' }}>
+            <div style={{ flex: 1, height: '1px', backgroundColor: 'rgba(255,255,255,0.08)' }}></div>
+            <span style={{ padding: '0 12px', fontSize: '11px', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>or register via</span>
+            <div style={{ flex: 1, height: '1px', backgroundColor: 'rgba(255,255,255,0.08)' }}></div>
+          </div>
+
+          {/* Google SSO Button */}
+          <button 
+            className="trace-register-submit-btn" 
+            style={{ 
+              backgroundColor: 'rgba(255,255,255,0.03)', 
+              border: '1px solid rgba(255,255,255,0.12)', 
+              color: '#F8FAFC', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              gap: '10px' 
+            }}
+            type="button" 
+            onClick={handleGoogleSignUp}
+            disabled={isSubmitting || googleLoading}
+          >
+            {googleLoading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin text-[#47FAF3]" aria-hidden="true" />
+                <span>Authenticating Identity...</span>
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" viewBox="0 0 24 24">
+                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"></path>
+                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"></path>
+                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.27.81-.57z" fill="#FBBC05"></path>
+                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.66l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"></path>
+                </svg>
+                <span>Continue with Google</span>
+              </>
+            )}
+          </button>
 
           {/* Navigation Link to Login Screen */}
           <div className="trace-register-card-footer">

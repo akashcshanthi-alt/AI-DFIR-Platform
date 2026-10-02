@@ -1,494 +1,844 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { auth, getResolvedUserName } from '../../services/firebase';
+import { 
+  FiUser, 
+  FiMail, 
+  FiShield, 
+  FiCheckCircle, 
+  FiAlertCircle, 
+  FiCalendar, 
+  FiClock, 
+  FiBriefcase, 
+  FiPhone, 
+  FiEdit2, 
+  FiLock, 
+  FiLogOut,
+  FiFolder, 
+  FiActivity,
+  FiRefreshCw,
+  FiX,
+  FiSave
+} from 'react-icons/fi';
+import { authService } from '../../services/auth.service';
+import { userService } from '../../services/user.service';
+import { casesService } from '../../services/cases.service';
+import { auditService } from '../../services/audit.service';
 
 export default function Profile() {
   const navigate = useNavigate();
 
-  // Auth Guard check
-  const hasSession = localStorage.getItem('isAuthenticated') === 'true';
+  // Profile and Loading State
+  const [profile, setProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  useEffect(() => {
-    if (!hasSession) {
-      navigate('/login', { replace: true });
-    }
-  }, [hasSession, navigate]);
+  // Associated Real Records
+  const [assignedCases, setAssignedCases] = useState([]);
+  const [recentActivity, setRecentActivity] = useState([]);
+  const [casesLoading, setCasesLoading] = useState(true);
+  const [activityLoading, setActivityLoading] = useState(true);
 
-  const currentName = getResolvedUserName(auth.currentUser, localStorage.getItem('operatorName'));
-  const currentEmail = localStorage.getItem('operatorEmail') || auth.currentUser?.email || '';
-  const currentRole = localStorage.getItem('operatorRole') || 'Investigator';
-  const currentAvatar = localStorage.getItem('operatorAvatar') || auth.currentUser?.photoURL || '';
+  // Modals & Feedback State
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [feedback, setFeedback] = useState({ message: '', type: 'success' });
+  const [submitting, setSubmitting] = useState(false);
+  const [passwordSubmitting, setPasswordSubmitting] = useState(false);
 
-  // Interactive settings state inside profile page
-  const [twoFaStatus, setTwoFaStatus] = useState(true);
-  const [isDarkMode, setIsDarkMode] = useState(true);
-  const [aiExpanded, setAiExpanded] = useState(false);
-  const [copiedCase, setCopiedCase] = useState(null);
-
-  // Dynamic Skill value increments for interactive micro-interaction
-  const [skills, setSkills] = useState({
-    forensics: 94,
-    malware: 88,
-    hunting: 76
+  // Edit Profile Form
+  const [editForm, setEditForm] = useState({
+    fullName: '',
+    department: '',
+    phone: '',
+    profileImage: ''
   });
 
-  // Action feedback alert
-  const [feedback, setFeedback] = useState('');
+  // Change Password Form
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  });
+  const [passwordError, setPasswordError] = useState('');
+  const [passwordSuccess, setPasswordSuccess] = useState('');
 
-  if (!hasSession) return null;
-
-  // Helper to trigger feedback popups
-  const showFeedback = (msg) => {
-    setFeedback(msg);
-    setTimeout(() => setFeedback(''), 3000);
+  const showNotification = (message, type = 'success') => {
+    setFeedback({ message, type });
+    setTimeout(() => setFeedback({ message: '', type: 'success' }), 4000);
   };
 
-  const handleCopyCase = (caseId) => {
-    navigator.clipboard.writeText(caseId);
-    setCopiedCase(caseId);
-    showFeedback(`Copied ${caseId} to clipboard.`);
-    setTimeout(() => setCopiedCase(null), 2000);
+  // Fetch real authenticated profile
+  const fetchProfileData = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await authService.getProfile();
+      if (response && response.success && response.data) {
+        setProfile(response.data);
+        setEditForm({
+          fullName: response.data.fullName || '',
+          department: response.data.department || '',
+          phone: response.data.phone || '',
+          profileImage: response.data.profileImage || ''
+        });
+      } else {
+        setError('Failed to retrieve operator profile.');
+      }
+    } catch (err) {
+      console.error('Error fetching profile:', err);
+      setError(err.message || 'Error communicating with authentication server.');
+      if (err.message && err.message.includes('token')) {
+        navigate('/login', { replace: true });
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetch real assigned cases
+  const fetchUserCases = async () => {
+    setCasesLoading(true);
+    try {
+      const res = await casesService.getCases({ limit: 5 });
+      if (res && res.success && Array.isArray(res.data)) {
+        setAssignedCases(res.data);
+      } else {
+        setAssignedCases([]);
+      }
+    } catch (err) {
+      console.error('Error loading cases for profile:', err);
+      setAssignedCases([]);
+    } finally {
+      setCasesLoading(false);
+    }
+  };
+
+  // Fetch real user activity
+  const fetchUserActivity = async () => {
+    setActivityLoading(true);
+    try {
+      const res = await auditService.getAuditLogs({ limit: 5 });
+      if (Array.isArray(res)) {
+        setRecentActivity(res);
+      } else if (res && res.success && Array.isArray(res.data)) {
+        setRecentActivity(res.data);
+      } else {
+        setRecentActivity([]);
+      }
+    } catch (err) {
+      console.error('Error loading user activity for profile:', err);
+      setRecentActivity([]);
+    } finally {
+      setActivityLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const hasSession = localStorage.getItem('isAuthenticated') === 'true' && localStorage.getItem('token');
+    if (!hasSession) {
+      navigate('/login', { replace: true });
+      return;
+    }
+
+    fetchProfileData();
+    fetchUserCases();
+    fetchUserActivity();
+  }, [navigate]);
+
+  // Handle Edit Profile Form Submission
+  const handleEditSubmit = async (e) => {
+    e.preventDefault();
+    if (!editForm.fullName.trim()) {
+      showNotification('Full Name is required.', 'error');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const res = await authService.updateProfile(
+        editForm.fullName.trim(),
+        editForm.department.trim(),
+        editForm.phone.trim(),
+        editForm.profileImage.trim()
+      );
+
+      if (res && res.success && res.data) {
+        setProfile(res.data);
+        localStorage.setItem('operatorName', res.data.fullName);
+        showNotification('Profile information updated successfully.', 'success');
+        setEditModalOpen(false);
+      } else {
+        showNotification('Failed to update profile.', 'error');
+      }
+    } catch (err) {
+      console.error('Update profile error:', err);
+      showNotification(err.message || 'Error updating profile.', 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Handle Password Change Form Submission
+  const handlePasswordSubmit = async (e) => {
+    e.preventDefault();
+    setPasswordError('');
+    setPasswordSuccess('');
+
+    if (!passwordForm.currentPassword || !passwordForm.newPassword) {
+      setPasswordError('Please provide both current and new passwords.');
+      return;
+    }
+
+    if (passwordForm.newPassword.length < 8) {
+      setPasswordError('New password must be at least 8 characters long.');
+      return;
+    }
+
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      setPasswordError('New passwords do not match.');
+      return;
+    }
+
+    setPasswordSubmitting(true);
+    try {
+      const res = await userService.changePassword(passwordForm.currentPassword, passwordForm.newPassword);
+      if (res && res.success) {
+        setPasswordSuccess('Password updated successfully.');
+        showNotification('Password updated successfully.', 'success');
+        setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      } else {
+        setPasswordError('Failed to change password. Please check your current password.');
+      }
+    } catch (err) {
+      setPasswordError(err.message || 'Error updating password.');
+    } finally {
+      setPasswordSubmitting(false);
+    }
+  };
+
+  // Handle Logout
+  const handleLogout = async () => {
+    try {
+      await authService.logout();
+    } catch (err) {
+      console.warn('Logout warning:', err.message);
+    } finally {
+      localStorage.clear();
+      sessionStorage.clear();
+      navigate('/login', { replace: true });
+    }
+  };
+
+  const getInitials = (name) => {
+    if (!name) return 'OP';
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+    return parts[0].slice(0, 2).toUpperCase();
+  };
+
+  const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
+    try {
+      const d = new Date(dateString);
+      return d.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch {
+      return dateString;
+    }
   };
 
   return (
-    <div className="trace-profile-layout min-h-screen text-on-surface font-body-md grid-bg-profile selection:bg-secondary/30 selection:text-secondary">
-      {/* Dynamic Inline CSS overrides for page layout elements */}
-      <style dangerouslySetInnerHTML={{
-        __html: `
-          .glass-card {
-              background: rgba(27, 31, 44, 0.4);
-              backdrop-filter: blur(20px);
-              border: 1px solid rgba(255, 255, 255, 0.08);
-              border-top: 1px solid rgba(255, 255, 255, 0.15);
-          }
-          .grid-bg-profile {
-              background-image: linear-gradient(rgba(174, 198, 255, 0.03) 1px, transparent 1px),
-                                linear-gradient(90deg, rgba(174, 198, 255, 0.03) 1px, transparent 1px);
-              background-size: 32px 32px;
-          }
-          .glow-blue {
-              box-shadow: 0 0 20px rgba(0, 112, 243, 0.2);
-          }
-          .glow-cyan {
-              box-shadow: 0 0 15px rgba(71, 250, 243, 0.15);
-          }
-          .animate-pulse-slow {
-              animation: pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-          }
-          @keyframes pulse {
-              0%, 100% { opacity: 1; }
-              50% { opacity: .7; }
-          }
-          .custom-scrollbar::-webkit-scrollbar {
-              width: 4px;
-          }
-          .custom-scrollbar::-webkit-scrollbar-track {
-              background: rgba(255, 255, 255, 0.02);
-          }
-          .custom-scrollbar::-webkit-scrollbar-thumb {
-              background: rgba(174, 198, 255, 0.2);
-              border-radius: 10px;
-          }
-          .switch-toggle-profile {
-              position: relative;
-              display: inline-block;
-              width: 32px;
-              height: 16px;
-          }
-          .switch-toggle-profile input { opacity: 0; width: 0; height: 0; }
-          .slider-profile {
-              position: absolute;
-              cursor: pointer;
-              top: 0; left: 0; right: 0; bottom: 0;
-              background-color: #313442;
-              transition: .3s;
-              border-radius: 34px;
-          }
-          .slider-profile:before {
-              position: absolute;
-              content: "";
-              height: 12px; width: 12px;
-              left: 2px; bottom: 2px;
-              background-color: white;
-              transition: .3s;
-              border-radius: 50%;
-          }
-          input:checked + .slider-profile { background-color: #47faf3; }
-          input:checked + .slider-profile:before { transform: translateX(16px); }
-        `
-      }} />
-
-      {/* Floating Action / Action Notification */}
-      {feedback && (
-        <div className="fixed top-20 right-6 z-50 bg-[#0f1425] border border-secondary/30 text-secondary text-xs px-4 py-2.5 rounded-lg shadow-xl animate-bounce">
-          {feedback}
+    <div className="trace-profile-container min-h-screen text-slate-100 p-6 md:p-8 max-w-7xl mx-auto space-y-6">
+      {/* Toast Notification */}
+      {feedback.message && (
+        <div 
+          className={`fixed top-20 right-6 z-50 flex items-center gap-2.5 px-4 py-3 rounded-lg shadow-xl text-xs font-medium border transition-all animate-bounce ${
+            feedback.type === 'error' 
+              ? 'bg-rose-950/90 text-rose-200 border-rose-600/50' 
+              : 'bg-emerald-950/90 text-emerald-200 border-emerald-600/50'
+          }`}
+        >
+          {feedback.type === 'error' ? <FiAlertCircle size={16} /> : <FiCheckCircle size={16} />}
+          <span>{feedback.message}</span>
         </div>
       )}
 
-      {/* Analyst Workspace Content Container */}
-      <div className="p-8 w-full max-w-[1600px] mx-auto grid grid-cols-12 gap-6">
+      {/* Header & Reload Action */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+        <div>
+          <h1 className="text-2xl font-bold text-white tracking-tight flex items-center gap-2.5">
+            <FiUser className="text-cyan-400" />
+            My Profile
+          </h1>
+          <p className="text-xs text-slate-400 mt-1">
+            Authenticated operator identity, account specifications, and security controls.
+          </p>
+        </div>
 
-        {/* COLUMN 1: Profile and Skills */}
-        <div className="col-span-12 lg:col-span-4 flex flex-col gap-6">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => {
+              fetchProfileData();
+              fetchUserCases();
+              fetchUserActivity();
+              showNotification('Refreshed profile data.', 'success');
+            }}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 text-xs font-medium border border-slate-700/60 transition-colors"
+            title="Refresh Profile"
+          >
+            <FiRefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+            <span>Refresh</span>
+          </button>
+
+          <button
+            onClick={() => setEditModalOpen(true)}
+            disabled={!profile}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-slate-950 text-xs font-semibold shadow-lg shadow-cyan-900/30 transition-colors disabled:opacity-50"
+          >
+            <FiEdit2 size={14} />
+            <span>Edit Profile</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Loading & Error States */}
+      {loading && !profile && (
+        <div className="flex flex-col items-center justify-center p-16 rounded-xl bg-slate-900/40 border border-slate-800 text-slate-400 gap-3">
+          <FiRefreshCw size={24} className="animate-spin text-cyan-400" />
+          <span className="text-xs">Authenticating and retrieving operator profile...</span>
+        </div>
+      )}
+
+      {error && !profile && (
+        <div className="p-6 rounded-xl bg-rose-950/20 border border-rose-800/40 text-rose-300 flex items-start gap-3">
+          <FiAlertCircle size={20} className="text-rose-400 shrink-0 mt-0.5" />
+          <div>
+            <h3 className="text-sm font-semibold text-rose-200">Unable to load profile</h3>
+            <p className="text-xs text-rose-300/80 mt-1">{error}</p>
+            <button
+              onClick={fetchProfileData}
+              className="mt-3 px-3 py-1.5 rounded bg-rose-900/50 hover:bg-rose-900 border border-rose-700/50 text-xs text-rose-100"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Main Content Layout */}
+      {profile && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           
-          {/* Hero Profile Panel */}
-          <div className="glass-card rounded-xl overflow-hidden p-6 relative group">
-            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary/50 to-transparent"></div>
+          {/* LEFT COLUMN: Profile Overview, Security Status, and Session */}
+          <div className="lg:col-span-4 flex flex-col gap-6">
             
-            <div className="flex flex-col items-center text-center">
-              <div className="relative mb-4">
-                <div className="h-32 w-32 rounded-full border-2 border-secondary p-1 overflow-hidden glow-cyan flex items-center justify-center bg-surface-container-highest">
-                  {currentAvatar ? (
+            {/* Operator Card */}
+            <div className="rounded-xl bg-slate-900/60 border border-slate-800 p-6 flex flex-col items-center text-center relative overflow-hidden backdrop-blur-md">
+              <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-cyan-500 via-blue-500 to-indigo-500" />
+
+              {/* Avatar */}
+              <div className="relative mb-4 mt-2">
+                <div className="h-24 w-24 rounded-full border-2 border-cyan-400/80 p-1 shadow-lg shadow-cyan-950/50 flex items-center justify-center bg-slate-800 overflow-hidden">
+                  {profile.profileImage ? (
                     <img 
-                      className="w-full h-full object-cover rounded-full" 
-                      alt={currentName} 
-                      src={currentAvatar}
+                      src={profile.profileImage} 
+                      alt={profile.fullName} 
+                      className="w-full h-full object-cover rounded-full"
                     />
                   ) : (
-                    <span className="text-3xl font-bold text-secondary font-mono">
-                      {currentName.split(/\s+/).length >= 2
-                        ? (currentName.split(/\s+/)[0][0] + currentName.split(/\s+/).slice(-1)[0][0]).toUpperCase()
-                        : currentName.slice(0, 2).toUpperCase()}
+                    <span className="text-2xl font-bold font-mono text-cyan-300">
+                      {getInitials(profile.fullName)}
                     </span>
                   )}
                 </div>
-                <div className="absolute bottom-0 right-0 h-8 w-8 bg-surface-container-highest border border-white/10 rounded-full flex items-center justify-center text-secondary">
-                  <span className="material-symbols-outlined text-[18px]" style={{ fontVariationSettings: "'FILL' 1" }}>verified</span>
+
+                <div 
+                  className={`absolute bottom-0 right-0 h-6 w-6 rounded-full border-2 border-slate-900 flex items-center justify-center text-white text-xs ${
+                    profile.emailVerified ? 'bg-emerald-500' : 'bg-amber-500'
+                  }`}
+                  title={profile.emailVerified ? 'Email Verified' : 'Email Pending Verification'}
+                >
+                  <FiCheckCircle size={12} />
                 </div>
               </div>
 
-              <h1 className="text-xl font-bold text-on-surface">{currentName}</h1>
-              <p className="font-label-caps text-xs text-on-surface-variant tracking-[0.2em] mb-1">{currentRole}</p>
-              {currentEmail && <p className="text-xs text-secondary/80 font-mono mb-4">{currentEmail}</p>}
+              {/* Identity Header */}
+              <h2 className="text-xl font-bold text-white tracking-tight">{profile.fullName}</h2>
+              <p className="text-xs font-mono text-cyan-400 mt-1">{profile.email}</p>
               
-              <div className="flex flex-wrap justify-center gap-2">
-                <span className="bg-primary/10 text-primary border border-primary/20 px-3 py-1 rounded-full text-[10px] font-label-caps uppercase tracking-wider">Malware Specialist</span>
-                <span className="bg-secondary/10 text-secondary border border-secondary/20 px-3 py-1 rounded-full text-[10px] font-label-caps uppercase tracking-wider">Forensic Expert</span>
-              </div>
-            </div>
-          </div>
+              <div className="flex flex-wrap items-center justify-center gap-2 mt-4">
+                <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-cyan-950/80 text-cyan-300 border border-cyan-700/50 flex items-center gap-1.5">
+                  <FiShield size={12} />
+                  {profile.role || 'Investigator'}
+                </span>
 
-          {/* Performance Stats Bento Grid */}
-          <div className="grid grid-cols-2 gap-4">
-            
-            <div className="glass-card rounded-xl p-4 flex flex-col items-center justify-center gap-1 border-l-2 border-l-primary/50 hover:bg-white/5 transition-all">
-              <span className="font-label-caps text-[10px] text-on-surface-variant">Cases Solved</span>
-              <span className="text-2xl font-bold text-primary font-mono">124</span>
-            </div>
-
-            <div className="glass-card rounded-xl p-4 flex flex-col items-center justify-center gap-1 border-l-2 border-l-secondary/50 hover:bg-white/5 transition-all">
-              <span className="font-label-caps text-[10px] text-on-surface-variant">Success Rate</span>
-              <span className="text-2xl font-bold text-secondary font-mono">98%</span>
-            </div>
-
-            <div className="glass-card rounded-xl p-4 flex flex-col items-center justify-center gap-1 border-l-2 border-l-tertiary/50 hover:bg-white/5 transition-all">
-              <span className="font-label-caps text-[10px] text-on-surface-variant">AI Efficiency</span>
-              <span className="text-2xl font-bold text-tertiary font-mono">+22%</span>
-            </div>
-
-            <div className="glass-card rounded-xl p-4 flex flex-col items-center justify-center gap-1 border-l-2 border-l-outline/50 hover:bg-white/5 transition-all">
-              <span className="font-label-caps text-[10px] text-on-surface-variant">Evidence Volume</span>
-              <span className="text-2xl font-bold text-on-surface font-mono">2.4TB</span>
-            </div>
-
-          </div>
-
-          {/* Interactive Skills Progress bars */}
-          <div className="glass-card rounded-xl p-6">
-            <h3 className="font-label-caps text-xs text-on-surface border-b border-white/5 pb-2 mb-4 flex items-center gap-2">
-              <span className="material-symbols-outlined text-[18px]">verified_user</span>
-              Specialized Skills
-            </h3>
-            
-            <div className="flex flex-col gap-4">
-              
-              <div className="group cursor-pointer" onClick={() => setSkills(s => ({ ...s, forensics: Math.min(100, s.forensics + 1) }))}>
-                <div className="flex justify-between font-label-caps text-[10px] mb-1">
-                  <span>Digital Forensics</span>
-                  <span className="text-primary font-bold group-hover:underline">{skills.forensics}%</span>
-                </div>
-                <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
-                  <div className="h-full bg-primary glow-blue transition-all duration-500" style={{ width: `${skills.forensics}%` }}></div>
-                </div>
+                <span className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border ${
+                  profile.accountStatus === 'Active' 
+                    ? 'bg-emerald-950/80 text-emerald-300 border-emerald-700/50' 
+                    : 'bg-amber-950/80 text-amber-300 border-amber-700/50'
+                }`}>
+                  Status: {profile.accountStatus || 'Active'}
+                </span>
               </div>
 
-              <div className="group cursor-pointer" onClick={() => setSkills(s => ({ ...s, malware: Math.min(100, s.malware + 1) }))}>
-                <div className="flex justify-between font-label-caps text-[10px] mb-1">
-                  <span>Malware Analysis</span>
-                  <span className="text-secondary font-bold group-hover:underline">{skills.malware}%</span>
-                </div>
-                <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
-                  <div className="h-full bg-secondary glow-cyan transition-all duration-500" style={{ width: `${skills.malware}%` }}></div>
-                </div>
-              </div>
-
-              <div className="group cursor-pointer" onClick={() => setSkills(s => ({ ...s, hunting: Math.min(100, s.hunting + 1) }))}>
-                <div className="flex justify-between font-label-caps text-[10px] mb-1">
-                  <span>Threat Hunting</span>
-                  <span className="text-tertiary font-bold group-hover:underline">{skills.hunting}%</span>
-                </div>
-                <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
-                  <div className="h-full bg-tertiary transition-all duration-500" style={{ width: `${skills.hunting}%` }}></div>
-                </div>
-              </div>
-
-            </div>
-          </div>
-
-        </div>
-
-        {/* COLUMN 2: Activity Feed and Security toggles */}
-        <div className="col-span-12 lg:col-span-5 flex flex-col gap-6">
-          
-          {/* Timeline Activity Feed */}
-          <div className="glass-card rounded-xl p-6 flex-1 flex flex-col min-h-[420px] max-h-[500px]">
-            <h3 className="font-label-caps text-xs text-on-surface border-b border-white/5 pb-2 mb-4 flex items-center gap-2">
-              <span className="material-symbols-outlined text-[18px]">timeline</span>
-              Incident Activity Feed
-            </h3>
-
-            <div className="flex-1 space-y-6 relative overflow-y-auto custom-scrollbar pr-2 pt-2">
-              <div className="absolute left-[11px] top-2 bottom-2 w-px bg-gradient-to-b from-primary via-primary/20 to-transparent"></div>
-
-              {/* Timeline Item 1 */}
-              <div className="flex gap-4 relative">
-                <div className="h-6 w-6 rounded-full bg-primary-container border-4 border-background z-10 flex items-center justify-center">
-                  <div className="h-1.5 w-1.5 bg-white rounded-full animate-pulse"></div>
-                </div>
-                <div>
-                  <p className="text-on-surface font-semibold text-sm">Incident #TR-8821 Closed</p>
-                  <p className="text-on-surface-variant text-xs mt-0.5">Threat neutralized. Data exfiltration prevented at node 44.</p>
-                  <span className="text-[9px] font-label-caps text-on-surface-variant/50 block mt-1">2 MINS AGO</span>
-                </div>
-              </div>
-
-              {/* Timeline Item 2 */}
-              <div className="flex gap-4 relative">
-                <div className="h-6 w-6 rounded-full bg-surface-container-highest border-4 border-background z-10 flex items-center justify-center">
-                  <div className="h-1.5 w-1.5 bg-on-surface-variant rounded-full"></div>
-                </div>
-                <div>
-                  <p className="text-on-surface font-semibold text-sm">Report Exported</p>
-                  <p className="text-on-surface-variant text-xs mt-0.5">Full forensic chain-of-custody report generated for legal review.</p>
-                  <span className="text-[9px] font-label-caps text-on-surface-variant/50 block mt-1">1 HOUR AGO</span>
-                </div>
-              </div>
-
-              {/* Timeline Item 3 */}
-              <div className="flex gap-4 relative">
-                <div className="h-6 w-6 rounded-full bg-secondary border-4 border-background z-10 flex items-center justify-center">
-                  <div className="h-1.5 w-1.5 bg-on-secondary rounded-full"></div>
-                </div>
-                <div>
-                  <p className="text-on-surface font-semibold text-sm">Evidence Verified</p>
-                  <p className="text-on-surface-variant text-xs mt-0.5">Memory dump hash SHA-256 validated against primary storage.</p>
-                  <span className="text-[9px] font-label-caps text-on-surface-variant/50 block mt-1">4 HOURS AGO</span>
-                </div>
-              </div>
-
-              {/* Timeline Item 4 */}
-              <div className="flex gap-4 relative opacity-60">
-                <div className="h-6 w-6 rounded-full bg-surface-container-highest border-4 border-background z-10 flex items-center justify-center">
-                  <div className="h-1.5 w-1.5 bg-on-surface-variant rounded-full"></div>
-                </div>
-                <div>
-                  <p className="text-on-surface font-semibold text-sm">Security Level Elevate</p>
-                  <p className="text-on-surface-variant text-xs mt-0.5">Regional access control adjusted to DEFCON 3.</p>
-                  <span className="text-[9px] font-label-caps text-on-surface-variant/50 block mt-1">YESTERDAY</span>
-                </div>
-              </div>
-
-            </div>
-          </div>
-
-          {/* Security & Preferences Widgets */}
-          <div className="grid grid-cols-2 gap-4">
-            
-            {/* 2FA Widget */}
-            <div className="glass-card rounded-xl p-4 flex items-center justify-between hover:border-primary/30 transition-all">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
-                  <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>enhanced_encryption</span>
-                </div>
-                <div>
-                  <h4 className="font-label-caps text-[10px] text-on-surface">2FA STATUS</h4>
-                  <p className="text-secondary text-xs font-bold mt-0.5">{twoFaStatus ? 'Active' : 'Inactive'}</p>
-                </div>
-              </div>
-              <label className="switch-toggle-profile">
-                <input 
-                  type="checkbox" 
-                  checked={twoFaStatus} 
-                  onChange={(e) => {
-                    setTwoFaStatus(e.target.checked);
-                    showFeedback(`2FA status updated to ${e.target.checked ? 'Active' : 'Inactive'}.`);
-                  }} 
-                />
-                <span className="slider-profile"></span>
-              </label>
-            </div>
-
-            {/* Theme Widget */}
-            <div className="glass-card rounded-xl p-4 flex items-center justify-between hover:border-primary/30 transition-all">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-on-surface-variant/10 flex items-center justify-center text-on-surface-variant">
-                  <span className="material-symbols-outlined">dark_mode</span>
-                </div>
-                <div>
-                  <h4 className="font-label-caps text-[10px] text-on-surface">THEME</h4>
-                  <p className="text-on-surface-variant text-xs font-bold mt-0.5">{isDarkMode ? 'Dark Mode' : 'Light Mode'}</p>
-                </div>
-              </div>
-              <label className="switch-toggle-profile">
-                <input 
-                  type="checkbox" 
-                  checked={isDarkMode} 
-                  onChange={(e) => {
-                    setIsDarkMode(e.target.checked);
-                    showFeedback(`Theme preference updated to ${e.target.checked ? 'Dark' : 'Light'}.`);
-                  }} 
-                />
-                <span className="slider-profile"></span>
-              </label>
-            </div>
-
-          </div>
-
-        </div>
-
-        {/* COLUMN 3: Assigned Cases, AI Assistant Suggestions, and Team Activity */}
-        <div className="col-span-12 lg:col-span-3 flex flex-col gap-6">
-          
-          {/* Assigned Cases List */}
-          <div className="glass-card rounded-xl p-6">
-            <h3 className="font-label-caps text-xs text-on-surface border-b border-white/5 pb-2 mb-4 flex items-center gap-2">
-              <span className="material-symbols-outlined text-[18px]">assignment</span>
-              Assigned Cases
-            </h3>
-
-            <div className="space-y-3">
-              
-              <div 
-                onClick={() => handleCopyCase('#TR-9902')}
-                className="p-3 rounded-lg bg-surface-container-highest border border-white/5 flex items-center justify-between group hover:bg-white/5 transition-all cursor-pointer"
+              {/* Edit Profile Trigger */}
+              <button
+                onClick={() => setEditModalOpen(true)}
+                className="w-full mt-6 py-2 px-4 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 flex items-center justify-center gap-2 transition-colors"
               >
-                <div>
-                  <h4 className="text-xs font-bold text-on-surface group-hover:text-secondary transition-colors">
-                    #TR-9902 {copiedCase === '#TR-9902' && <span className="text-[10px] text-secondary ml-1 font-normal font-sans">(Copied!)</span>}
-                  </h4>
-                  <p className="text-[10px] text-on-surface-variant mt-0.5">Memory Injection</p>
-                </div>
-                <span className="text-[9px] bg-error-container text-white px-2 py-0.5 rounded font-bold uppercase tracking-wider">Urgent</span>
-              </div>
-
-              <div 
-                onClick={() => handleCopyCase('#TR-8815')}
-                className="p-3 rounded-lg bg-surface-container-highest border border-white/5 flex items-center justify-between group hover:bg-white/5 transition-all cursor-pointer"
-              >
-                <div>
-                  <h4 className="text-xs font-bold text-on-surface group-hover:text-secondary transition-colors">
-                    #TR-8815 {copiedCase === '#TR-8815' && <span className="text-[10px] text-secondary ml-1 font-normal font-sans">(Copied!)</span>}
-                  </h4>
-                  <p className="text-[10px] text-on-surface-variant mt-0.5">Auth Bypass Loop</p>
-                </div>
-                <span className="text-[9px] bg-primary-container text-white px-2 py-0.5 rounded font-bold uppercase tracking-wider">Pending</span>
-              </div>
-
-              <div 
-                onClick={() => handleCopyCase('#TR-9001')}
-                className="p-3 rounded-lg bg-surface-container-highest border border-white/5 flex items-center justify-between group hover:bg-white/5 transition-all cursor-pointer"
-              >
-                <div>
-                  <h4 className="text-xs font-bold text-on-surface group-hover:text-secondary transition-colors">
-                    #TR-9001 {copiedCase === '#TR-9001' && <span className="text-[10px] text-secondary ml-1 font-normal font-sans">(Copied!)</span>}
-                  </h4>
-                  <p className="text-[10px] text-on-surface-variant mt-0.5">SQLi Attempt</p>
-                </div>
-                <span className="text-[9px] bg-secondary-container text-on-secondary-container px-2 py-0.5 rounded font-bold uppercase tracking-wider">Low</span>
-              </div>
-
-            </div>
-          </div>
-
-          {/* AI Assistant Suggestions Speech bubble */}
-          <div className="relative">
-            <div className="glass-card rounded-xl p-5 border-primary/30 shadow-[0_0_30px_rgba(0,112,243,0.15)] relative overflow-hidden">
-              <div className="absolute -right-4 -top-4 w-16 h-16 bg-primary/20 rounded-full blur-2xl"></div>
-              
-              <div className="flex items-center gap-3 mb-2">
-                <span className="material-symbols-outlined text-primary text-lg">psychology</span>
-                <span className="font-label-caps text-[10px] text-primary tracking-wider uppercase">AI Suggestion</span>
-              </div>
-
-              <p className="text-xs text-on-surface leading-relaxed italic">
-                "Based on recent patterns in Case #TR-9902, I recommend checking the lateral movement in the staging environment. 88% correlation found."
-              </p>
-
-              {aiExpanded && (
-                <div className="mt-3 p-3 bg-surface-container-low border border-white/5 rounded text-[11px] text-on-surface-variant leading-relaxed">
-                  Additional analysis indicates outbound connections to known low-reputation IP blocks on staging port 8443. Recommendation: isolates nodes STG-02 and STG-04.
-                </div>
-              )}
-
-              <button 
-                onClick={() => setAiExpanded(!aiExpanded)}
-                className="mt-4 w-full py-2 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 rounded font-label-caps text-[9px] tracking-wider uppercase transition-all"
-              >
-                {aiExpanded ? 'Collapse Analysis' : 'Explore Analysis'}
+                <FiEdit2 size={13} />
+                <span>Update Profile Details</span>
               </button>
             </div>
-            
-            {/* Bubble Pointer */}
-            <div className="absolute -bottom-2 right-8 w-4 h-4 bg-[#1b1f2c] border border-primary/25 rotate-45 border-t-0 border-l-0"></div>
+
+            {/* Account Status & Verification Summary */}
+            <div className="rounded-xl bg-slate-900/60 border border-slate-800 p-5 space-y-3">
+              <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                <FiShield size={14} className="text-cyan-400" />
+                Account Verification
+              </h3>
+
+              <div className="space-y-2 text-xs">
+                <div className="flex justify-between py-1.5 border-b border-slate-800">
+                  <span className="text-slate-400">Email Status</span>
+                  <span className={profile.emailVerified ? 'text-emerald-400 font-medium' : 'text-amber-400 font-medium'}>
+                    {profile.emailVerified ? 'Verified' : 'Pending Verification'}
+                  </span>
+                </div>
+
+                <div className="flex justify-between py-1.5 border-b border-slate-800">
+                  <span className="text-slate-400">Clearance Level</span>
+                  <span className="text-slate-200 font-medium">{profile.role}</span>
+                </div>
+
+                <div className="flex justify-between py-1.5">
+                  <span className="text-slate-400">Account Access</span>
+                  <span className="text-emerald-400 font-medium">Authorized</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Session Management & Direct Logout */}
+            <div className="rounded-xl bg-slate-900/60 border border-slate-800 p-5 space-y-4">
+              <div>
+                <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                  <FiLogOut size={14} className="text-rose-400" />
+                  Active Session
+                </h3>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Current authentication token session.
+                </p>
+              </div>
+
+              <div className="p-3 rounded-lg bg-slate-950/40 border border-slate-800/80 text-xs space-y-1.5">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Session Type:</span>
+                  <span className="text-slate-300 font-mono">JWT Bearer Token</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Status:</span>
+                  <span className="text-emerald-400 font-medium">Active & Validated</span>
+                </div>
+              </div>
+
+              <button
+                onClick={handleLogout}
+                className="w-full py-2.5 px-4 rounded-lg bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 text-xs font-medium border border-rose-800/50 flex items-center justify-center gap-2 transition-colors shadow-sm"
+              >
+                <FiLogOut size={14} />
+                <span>Logout Session</span>
+              </button>
+            </div>
+
           </div>
 
-          {/* Team Activity Logs Feed */}
-          <div className="glass-card rounded-xl p-6">
-            <h3 className="font-label-caps text-xs text-on-surface border-b border-white/5 pb-2 mb-4 flex items-center gap-2">
-              <span className="material-symbols-outlined text-[18px]">group</span>
-              Team Activity
-            </h3>
-
-            <div className="space-y-4">
-              
-              <div className="flex items-center gap-3">
-                <div className="h-8 w-8 rounded-full bg-surface-container-highest overflow-hidden flex-shrink-0">
-                  <img 
-                    className="h-full w-full object-cover" 
-                    alt="Agent Kael" 
-                    src="https://lh3.googleusercontent.com/aida-public/AB6AXuCdSHqT8uFYI3x-7tMpFGKc30Tlsk_UXbc_GU77mAItFjUnpTHwJ6tYeGsyCy_13yrSo-QAgq47oU-NN9PhGBUC5MFijJ_pcgtf8WjmrvPS9o7MOUiZfSWMZ1T5Q8SxfFw58mfxiDiWmNHvJj8U3A7ISWp7BsQowHxYMqqIhaqM17d3JiVKlcVFDZub5qaRSgfndhjrW_DSxoTA7bvNSl1IVnYnsrndn_sWmF9PwFJWjBwN3OQaE5Ct"
-                  />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs text-on-surface truncate">
-                    <span className="font-bold">Agent Kael</span> verified logs
-                  </p>
-                  <p className="text-[10px] text-on-surface-variant mt-0.5">10m ago</p>
-                </div>
+          {/* RIGHT COLUMN: Account Specifications, Change Password, and Real Assigned Records */}
+          <div className="lg:col-span-8 flex flex-col gap-6">
+            
+            {/* Account Specifications */}
+            <div className="rounded-xl bg-slate-900/60 border border-slate-800 p-6 space-y-5">
+              <div className="border-b border-slate-800 pb-3">
+                <h3 className="text-sm font-semibold text-white tracking-tight flex items-center gap-2">
+                  <FiBriefcase className="text-cyan-400" />
+                  Account Specifications
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Authenticated parameters associated with this investigator session.
+                </p>
               </div>
 
-              <div className="flex items-center gap-3">
-                <div className="h-8 w-8 rounded-full bg-surface-container-highest overflow-hidden flex-shrink-0">
-                  <img 
-                    className="h-full w-full object-cover" 
-                    alt="Agent Jiro" 
-                    src="https://lh3.googleusercontent.com/aida-public/AB6AXuBzmuFbqG3KCQ09jJOCR0-t0mqEAjtj05zLanKYwDWhtPuUXKp1ahw50wxQTks23RsdySIN5KuYDl2Zw-oS8nULzh95V1Ti5Q8DmBjsTCGZTpLrC4amPzH9fLxQ-cC-DqTQwGRQa-yh5I5Cw0WujTxtI2JhlhHesN0N37OoaeyG9VZrZWJt5LBl-tj1u6FDfhupidsmdIuIJxchLo-RXxc5WTJP-MEyfsSmpEyzVmzNJMT7BM97Bj6j"
-                  />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="p-3.5 rounded-lg bg-slate-950/40 border border-slate-800/80">
+                  <div className="flex items-center gap-2 text-slate-400 text-xs mb-1">
+                    <FiShield size={14} className="text-cyan-400" />
+                    <span>Operator ID</span>
+                  </div>
+                  <div className="text-sm font-mono text-slate-200 font-semibold">
+                    {profile.userId || profile.id || 'N/A'}
+                  </div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs text-on-surface truncate">
-                    <span className="font-bold">Agent Jiro</span> started Case #TR-9908
-                  </p>
-                  <p className="text-[10px] text-on-surface-variant mt-0.5">2h ago</p>
+
+                <div className="p-3.5 rounded-lg bg-slate-950/40 border border-slate-800/80">
+                  <div className="flex items-center gap-2 text-slate-400 text-xs mb-1">
+                    <FiUser size={14} className="text-cyan-400" />
+                    <span>Full Name</span>
+                  </div>
+                  <div className="text-sm text-slate-200 font-semibold">
+                    {profile.fullName || 'N/A'}
+                  </div>
+                </div>
+
+                <div className="p-3.5 rounded-lg bg-slate-950/40 border border-slate-800/80">
+                  <div className="flex items-center gap-2 text-slate-400 text-xs mb-1">
+                    <FiMail size={14} className="text-cyan-400" />
+                    <span>Email Address</span>
+                  </div>
+                  <div className="text-sm font-mono text-slate-200">
+                    {profile.email || 'N/A'}
+                  </div>
+                </div>
+
+                <div className="p-3.5 rounded-lg bg-slate-950/40 border border-slate-800/80">
+                  <div className="flex items-center gap-2 text-slate-400 text-xs mb-1">
+                    <FiBriefcase size={14} className="text-cyan-400" />
+                    <span>Department / Unit</span>
+                  </div>
+                  <div className="text-sm text-slate-200">
+                    {profile.department || 'DFIR Incident Response'}
+                  </div>
+                </div>
+
+                <div className="p-3.5 rounded-lg bg-slate-950/40 border border-slate-800/80">
+                  <div className="flex items-center gap-2 text-slate-400 text-xs mb-1">
+                    <FiPhone size={14} className="text-cyan-400" />
+                    <span>Contact Phone</span>
+                  </div>
+                  <div className="text-sm text-slate-200">
+                    {profile.phone || 'Not provided'}
+                  </div>
+                </div>
+
+                <div className="p-3.5 rounded-lg bg-slate-950/40 border border-slate-800/80">
+                  <div className="flex items-center gap-2 text-slate-400 text-xs mb-1">
+                    <FiCalendar size={14} className="text-cyan-400" />
+                    <span>Account Created</span>
+                  </div>
+                  <div className="text-sm text-slate-200">
+                    {formatDate(profile.createdAt)}
+                  </div>
+                </div>
+
+                <div className="p-3.5 rounded-lg bg-slate-950/40 border border-slate-800/80 md:col-span-2">
+                  <div className="flex items-center gap-2 text-slate-400 text-xs mb-1">
+                    <FiClock size={14} className="text-cyan-400" />
+                    <span>Last Profile Update</span>
+                  </div>
+                  <div className="text-sm text-slate-200">
+                    {formatDate(profile.updatedAt)}
+                  </div>
                 </div>
               </div>
-
             </div>
+
+            {/* Direct Change Password Card */}
+            <div className="rounded-xl bg-slate-900/60 border border-slate-800 p-6 space-y-4">
+              <div className="border-b border-slate-800 pb-3">
+                <h3 className="text-sm font-semibold text-white tracking-tight flex items-center gap-2">
+                  <FiLock className="text-cyan-400" />
+                  Change Password
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Update your authentication clearance key.
+                </p>
+              </div>
+
+              <form onSubmit={handlePasswordSubmit} className="space-y-4">
+                {passwordError && (
+                  <div className="p-3 rounded-lg bg-rose-950/40 border border-rose-800 text-rose-300 text-xs flex items-center gap-2">
+                    <FiAlertCircle size={14} className="shrink-0" />
+                    <span>{passwordError}</span>
+                  </div>
+                )}
+
+                {passwordSuccess && (
+                  <div className="p-3 rounded-lg bg-emerald-950/40 border border-emerald-800 text-emerald-300 text-xs flex items-center gap-2">
+                    <FiCheckCircle size={14} className="shrink-0" />
+                    <span>{passwordSuccess}</span>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                      Current Password *
+                    </label>
+                    <input
+                      type="password"
+                      required
+                      value={passwordForm.currentPassword}
+                      onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
+                      className="w-full px-3.5 py-2 rounded-lg bg-slate-950 border border-slate-800 focus:border-cyan-500 focus:outline-none text-xs text-white"
+                      placeholder="Current password"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                      New Password *
+                    </label>
+                    <input
+                      type="password"
+                      required
+                      minLength={8}
+                      value={passwordForm.newPassword}
+                      onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+                      className="w-full px-3.5 py-2 rounded-lg bg-slate-950 border border-slate-800 focus:border-cyan-500 focus:outline-none text-xs text-white"
+                      placeholder="Min. 8 chars"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                      Confirm New Password *
+                    </label>
+                    <input
+                      type="password"
+                      required
+                      minLength={8}
+                      value={passwordForm.confirmPassword}
+                      onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
+                      className="w-full px-3.5 py-2 rounded-lg bg-slate-950 border border-slate-800 focus:border-cyan-500 focus:outline-none text-xs text-white"
+                      placeholder="Confirm password"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-2">
+                  <button
+                    type="submit"
+                    disabled={passwordSubmitting}
+                    className="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-slate-950 text-xs font-semibold flex items-center gap-2 transition-colors disabled:opacity-50"
+                  >
+                    <FiSave size={14} />
+                    <span>{passwordSubmitting ? 'Updating...' : 'Change Password'}</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {/* Assigned Cases Section */}
+            <div className="rounded-xl bg-slate-900/60 border border-slate-800 p-6 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-white tracking-tight flex items-center gap-2">
+                    <FiFolder className="text-cyan-400" />
+                    Assigned Cases
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Active investigation cases assigned to this operator.
+                  </p>
+                </div>
+                <button
+                  onClick={() => navigate('/cases')}
+                  className="text-xs text-cyan-400 hover:text-cyan-300 font-medium"
+                >
+                  View All Cases &rarr;
+                </button>
+              </div>
+
+              {casesLoading ? (
+                <div className="py-6 text-center text-xs text-slate-500">
+                  Loading assigned cases...
+                </div>
+              ) : assignedCases.length === 0 ? (
+                <div className="py-6 text-center rounded-lg bg-slate-950/30 border border-dashed border-slate-800 text-slate-400 text-xs">
+                  <FiFolder size={20} className="mx-auto mb-1.5 text-slate-600" />
+                  <span>No assigned cases yet.</span>
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {assignedCases.map((c) => (
+                    <div
+                      key={c._id || c.caseId}
+                      onClick={() => navigate(`/cases/${c._id || c.caseId}`)}
+                      className="p-3 rounded-lg bg-slate-950/40 border border-slate-800/80 hover:border-cyan-500/40 flex items-center justify-between cursor-pointer transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="font-mono text-xs font-semibold text-cyan-400">
+                          {c.caseId || `#${c._id.slice(-6)}`}
+                        </span>
+                        <span className="text-xs text-slate-200 font-medium">{c.title}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-mono">
+                          {c.status || 'Active'}
+                        </span>
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 font-mono border border-cyan-800/40">
+                          {c.severity || 'Medium'}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Recent Incident Activity */}
+            <div className="rounded-xl bg-slate-900/60 border border-slate-800 p-6 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-white tracking-tight flex items-center gap-2">
+                    <FiActivity className="text-cyan-400" />
+                    Recent Activity
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Audit log events executed under this operator clearance.
+                  </p>
+                </div>
+                <button
+                  onClick={() => navigate('/audit-logs')}
+                  className="text-xs text-cyan-400 hover:text-cyan-300 font-medium"
+                >
+                  View Audit Logs &rarr;
+                </button>
+              </div>
+
+              {activityLoading ? (
+                <div className="py-6 text-center text-xs text-slate-500">
+                  Loading recent activity...
+                </div>
+              ) : recentActivity.length === 0 ? (
+                <div className="py-6 text-center rounded-lg bg-slate-950/30 border border-dashed border-slate-800 text-slate-400 text-xs">
+                  <FiActivity size={20} className="mx-auto mb-1.5 text-slate-600" />
+                  <span>No recent activity.</span>
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {recentActivity.map((log) => (
+                    <div
+                      key={log._id}
+                      className="p-3 rounded-lg bg-slate-950/40 border border-slate-800/80 flex items-center justify-between"
+                    >
+                      <div>
+                        <div className="text-xs font-semibold text-slate-200">
+                          {log.action}
+                        </div>
+                        <div className="text-[11px] text-slate-400 mt-0.5">
+                          {log.details || log.targetType || 'Activity logged'}
+                        </div>
+                      </div>
+                      <span className="text-[10px] text-slate-500 font-mono">
+                        {formatDate(log.createdAt)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
           </div>
 
         </div>
+      )}
 
-      </div>
+      {/* Edit Profile Modal */}
+      {editModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-xl w-full max-w-lg overflow-hidden shadow-2xl animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800">
+              <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                <FiEdit2 className="text-cyan-400" />
+                Edit Operator Profile
+              </h3>
+              <button
+                onClick={() => setEditModalOpen(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
+              >
+                <FiX size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditSubmit} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                  Full Legal Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editForm.fullName}
+                  onChange={(e) => setEditForm({ ...editForm, fullName: e.target.value })}
+                  className="w-full px-3.5 py-2 rounded-lg bg-slate-950 border border-slate-800 focus:border-cyan-500 focus:outline-none text-xs text-white"
+                  placeholder="e.g. AKASH C"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                  Department / Organization Unit
+                </label>
+                <input
+                  type="text"
+                  value={editForm.department}
+                  onChange={(e) => setEditForm({ ...editForm, department: e.target.value })}
+                  className="w-full px-3.5 py-2 rounded-lg bg-slate-950 border border-slate-800 focus:border-cyan-500 focus:outline-none text-xs text-white"
+                  placeholder="e.g. DFIR Incident Response"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                  Phone Number
+                </label>
+                <input
+                  type="text"
+                  value={editForm.phone}
+                  onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                  className="w-full px-3.5 py-2 rounded-lg bg-slate-950 border border-slate-800 focus:border-cyan-500 focus:outline-none text-xs text-white"
+                  placeholder="e.g. +1 (555) 019-2834"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                  Profile Avatar URL
+                </label>
+                <input
+                  type="url"
+                  value={editForm.profileImage}
+                  onChange={(e) => setEditForm({ ...editForm, profileImage: e.target.value })}
+                  className="w-full px-3.5 py-2 rounded-lg bg-slate-950 border border-slate-800 focus:border-cyan-500 focus:outline-none text-xs text-white"
+                  placeholder="https://example.com/avatar.jpg"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setEditModalOpen(false)}
+                  className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-slate-950 text-xs font-semibold flex items-center gap-2 transition-colors disabled:opacity-50"
+                >
+                  <FiSave size={14} />
+                  <span>{submitting ? 'Saving...' : 'Save Changes'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

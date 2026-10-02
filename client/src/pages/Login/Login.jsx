@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Shield, Mail, Lock, Eye, EyeOff, Bolt, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 import { auth, googleProvider, signInWithPopup, getResolvedUserName } from '../../services/firebase';
 import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
+import { authService } from '../../services/auth.service';
 
 /**
  * Login Component
@@ -32,72 +33,26 @@ export default function Login() {
 
     try {
       let user = null;
+      let idToken = null;
       try {
         const result = await signInWithPopup(auth, googleProvider);
         user = result.user;
+        idToken = await user.getIdToken();
       } catch (popupError) {
-        console.error('[Firebase Auth Error Details]', {
-          code: popupError.code,
-          message: popupError.message,
-          customData: popupError.customData,
-          stack: popupError.stack
-        });
-
         if (popupError.code === 'auth/popup-closed-by-user' || popupError.code === 'auth/cancelled-popup-request') {
           console.log('[Login] Google Auth popup closed by user.');
           setGoogleLoading(false);
           return;
         }
-
-        // Fallback for internal error or popup constraints
-        console.warn(`[Login] Firebase Auth popup returned ${popupError.code || 'error'}. Using Google identity provider flow...`);
-        user = {
-          email: 'analyst.google@trace.ai',
-          displayName: 'Google SSO Operator',
-          photoURL: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80'
-        };
+        throw new Error(popupError.message || 'Google identity provider authentication failed.', { cause: popupError });
       }
 
-      if (user && user.email) {
-        // Contact backend endpoint /api/auth/google
-        try {
-          const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
-          const res = await fetch(`${API_URL}/auth/google`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              email: user.email,
-              fullName: user.displayName || user.email.split('@')[0],
-              profileImage: user.photoURL || ''
-            })
-          });
-          const data = await res.json();
-          if (res.ok && data.success) {
-            if (data.token) localStorage.setItem('token', data.token);
-            if (data.refreshToken) localStorage.setItem('refreshToken', data.refreshToken);
-            const resolvedName = getResolvedUserName(user, data.user?.fullName || user.displayName);
-            const resolvedRole = data.user?.role || (user.email?.toLowerCase().includes('admin') ? 'Admin' : 'Investigator');
-            localStorage.setItem('isAuthenticated', 'true');
-            localStorage.setItem('operatorName', resolvedName);
-            localStorage.setItem('operatorEmail', data.user?.email || user.email);
-            localStorage.setItem('operatorAvatar', data.user?.profileImage || user.photoURL || '');
-            localStorage.setItem('operatorRole', resolvedRole);
-          } else {
-            throw new Error(data.error?.message || 'Google backend authentication failed');
-          }
-        } catch (apiError) {
-          console.warn('[Backend Auth Warning] Setting session directly:', apiError.message);
-          const resolvedName = getResolvedUserName(user, user.displayName);
-          const resolvedRole = user.email?.toLowerCase().includes('admin') ? 'Admin' : 'Investigator';
-          localStorage.setItem('isAuthenticated', 'true');
-          localStorage.setItem('operatorName', resolvedName);
-          localStorage.setItem('operatorEmail', user.email);
-          localStorage.setItem('operatorAvatar', user.photoURL || '');
-          localStorage.setItem('operatorRole', resolvedRole);
-        }
-
-        navigate('/dashboard', { replace: true });
+      if (!idToken) {
+        throw new Error('Failed to retrieve cryptographic identity token from Google.');
       }
+
+      await authService.googleLogin(idToken);
+      navigate('/dashboard', { replace: true });
     } catch (error) {
       console.error('[Login] Google authentication failed:', error);
       setGoogleError(error.message || 'Google Federated Authentication failed.');
@@ -143,7 +98,7 @@ export default function Login() {
     }
   };
 
-  // Submit Handler with Firebase Authentication
+  // Submit Handler with Backend Authentication
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (isLoading) return;
@@ -153,30 +108,16 @@ export default function Login() {
       setErrors({});
 
       try {
-        const result = await signInWithEmailAndPassword(auth, email.trim(), password);
-        
-        // Redirect to Verification Center if email is not verified
-        if (!result.user.emailVerified) {
-          console.log('[Login] User email not verified. Redirecting to Verification Center...');
-          setIsLoading(false);
-          navigate('/verify');
-          return;
-        }
-
-        const userEmail = result.user.email || email.trim();
-        const resolvedName = getResolvedUserName(result.user, result.user.displayName);
-        const resolvedRole = result.user.role || (userEmail.toLowerCase().includes('admin') ? 'Admin' : 'Investigator');
-
-        localStorage.setItem('isAuthenticated', 'true');
-        localStorage.setItem('operatorName', resolvedName);
-        localStorage.setItem('operatorEmail', userEmail);
-        localStorage.setItem('operatorAvatar', result.user.photoURL || '');
-        localStorage.setItem('operatorRole', resolvedRole);
+        await authService.login(email.trim(), password, rememberMe);
         navigate('/dashboard', { replace: true });
       } catch (error) {
         setIsLoading(false);
-        const userFriendlyMessage = mapFirebaseError(error);
-        setErrors({ auth: userFriendlyMessage });
+        const errMsg = error.message || 'Authentication failed.';
+        const isUnverified = errMsg.toLowerCase().includes('not been verified');
+        setErrors({
+          auth: errMsg,
+          unverified: isUnverified
+        });
       }
     }
   };
@@ -437,10 +378,13 @@ export default function Login() {
           }
 
           .trace-login-logo {
+            display: block;
+            width: 64px;
             height: 64px;
             margin-left: auto;
             margin-right: auto;
             margin-bottom: 16px;
+            object-fit: contain;
           }
 
           .trace-login-card-title {
@@ -852,7 +796,15 @@ export default function Login() {
         <div className="trace-login-card">
           {/* Brand & Header */}
           <div className="trace-login-card-header">
-            <img alt="TRACE AI Logo" className="trace-login-logo" src="https://lh3.googleusercontent.com/aida/AP1WRLuz09skiO_Gg27FxlCj0Xpmpe7cK9UWgHVU9v12QjZ3BJitQrudTVRDg937R92CU6i-PCwIQrGUp6CI60bD4P3WxmRTWiB7d9aKfQFE2CJaem64MD2XEGpf_FgjGDBcJuEr1p6O0X1WRRE7GN2149tDknL7D-yP67AoZBZa4vRWBIbOqAeBpQ9NKLbl3XqyYnmIt-HGsX4uyhnBVZ44dXmpxLXMoZpneLrzRTT8o1vDLfxzcjoH6nIe9S8"/>
+            <img 
+              alt="TRACE AI Logo" 
+              className="trace-login-logo" 
+              src="/logo-white.svg"
+              onError={(e) => {
+                e.currentTarget.onerror = null;
+                e.currentTarget.src = '/logo-login.svg';
+              }}
+            />
             <h2 className="trace-login-card-title">Welcome back</h2>
             <p className="trace-login-card-subtitle">AI-Driven Digital Forensics &amp; Incident Response Platform</p>
           </div>
@@ -953,9 +905,14 @@ export default function Login() {
             </div>
 
             {errors.auth && (
-              <div className="trace-login-validation-feedback error" role="alert" style={{ alignSelf: 'center', margin: '4px 0' }}>
-                <AlertCircle className="w-3.5 h-3.5" />
+              <div className="trace-login-validation-feedback error" role="alert" style={{ alignSelf: 'center', margin: '4px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
                 <span>✕ {errors.auth}</span>
+                {errors.unverified && (
+                  <Link to="/verify" state={{ email: email.trim() }} style={{ color: '#47FAF3', textDecoration: 'underline', marginLeft: '6px', whiteSpace: 'nowrap' }}>
+                    Verify Now
+                  </Link>
+                )}
               </div>
             )}
 

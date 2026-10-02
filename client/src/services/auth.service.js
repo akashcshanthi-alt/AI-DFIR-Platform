@@ -1,5 +1,12 @@
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
+const extractErrorMessage = (data, defaultMessage) => {
+  if (data?.error?.details && Array.isArray(data.error.details) && data.error.details.length > 0) {
+    return data.error.details[0].message || data.error.message || defaultMessage;
+  }
+  return data?.error?.message || defaultMessage;
+};
+
 /**
  * Authentication Service
  * Communicates with the Express API server and manages local session credentials securely.
@@ -36,12 +43,34 @@ export const authService = {
     localStorage.removeItem('operatorRole');
     localStorage.removeItem('operatorAvatar');
     localStorage.removeItem('operatorOrg');
+    localStorage.removeItem('rememberMe');
+  },
+
+  /**
+   * Checks if user has a valid, unexpired token.
+   */
+  isAuthenticated() {
+    const token = this.getToken();
+    if (!token) return false;
+    try {
+      const parts = token.split('.');
+      if (parts.length !== 3) return false;
+      const payload = JSON.parse(atob(parts[1]));
+      if (payload.exp && payload.exp * 1000 < Date.now()) {
+        this.clearAuth();
+        return false;
+      }
+      return localStorage.getItem('isAuthenticated') === 'true';
+    } catch {
+      this.clearAuth();
+      return false;
+    }
   },
 
   /**
    * POST /api/auth/login
    */
-  async login(email, password) {
+  async login(email, password, remember = true) {
     const response = await fetch(`${API_URL}/auth/login`, {
       method: 'POST',
       headers: {
@@ -52,13 +81,14 @@ export const authService = {
 
     const data = await response.json();
     if (!response.ok || !data.success) {
-      throw new Error(data.error?.message || 'Login failed. Invalid credentials.');
+      throw new Error(extractErrorMessage(data, 'Login failed. Invalid credentials.'));
     }
 
     // Capture response keys
     this.setToken(data.token);
     this.setRefreshToken(data.refreshToken);
     localStorage.setItem('isAuthenticated', 'true');
+    localStorage.setItem('rememberMe', remember ? 'true' : 'false');
     localStorage.setItem('operatorName', data.user.fullName);
     localStorage.setItem('operatorEmail', data.user.email);
     localStorage.setItem('operatorRole', data.user.role);
@@ -70,19 +100,20 @@ export const authService = {
 
   /**
    * POST /api/auth/google
+   * Authenticate using cryptographic ID token
    */
-  async googleLogin(email, fullName, profileImage) {
+  async googleLogin(idToken) {
     const response = await fetch(`${API_URL}/auth/google`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ email, fullName, profileImage })
+      body: JSON.stringify({ idToken })
     });
 
     const data = await response.json();
     if (!response.ok || !data.success) {
-      throw new Error(data.error?.message || 'Google SSO login failed.');
+      throw new Error(extractErrorMessage(data, 'Google SSO login failed.'));
     }
 
     // Capture response keys
@@ -118,7 +149,47 @@ export const authService = {
 
     const data = await response.json();
     if (!response.ok || !data.success) {
-      throw new Error(data.error?.message || 'Registration failed.');
+      throw new Error(extractErrorMessage(data, 'Registration failed.'));
+    }
+
+    return data;
+  },
+
+  /**
+   * POST /api/auth/verify-email
+   */
+  async verifyEmail(token) {
+    const response = await fetch(`${API_URL}/auth/verify-email`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ token })
+    });
+
+    const data = await response.json();
+    if (!response.ok || !data.success) {
+      throw new Error(extractErrorMessage(data, 'Verification token is invalid or has expired.'));
+    }
+
+    return data;
+  },
+
+  /**
+   * POST /api/auth/resend-verification
+   */
+  async resendVerification(email) {
+    const response = await fetch(`${API_URL}/auth/resend-verification`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ email })
+    });
+
+    const data = await response.json();
+    if (!response.ok || !data.success) {
+      throw new Error(extractErrorMessage(data, 'Failed to resend verification link.'));
     }
 
     return data;
@@ -138,7 +209,7 @@ export const authService = {
 
     const data = await response.json();
     if (!response.ok || !data.success) {
-      throw new Error(data.error?.message || 'Failed to dispatch reset link.');
+      throw new Error(extractErrorMessage(data, 'Failed to dispatch reset link.'));
     }
 
     return data;
@@ -158,7 +229,7 @@ export const authService = {
 
     const data = await response.json();
     if (!response.ok || !data.success) {
-      throw new Error(data.error?.message || 'Reset password operation failed.');
+      throw new Error(extractErrorMessage(data, 'Reset password operation failed.'));
     }
 
     return data;

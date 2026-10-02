@@ -41,8 +41,12 @@ export default function ResetPassword() {
     const tempErrors = {};
     if (!password) {
       tempErrors.password = 'New clearance key is required';
-    } else if (password.length < 6) {
-      tempErrors.password = 'Clearance key must be at least 6 characters long';
+    } else if (password.length < 8) {
+      tempErrors.password = 'Clearance key must be at least 8 characters long';
+    } else if (!/[A-Z]/.test(password)) {
+      tempErrors.password = 'Clearance key must contain at least one uppercase letter';
+    } else if (!/[0-9]/.test(password)) {
+      tempErrors.password = 'Clearance key must contain at least one number';
     }
 
     if (!confirmPassword) {

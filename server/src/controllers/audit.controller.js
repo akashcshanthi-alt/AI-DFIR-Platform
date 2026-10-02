@@ -1,20 +1,63 @@
 const AuditLog = require('../models/AuditLog');
+const User = require('../models/User');
 const response = require('../utils/response');
 const { validationResult } = require('express-validator');
+const mongoose = require('mongoose');
+
+/**
+ * Resolve the authenticated user's ID from req.user.
+ */
+const getUserId = (req) => req.user?.id || req.user?._id;
+
+/**
+ * Helper to retrieve user identifiers and check RBAC clearance.
+ */
+const getUserAuthContext = async (req) => {
+  const userId = getUserId(req);
+  let userDoc = null;
+  if (userId && mongoose.Types.ObjectId.isValid(userId)) {
+    userDoc = await User.findById(userId, 'email fullName userId role').lean();
+  }
+
+  const role = req.user?.role || userDoc?.role || 'Investigator';
+  const isPrivilegedAdmin = ['Super Admin', 'Admin'].includes(role);
+
+  const identifiers = [];
+  if (userDoc?.email) identifiers.push(userDoc.email.toLowerCase());
+  if (userDoc?.fullName) identifiers.push(userDoc.fullName);
+  if (userDoc?.userId) identifiers.push(userDoc.userId);
+  if (userId) identifiers.push(String(userId));
+  if (req.user?.email && !identifiers.includes(req.user.email.toLowerCase())) {
+    identifiers.push(req.user.email.toLowerCase());
+  }
+  if (req.user?.userId && !identifiers.includes(req.user.userId)) {
+    identifiers.push(req.user.userId);
+  }
+
+  return {
+    userId,
+    userDoc,
+    role,
+    isPrivilegedAdmin,
+    identifiers
+  };
+};
 
 /**
  * GET /api/audit-logs
- * List audit logs with server-side pagination, search, sorting, and filters.
+ * List audit logs with server-side pagination, search, sorting, and user-scoped authorization.
  */
 const getAuditLogs = async (req, res, next) => {
   try {
+    const { isPrivilegedAdmin, identifiers } = await getUserAuthContext(req);
+
     const page = parseInt(req.query.page, 10) || 1;
     const limit = parseInt(req.query.limit, 10) || 10;
     const skip = (page - 1) * limit;
 
     const {
       search,
-      user,
+      user: targetUser,
       status,
       severity,
       module: modFilter,
@@ -24,55 +67,61 @@ const getAuditLogs = async (req, res, next) => {
       sortOrder
     } = req.query;
 
-    const query = {};
+    const andConditions = [];
 
-    // 1. Regex search across indexed fields
-    if (search) {
-      const regex = new RegExp(search, 'i');
-      query.$or = [
-        { logId: regex },
-        { eventId: regex },
-        { user: regex },
-        { action: regex },
-        { module: regex },
-        { ipAddress: regex },
-        { description: regex },
-        { resource: regex }
-      ];
+    // 1. User scoping: Non-admins can ONLY see their own audit records
+    if (!isPrivilegedAdmin) {
+      andConditions.push({ user: { $in: identifiers } });
+    } else if (targetUser && targetUser !== 'All') {
+      // Privileged admin filtering by user
+      andConditions.push({ user: targetUser });
     }
 
-    // 2. Exact filters
-    if (user && user !== 'All') {
-      query.user = user;
+    // 2. Search across indexed fields
+    if (search && search.trim()) {
+      const regex = new RegExp(search.trim(), 'i');
+      andConditions.push({
+        $or: [
+          { logId: regex },
+          { eventId: regex },
+          { user: regex },
+          { action: regex },
+          { module: regex },
+          { ipAddress: regex },
+          { description: regex },
+          { resource: regex }
+        ]
+      });
     }
+
+    // 3. Exact status, severity, and module filters
     if (status && status !== 'All') {
-      query.status = status;
+      andConditions.push({ status });
     }
     if (severity && severity !== 'All') {
-      query.severity = severity;
+      andConditions.push({ severity });
     }
     if (modFilter && modFilter !== 'All') {
-      query.module = modFilter;
+      andConditions.push({ module: modFilter });
     }
 
-    // 3. Date range filters
+    // 4. Date range filters
     if (startDate || endDate) {
-      query.timestamp = {};
-      if (startDate) {
-        query.timestamp.$gte = new Date(startDate);
-      }
-      if (endDate) {
-        query.timestamp.$lte = new Date(endDate);
-      }
+      const dateRange = {};
+      if (startDate) dateRange.$gte = new Date(startDate);
+      if (endDate) dateRange.$lte = new Date(endDate);
+      andConditions.push({ timestamp: dateRange });
     }
 
-    // 4. Sort execution
+    const query = andConditions.length > 0 ? { $and: andConditions } : {};
+
+    // 5. Sort execution
     const sort = {};
     const field = sortBy || 'timestamp';
     const order = sortOrder === 'asc' ? 1 : -1;
     sort[field] = order;
 
-    // 5. Query execution
+    // 6. Query execution
     const total = await AuditLog.countDocuments(query);
     const logs = await AuditLog.find(query)
       .sort(sort)
@@ -80,9 +129,10 @@ const getAuditLogs = async (req, res, next) => {
       .limit(limit)
       .exec();
 
-    // Compile distinct filters for front-end dropdown lists
-    const users = await AuditLog.distinct('user');
-    const modules = await AuditLog.distinct('module');
+    // Distinct dropdown values scoped appropriately
+    const distinctScope = !isPrivilegedAdmin ? { user: { $in: identifiers } } : {};
+    const users = await AuditLog.distinct('user', distinctScope);
+    const modules = await AuditLog.distinct('module', distinctScope);
 
     return response.success(res, {
       logs,
@@ -90,7 +140,7 @@ const getAuditLogs = async (req, res, next) => {
         total,
         page,
         limit,
-        totalPages: Math.ceil(total / limit)
+        totalPages: Math.ceil(total / limit) || 1
       },
       filters: {
         users,
@@ -104,18 +154,26 @@ const getAuditLogs = async (req, res, next) => {
 
 /**
  * GET /api/audit-logs/:id
- * Retrieve a specific audit log by its logId or ObjectId.
+ * Retrieve a specific audit log by its logId or ObjectId, strictly verifying authorization.
  */
 const getAuditLogById = async (req, res, next) => {
   try {
+    const { isPrivilegedAdmin, identifiers } = await getUserAuthContext(req);
     const id = req.params.id;
-    let log = await AuditLog.findOne({ logId: id }).exec();
-    if (!log) {
-      log = await AuditLog.findById(id).exec();
+
+    const idCondition = mongoose.Types.ObjectId.isValid(id)
+      ? { $or: [{ _id: id }, { logId: id }, { eventId: id }] }
+      : { $or: [{ logId: id }, { eventId: id }] };
+
+    const andConditions = [idCondition];
+    if (!isPrivilegedAdmin) {
+      andConditions.push({ user: { $in: identifiers } });
     }
 
+    const log = await AuditLog.findOne({ $and: andConditions }).exec();
+
     if (!log) {
-      return response.notFound(res, 'Audit log entry not found');
+      return response.notFound(res, 'Audit log entry not found or access unauthorized.');
     }
 
     return response.success(res, log, 'Audit log retrieved successfully');
@@ -126,18 +184,26 @@ const getAuditLogById = async (req, res, next) => {
 
 /**
  * DELETE /api/audit-logs/:id
- * Delete a specific audit log by logId or ObjectId.
+ * Delete a specific audit log by logId or ObjectId, strictly verifying authorization.
  */
 const deleteAuditLog = async (req, res, next) => {
   try {
+    const { isPrivilegedAdmin, identifiers } = await getUserAuthContext(req);
     const id = req.params.id;
-    let result = await AuditLog.findOneAndDelete({ logId: id }).exec();
-    if (!result) {
-      result = await AuditLog.findByIdAndDelete(id).exec();
+
+    const idCondition = mongoose.Types.ObjectId.isValid(id)
+      ? { $or: [{ _id: id }, { logId: id }, { eventId: id }] }
+      : { $or: [{ logId: id }, { eventId: id }] };
+
+    const andConditions = [idCondition];
+    if (!isPrivilegedAdmin) {
+      andConditions.push({ user: { $in: identifiers } });
     }
 
+    const result = await AuditLog.findOneAndDelete({ $and: andConditions }).exec();
+
     if (!result) {
-      return response.notFound(res, 'Audit log entry not found for deletion');
+      return response.notFound(res, 'Audit log entry not found for deletion or access unauthorized.');
     }
 
     return response.success(res, null, 'Audit log entry deleted successfully');
@@ -148,7 +214,7 @@ const deleteAuditLog = async (req, res, next) => {
 
 /**
  * POST /api/audit-logs/export
- * Export audit logs as CSV or PDF documents based on query filters.
+ * Export authorized audit logs as CSV or PDF documents.
  */
 const exportAuditLogs = async (req, res, next) => {
   try {
@@ -157,10 +223,12 @@ const exportAuditLogs = async (req, res, next) => {
       return res.status(400).json({ success: false, errors: errors.array() });
     }
 
+    const { isPrivilegedAdmin, identifiers } = await getUserAuthContext(req);
+
     const {
       format,
       search,
-      user,
+      user: targetUser,
       status,
       severity,
       module: modFilter,
@@ -168,40 +236,48 @@ const exportAuditLogs = async (req, res, next) => {
       endDate
     } = req.body;
 
-    const query = {};
+    const andConditions = [];
 
-    if (search) {
-      const regex = new RegExp(search, 'i');
-      query.$or = [
-        { logId: regex },
-        { eventId: regex },
-        { user: regex },
-        { action: regex },
-        { module: regex },
-        { ipAddress: regex },
-        { description: regex },
-        { resource: regex }
-      ];
+    if (!isPrivilegedAdmin) {
+      andConditions.push({ user: { $in: identifiers } });
+    } else if (targetUser && targetUser !== 'All') {
+      andConditions.push({ user: targetUser });
     }
 
-    if (user && user !== 'All') {
-      query.user = user;
+    if (search && search.trim()) {
+      const regex = new RegExp(search.trim(), 'i');
+      andConditions.push({
+        $or: [
+          { logId: regex },
+          { eventId: regex },
+          { user: regex },
+          { action: regex },
+          { module: regex },
+          { ipAddress: regex },
+          { description: regex },
+          { resource: regex }
+        ]
+      });
     }
+
     if (status && status !== 'All') {
-      query.status = status;
+      andConditions.push({ status });
     }
     if (severity && severity !== 'All') {
-      query.severity = severity;
+      andConditions.push({ severity });
     }
     if (modFilter && modFilter !== 'All') {
-      query.module = modFilter;
+      andConditions.push({ module: modFilter });
     }
 
     if (startDate || endDate) {
-      query.timestamp = {};
-      if (startDate) query.timestamp.$gte = new Date(startDate);
-      if (endDate) query.timestamp.$lte = new Date(endDate);
+      const dateRange = {};
+      if (startDate) dateRange.$gte = new Date(startDate);
+      if (endDate) dateRange.$lte = new Date(endDate);
+      andConditions.push({ timestamp: dateRange });
     }
+
+    const query = andConditions.length > 0 ? { $and: andConditions } : {};
 
     const logs = await AuditLog.find(query).sort({ timestamp: -1 }).exec();
 
@@ -212,18 +288,18 @@ const exportAuditLogs = async (req, res, next) => {
       
       logs.forEach(log => {
         const row = [
-          log.timestamp.toISOString(),
-          log.logId || log.eventId,
-          log.user,
+          log.timestamp ? log.timestamp.toISOString() : new Date().toISOString(),
+          log.logId || log.eventId || '',
+          log.user || '',
           log.role || '',
-          `"${log.action.replace(/"/g, '""')}"`,
+          `"${(log.action || '').replace(/"/g, '""')}"`,
           log.module || '',
           log.resource || '',
           log.ipAddress || log.ip || '',
           log.device || '',
           log.browser || '',
-          log.status,
-          log.severity,
+          log.status || '',
+          log.severity || '',
           `"${(log.description || '').replace(/"/g, '""')}"`
         ];
         csvRows.push(row.join(','));
@@ -250,20 +326,19 @@ const exportAuditLogs = async (req, res, next) => {
         doc.fontSize(10).fillColor('#64748b').text(`Generated at: ${new Date().toISOString()}`, { align: 'center' });
         doc.moveDown();
 
-        // Print search/filters summary
+        // Print summary
         doc.fillColor('#1e293b').fontSize(10).text('Export Parameters:', { underline: true });
-        doc.text(`Search Term: ${search || 'N/A'} | Operator: ${user || 'All'} | Status: ${status || 'All'} | Severity: ${severity || 'All'}`);
-        doc.text(`Timeline Scope: ${startDate || 'Earliest'} to ${endDate || 'Latest'} | Record Volume: ${logs.length}`);
+        doc.text(`Search: ${search || 'N/A'} | Status: ${status || 'All'} | Severity: ${severity || 'All'} | Total Records: ${logs.length}`);
         doc.moveDown(1.5);
 
         // Table headers layout
         doc.fillColor('#0f172a').fontSize(9).font('Helvetica-Bold');
-        doc.text('Timestamp', 30, doc.y, { width: 100, continued: true });
-        doc.text('User', 130, doc.y, { width: 80, continued: true });
-        doc.text('Action', 210, doc.y, { width: 150, continued: true });
-        doc.text('Module', 360, doc.y, { width: 80, continued: true });
-        doc.text('IP Address', 440, doc.y, { width: 80, continued: true });
-        doc.text('Status', 520, doc.y, { width: 45 });
+        doc.text('Timestamp', 30, doc.y, { width: 110, continued: true });
+        doc.text('User', 140, doc.y, { width: 100, continued: true });
+        doc.text('Action', 240, doc.y, { width: 130, continued: true });
+        doc.text('Module', 370, doc.y, { width: 90, continued: true });
+        doc.text('IP Address', 460, doc.y, { width: 65, continued: true });
+        doc.text('Status', 525, doc.y, { width: 45 });
         doc.moveDown(0.5);
         doc.strokeColor('#cbd5e1').lineWidth(0.5).moveTo(30, doc.y).lineTo(565, doc.y).stroke();
         doc.moveDown(0.5);
@@ -273,31 +348,30 @@ const exportAuditLogs = async (req, res, next) => {
         logs.slice(0, 100).forEach(log => {
           if (doc.y > 750) {
             doc.addPage();
-            // Re-render headers on new page
             doc.fillColor('#0f172a').fontSize(9).font('Helvetica-Bold');
-            doc.text('Timestamp', 30, doc.y, { width: 100, continued: true });
-            doc.text('User', 130, doc.y, { width: 80, continued: true });
-            doc.text('Action', 210, doc.y, { width: 150, continued: true });
-            doc.text('Module', 360, doc.y, { width: 80, continued: true });
-            doc.text('IP Address', 440, doc.y, { width: 80, continued: true });
-            doc.text('Status', 520, doc.y, { width: 45 });
+            doc.text('Timestamp', 30, doc.y, { width: 110, continued: true });
+            doc.text('User', 140, doc.y, { width: 100, continued: true });
+            doc.text('Action', 240, doc.y, { width: 130, continued: true });
+            doc.text('Module', 370, doc.y, { width: 90, continued: true });
+            doc.text('IP Address', 460, doc.y, { width: 65, continued: true });
+            doc.text('Status', 525, doc.y, { width: 45 });
             doc.moveDown(0.5);
             doc.strokeColor('#cbd5e1').lineWidth(0.5).moveTo(30, doc.y).lineTo(565, doc.y).stroke();
             doc.moveDown(0.5);
             doc.font('Helvetica');
           }
 
-          const timestampStr = new Date(log.timestamp).toISOString().slice(0, 16).replace('T', ' ');
+          const timestampStr = log.timestamp ? new Date(log.timestamp).toISOString().slice(0, 16).replace('T', ' ') : 'N/A';
           doc.fillColor('#334155').fontSize(8);
-          doc.text(timestampStr, 30, doc.y, { width: 100, continued: true });
-          doc.text(log.user || '', 130, doc.y, { width: 80, continued: true });
-          doc.text(log.action || '', 210, doc.y, { width: 150, continued: true });
-          doc.text(log.module || '', 360, doc.y, { width: 80, continued: true });
-          doc.text(log.ipAddress || log.ip || '', 440, doc.y, { width: 80, continued: true });
+          doc.text(timestampStr, 30, doc.y, { width: 110, continued: true });
+          doc.text(log.user || '', 140, doc.y, { width: 100, continued: true });
+          doc.text(log.action || '', 240, doc.y, { width: 130, continued: true });
+          doc.text(log.module || '', 370, doc.y, { width: 90, continued: true });
+          doc.text(log.ipAddress || log.ip || '', 460, doc.y, { width: 65, continued: true });
           
           const isFailed = log.status === 'Failed';
           doc.fillColor(isFailed ? '#ef4444' : '#10b981');
-          doc.text(log.status || '', 520, doc.y, { width: 45 });
+          doc.text(log.status || 'Success', 525, doc.y, { width: 45 });
           doc.moveDown(0.5);
         });
 
@@ -309,12 +383,11 @@ const exportAuditLogs = async (req, res, next) => {
         doc.end();
       } catch (pdfErr) {
         console.error('Failed to generate PDF via pdfkit:', pdfErr);
-        // Fallback to text file in case of native build error
         res.setHeader('Content-Type', 'text/plain');
         res.setHeader('Content-Disposition', 'attachment; filename=audit-logs-export.txt');
         let textString = `TRACE AI Audit Logs Export - Generated ${new Date().toISOString()}\n\n`;
         logs.forEach(log => {
-          textString += `[${log.timestamp.toISOString()}] LOG_ID: ${log.logId} | USER: ${log.user} (${log.role}) | ACTION: ${log.action} | MODULE: ${log.module} | STATUS: ${log.status} | IP: ${log.ipAddress}\n`;
+          textString += `[${log.timestamp ? log.timestamp.toISOString() : ''}] LOG_ID: ${log.logId} | USER: ${log.user} | ACTION: ${log.action} | MODULE: ${log.module} | STATUS: ${log.status} | IP: ${log.ipAddress}\n`;
         });
         return res.send(textString);
       }

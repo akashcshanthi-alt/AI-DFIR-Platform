@@ -18,7 +18,17 @@ const authenticate = (req, res, next) => {
 
   const token = authHeader.split(' ')[1];
   try {
-    const secret = process.env.JWT_SECRET || 'fallback-secret-key-12345';
+    const secret = process.env.JWT_SECRET;
+    if (!secret) {
+      console.error('[Security Critical] JWT_SECRET environment variable is missing.');
+      return res.status(500).json({
+        success: false,
+        error: {
+          message: 'Authentication service configuration error.',
+          status: 500
+        }
+      });
+    }
     const decoded = jwt.verify(token, secret);
     req.user = decoded;
     next();

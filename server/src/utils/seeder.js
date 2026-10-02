@@ -16,7 +16,8 @@ const seedDatabase = async () => {
         email: 'cso@trace.ai',
         password: 'clearancepassword123',
         role: 'Admin',
-        department: 'TRACE Security Command'
+        department: 'TRACE Security Command',
+        emailVerified: true
       });
       await testUser.save();
     }

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Loader2, RefreshCw, Database } from 'lucide-react';
+import { Loader2, RefreshCw, FolderPlus, ShieldAlert } from 'lucide-react';
 import './Cases.css';
 
 // Import sub-components
@@ -8,8 +8,6 @@ import CasesHeader from './components/CasesHeader';
 import CasesFilters from './components/CasesFilters';
 import CasesTable from './components/CasesTable';
 import EditCaseModal from './components/EditCaseModal';
-import AIInsightsSidebar from './components/AIInsightsSidebar';
-import ChatFAB from './components/ChatFAB';
 import { casesService } from '../../services/cases.service';
 
 export default function Cases() {
@@ -43,14 +41,15 @@ export default function Cases() {
   });
   const [severityFilter, setSeverityFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
-  const [analystFilter, setAnalystFilter] = useState('All');
-  const [dateRangeFilter, setDateRangeFilter] = useState('All');
 
   // Edit Case Modal States
   const [activeEditCase, setActiveEditCase] = useState(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
-  // Synchronize search query from URL search params changes (e.g. from global header search)
+  // Checkbox multiselector state
+  const [selectedCaseIds, setSelectedCaseIds] = useState(new Set());
+
+  // Synchronize search query from URL search params changes
   useEffect(() => {
     const q = new URLSearchParams(location.search).get('q');
     if (q !== null) {
@@ -58,12 +57,6 @@ export default function Cases() {
       setPage(1);
     }
   }, [location.search]);
-
-  // Sidebar collapsible state
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-
-  // Checkbox multiselector state
-  const [selectedCaseIds, setSelectedCaseIds] = useState(new Set());
 
   // Fetch Cases from server
   const fetchCasesData = async () => {
@@ -81,14 +74,11 @@ export default function Cases() {
       if (searchQuery.trim()) {
         params.q = searchQuery.trim();
       }
-      if (severityFilter !== 'All' && severityFilter !== 'Severity') {
+      if (severityFilter !== 'All') {
         params.severity = severityFilter;
       }
-      if (statusFilter !== 'All' && statusFilter !== 'Status') {
+      if (statusFilter !== 'All') {
         params.status = statusFilter;
-      }
-      if (analystFilter !== 'All' && analystFilter !== 'Analyst') {
-        params.analyst = analystFilter;
       }
 
       const res = await casesService.getCases(params);
@@ -112,12 +102,11 @@ export default function Cases() {
     if (!hasSession) return;
     const delayDebounce = setTimeout(() => {
       fetchCasesData();
-    }, 300);
+    }, 250);
 
     return () => clearTimeout(delayDebounce);
-  }, [searchQuery, severityFilter, statusFilter, analystFilter, page, hasSession]);
+  }, [searchQuery, severityFilter, statusFilter, page, hasSession]);
 
-  // Reset page to 1 when filters change
   const handleSeverityChange = (val) => {
     setSeverityFilter(val);
     setPage(1);
@@ -125,11 +114,6 @@ export default function Cases() {
 
   const handleStatusChange = (val) => {
     setStatusFilter(val);
-    setPage(1);
-  };
-
-  const handleAnalystChange = (val) => {
-    setAnalystFilter(val);
     setPage(1);
   };
 
@@ -141,15 +125,13 @@ export default function Cases() {
     try {
       setIsFetching(true);
       await casesService.deleteCase(id);
-      setSuccessMessage(`Investigation case [${id}] successfully archived.`);
+      setSuccessMessage(`Investigation case [${id}] successfully deleted.`);
       setTimeout(() => setSuccessMessage(''), 3000);
       
-      // Update selected set
       const nextSelected = new Set(selectedCaseIds);
       nextSelected.delete(id);
       setSelectedCaseIds(nextSelected);
 
-      // Check if page index needs correction
       if (cases.length === 1 && page > 1) {
         setPage(prev => prev - 1);
       } else {
@@ -168,7 +150,7 @@ export default function Cases() {
   };
 
   const handleCaseUpdated = (updatedCase) => {
-    setSuccessMessage(`Case [${updatedCase.caseId}] details updated successfully.`);
+    setSuccessMessage(`Case [${updatedCase.caseId || updatedCase._id}] details updated successfully.`);
     setTimeout(() => setSuccessMessage(''), 3000);
     fetchCasesData();
   };
@@ -194,7 +176,6 @@ export default function Cases() {
     }
   };
 
-  // Case ID formatter
   const formatCaseId = (id) => {
     if (!id) return '';
     if (id.startsWith('CASE-')) {
@@ -206,47 +187,27 @@ export default function Cases() {
     return id;
   };
 
-  // Map case severity to CSS badge color classes
   const getSeverityBadgeClass = (severity) => {
     if (!severity) return '';
     const s = severity.toUpperCase();
-    if (s === 'CRITICAL') return 'bg-error/10 text-error border border-error/20 shadow-[0_0_10px_rgba(255,180,171,0.1)]';
-    if (s === 'HIGH') return 'bg-tertiary-container/20 text-tertiary border border-tertiary/20';
-    if (s === 'MEDIUM') return 'bg-primary-container/20 text-primary border border-primary/20';
-    return 'bg-secondary/10 text-secondary border border-secondary/20';
+    if (s === 'CRITICAL') return 'bg-[#ef4444]/15 text-[#ef4444] border border-[#ef4444]/30 shadow-[0_0_10px_rgba(239,68,68,0.15)]';
+    if (s === 'HIGH') return 'bg-[#f59e0b]/15 text-[#f59e0b] border border-[#f59e0b]/30';
+    if (s === 'MEDIUM') return 'bg-[#00E5FF]/15 text-[#00E5FF] border border-[#00E5FF]/30';
+    return 'bg-[#10b981]/15 text-[#10b981] border border-[#10b981]/30';
   };
 
-  // Map status badges
   const getStatusBadgeClass = (status) => {
     if (!status) return '';
     const st = status.toLowerCase();
-    if (st === 'open') return 'bg-secondary/10 text-secondary border border-secondary/20';
-    if (st === 'investigating') return 'bg-primary/10 text-primary border border-primary/20';
-    return 'bg-surface-variant text-on-surface-variant border border-white/10';
-  };
-
-  // Initials generator
-  const getAnalystInitials = (analyst) => {
-    if (!analyst || analyst === 'Autonomous' || analyst === 'Unassigned') return 'AI';
-    const parts = analyst.split(/\s+/);
-    if (parts.length >= 2) {
-      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-    }
-    return analyst.slice(0, 2).toUpperCase();
-  };
-
-  // Risk Score color decider
-  const getRiskColor = (score) => {
-    if (score >= 90) return '#ffb4ab';
-    if (score >= 70) return '#ffb3ae';
-    if (score >= 30) return '#aec6ff';
-    return '#8b90a0';
+    if (st === 'open') return 'bg-[#00E5FF]/15 text-[#00E5FF] border border-[#00E5FF]/30';
+    if (st === 'investigating') return 'bg-[#f59e0b]/15 text-[#f59e0b] border border-[#f59e0b]/30';
+    return 'bg-white/10 text-[#94a3b8] border border-white/10';
   };
 
   if (!hasSession) return null;
 
   return (
-    <div className="trace-cases-layout select-none">
+    <div className="trace-cases-layout select-none w-full min-h-screen bg-[#060913] text-white p-6 box-border">
       
       {/* Toast Notification Banner */}
       {successMessage && (
@@ -255,91 +216,81 @@ export default function Cases() {
         </div>
       )}
 
-      <div className="w-full bg-surface-container-lowest text-on-surface font-body-md selection:bg-primary/30 min-h-screen cyber-grid overflow-x-hidden flex flex-row box-border">
+      <div className="max-w-7xl mx-auto w-full">
+        {/* Header */}
+        <CasesHeader onNewCaseClick={() => navigate('/cases/new')} />
         
-        {/* Main Content Area */}
-        <main className="flex-grow flex flex-col p-6 overflow-y-auto min-w-0">
-          <CasesHeader onNewCaseClick={() => navigate('/cases/new')} />
-          
-          <CasesFilters 
-            searchQuery={searchQuery}
-            setSearchQuery={setSearchQuery}
-            severityFilter={severityFilter}
-            setSeverityFilter={handleSeverityChange}
-            statusFilter={statusFilter}
-            setStatusFilter={handleStatusChange}
-            analystFilter={analystFilter}
-            setAnalystFilter={handleAnalystChange}
-            dateRangeFilter={dateRangeFilter}
-            setDateRangeFilter={setDateRangeFilter}
-          />
-
-          {/* Conditional Layout Rendering */}
-          {isFetching && cases.length === 0 ? (
-            <div className="glass-card rounded-xl border border-white/5 flex-grow flex flex-col items-center justify-center min-h-[500px]">
-              <Loader2 className="w-10 h-10 text-primary animate-spin mb-3" />
-              <span className="text-sm font-semibold text-on-surface-variant">Accessing MongoDB threat records...</span>
-            </div>
-          ) : error ? (
-            <div className="glass-card rounded-xl border border-white/5 flex-grow flex flex-col items-center justify-center min-h-[500px] p-6 text-center">
-              <Database className="w-12 h-12 text-error/60 mb-4" />
-              <h3 className="font-semibold text-white text-base">Backend Disconnected</h3>
-              <p className="text-xs text-on-surface-variant/80 max-w-sm mt-1 mb-6">
-                {error}
-              </p>
-              <button 
-                type="button" 
-                onClick={fetchCasesData}
-                className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-semibold text-white flex items-center gap-2 transition-all cursor-pointer"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-                Retry Uplink
-              </button>
-            </div>
-          ) : cases.length === 0 ? (
-            <div className="glass-card rounded-xl border border-white/5 flex-grow flex flex-col items-center justify-center min-h-[500px] p-6 text-center">
-              <Database className="w-12 h-12 text-primary/40 mb-4" />
-              <h3 className="font-semibold text-white text-base">No Incidents Documented</h3>
-              <p className="text-xs text-on-surface-variant/80 max-w-sm mt-1">
-                There are no incident response cases matching the active filter criteria. Click "New Case" to initiate an investigation.
-              </p>
-            </div>
-          ) : (
-            <CasesTable 
-              cases={cases}
-              allCases={cases}
-              selectedCaseIds={selectedCaseIds}
-              handleCheckboxChange={handleCheckboxChange}
-              handleMasterCheckboxChange={handleMasterCheckboxChange}
-              formatCaseId={formatCaseId}
-              getSeverityBadgeClass={getSeverityBadgeClass}
-              getStatusBadgeClass={getStatusBadgeClass}
-              getAnalystInitials={getAnalystInitials}
-              getRiskColor={getRiskColor}
-              
-              // Pagination values
-              currentPage={page}
-              totalPages={totalPages}
-              totalCases={totalCases}
-              onPageChange={setPage}
-
-              // Event callbacks
-              onEditClick={handleEditCaseClick}
-              onDeleteClick={handleDeleteCase}
-            />
-          )}
-        </main>
-
-        {/* Collapsible AI Insights Widget Panel (Right 25%) */}
-        <AIInsightsSidebar 
-          isSidebarCollapsed={isSidebarCollapsed}
-          setIsSidebarCollapsed={setIsSidebarCollapsed}
+        {/* Filters */}
+        <CasesFilters 
+          searchQuery={searchQuery}
+          setSearchQuery={setSearchQuery}
+          severityFilter={severityFilter}
+          setSeverityFilter={handleSeverityChange}
+          statusFilter={statusFilter}
+          setStatusFilter={handleStatusChange}
         />
 
-      </div>
+        {/* Content Viewport */}
+        {isFetching && cases.length === 0 ? (
+          <div className="glass-card rounded-2xl border border-white/10 flex flex-col items-center justify-center min-h-[400px] bg-[#0B1220]/70">
+            <Loader2 className="w-10 h-10 text-[#00E5FF] animate-spin mb-3" />
+            <span className="text-xs font-semibold text-[#94a3b8]">Loading cases from MongoDB...</span>
+          </div>
+        ) : error ? (
+          <div className="glass-card rounded-2xl border border-white/10 flex flex-col items-center justify-center min-h-[400px] p-6 text-center bg-[#0B1220]/70">
+            <ShieldAlert className="w-12 h-12 text-[#ef4444]/80 mb-3" />
+            <h3 className="font-bold text-white text-base">Backend Connection Error</h3>
+            <p className="text-xs text-[#94a3b8] max-w-sm mt-1 mb-5">
+              {error}
+            </p>
+            <button 
+              type="button" 
+              onClick={fetchCasesData}
+              className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-xs font-semibold text-white flex items-center gap-2 transition-all cursor-pointer"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              Retry
+            </button>
+          </div>
+        ) : cases.length === 0 ? (
+          /* Empty State Requirement: "No cases yet. Create your first case to begin an investigation." */
+          <div className="glass-card rounded-2xl border border-white/10 flex flex-col items-center justify-center min-h-[420px] p-8 text-center bg-[#0B1220]/70">
+            <div className="w-16 h-16 rounded-2xl bg-[#00E5FF]/10 border border-[#00E5FF]/20 flex items-center justify-center text-[#00E5FF] mb-4">
+              <FolderPlus className="w-8 h-8" />
+            </div>
+            <h3 className="font-bold text-white text-lg">No cases yet.</h3>
+            <p className="text-xs text-[#94a3b8] max-w-md mt-1.5 mb-6 leading-relaxed">
+              No cases yet. Create your first case to begin an investigation.
+            </p>
+            <button 
+              type="button"
+              onClick={() => navigate('/cases/new')}
+              className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#00E5FF] to-[#3B82F6] hover:brightness-110 active:scale-95 text-[#0A0F1E] font-bold text-xs tracking-wider uppercase transition-all shadow-[0_0_15px_rgba(0,229,255,0.25)] flex items-center gap-2 cursor-pointer"
+            >
+              <FolderPlus className="w-4 h-4" />
+              <span>Create Case</span>
+            </button>
+          </div>
+        ) : (
+          <CasesTable 
+            cases={cases}
+            selectedCaseIds={selectedCaseIds}
+            handleCheckboxChange={handleCheckboxChange}
+            handleMasterCheckboxChange={handleMasterCheckboxChange}
+            formatCaseId={formatCaseId}
+            getSeverityBadgeClass={getSeverityBadgeClass}
+            getStatusBadgeClass={getStatusBadgeClass}
+            
+            currentPage={page}
+            totalPages={totalPages}
+            totalCases={totalCases}
+            onPageChange={setPage}
 
-      {/* Floating Action SOC Assistant Button */}
-      <ChatFAB />
+            onEditClick={handleEditCaseClick}
+            onDeleteClick={handleDeleteCase}
+          />
+        )}
+      </div>
 
       {/* Reusable Edit Modal */}
       <EditCaseModal 

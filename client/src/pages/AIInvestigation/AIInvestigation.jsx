@@ -1,32 +1,35 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { 
-  Search, 
-  Upload, 
-  Play, 
-  CheckCircle, 
-  User, 
-  Clock, 
-  Terminal, 
-  Globe, 
-  Network, 
-  Cpu, 
-  File, 
-  Download, 
-  ArrowRight,
-  Send,
-  MessageSquare,
-  FileText,
-  AlertTriangle,
-  Link as LinkIcon
+  Bot, 
+  Send, 
+  RefreshCw, 
+  Sparkles, 
+  ShieldAlert, 
+  FolderPlus, 
+  AlertCircle, 
+  Server, 
+  Zap, 
+  HelpCircle, 
+  FileText, 
+  CheckCircle2, 
+  Loader2 
 } from 'lucide-react';
 import { casesService } from '../../services/cases.service';
-import { evidenceService } from '../../services/evidence.service';
 import { aiService } from '../../services/ai.service';
 import './AIInvestigation.css';
 
+const QUICK_PROMPTS = [
+  "Summarize this security incident and affected assets.",
+  "What immediate containment and mitigation steps should I take?",
+  "What indicators of compromise (IOCs) should I investigate?",
+  "Explain the likely root cause and attack vector.",
+  "Help me formulate a forensic evidence collection plan."
+];
+
 export default function AIInvestigation() {
   const navigate = useNavigate();
+  const location = useLocation();
 
   // Auth Guard check
   const hasSession = localStorage.getItem('isAuthenticated') === 'true';
@@ -37,1041 +40,472 @@ export default function AIInvestigation() {
     }
   }, [hasSession, navigate]);
 
-  // State variables
+  // State
   const [cases, setCases] = useState([]);
   const [selectedCaseId, setSelectedCaseId] = useState('');
-  const [activeCaseDetails, setActiveCaseDetails] = useState(null);
-  const [evidenceItems, setEvidenceItems] = useState([]);
-  
-  // Search & workspace tabs
-  const [searchQuery, setSearchQuery] = useState('');
-  const [workspaceTab, setWorkspaceTab] = useState('timeline');
-  const [dragActive, setDragActive] = useState(false);
-  const [isLoadingCases, setIsLoadingCases] = useState(false);
+  const [selectedCase, setSelectedCase] = useState(null);
+  const [loadingCases, setLoadingCases] = useState(true);
 
-  // AI analysis findings & indicators
-  const [aiFindings, setAiFindings] = useState(null);
-  const [isLoadingFindings, setIsLoadingFindings] = useState(false);
-  const [isThinking, setIsThinking] = useState(false);
-  const [thinkingProgress, setThinkingProgress] = useState(0);
-  const [thinkingStep, setThinkingStep] = useState('');
+  // AI Readiness
+  const [readiness, setReadiness] = useState(null);
+  const [probingReadiness, setProbingReadiness] = useState(false);
 
-  // Right panel toggle: 'analysis' or 'chat'
-  const [rightPanelTab, setRightPanelTab] = useState('analysis');
-  const [chatMessages, setChatMessages] = useState([]);
-  const [chatInput, setChatInput] = useState('');
-  const [isSendingChat, setIsSendingChat] = useState(false);
-  const [toastMsg, setToastMsg] = useState('');
+  // Chat conversation
+  const [messages, setMessages] = useState([]);
+  const [inputPrompt, setInputPrompt] = useState('');
+  const [isSending, setIsSending] = useState(false);
+  const [isRunningInvestigation, setIsRunningInvestigation] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [notification, setNotification] = useState('');
 
   const chatEndRef = useRef(null);
 
-  const triggerToast = (msg) => {
-    setToastMsg(msg);
-    setTimeout(() => setToastMsg(''), 3000);
-  };
-
-  // Scroll chat window to bottom
   const scrollToBottom = () => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
   useEffect(() => {
     scrollToBottom();
-  }, [chatMessages]);
+  }, [messages, isSending]);
 
-  // Load cases catalog on mount
-  const fetchCasesList = async () => {
-    setIsLoadingCases(true);
+  // Fetch AI readiness status
+  const probeAIReadiness = async () => {
     try {
-      const res = await casesService.getCases({ limit: 100 });
-      setCases(res.data || []);
-      if (res.data && res.data.length > 0) {
-        setSelectedCaseId(res.data[0].caseId);
-      }
+      setProbingReadiness(true);
+      const res = await aiService.getReadiness().catch(err => ({
+        ready: false,
+        status: 'OFFLINE',
+        message: err.message
+      }));
+      setReadiness(res);
     } catch (err) {
-      console.error('[AIInvestigation] Failed to fetch cases list:', err);
+      setReadiness({ ready: false, status: 'OFFLINE', message: err.message });
     } finally {
-      setIsLoadingCases(false);
+      setProbingReadiness(false);
     }
   };
 
-  useEffect(() => {
-    fetchCasesList();
-  }, []);
-
-  // Fetch case details, evidence, and AI findings when selectedCaseId changes
-  const fetchActiveCaseTelemetry = async () => {
-    if (!selectedCaseId) return;
+  // Load cases list
+  const loadUserCases = async () => {
     try {
-      // 1. Fetch case details
-      const details = await casesService.getCaseById(selectedCaseId);
-      setActiveCaseDetails(details);
+      setLoadingCases(true);
+      setErrorMessage('');
+      const res = await casesService.getCases({ limit: 100 });
+      const items = res.data || [];
+      setCases(items);
 
-      // 2. Fetch evidence list
-      const evList = await evidenceService.getEvidenceByCase(selectedCaseId);
-      setEvidenceItems(evList || []);
+      // Check if URL search param specifies a caseId
+      const urlParams = new URLSearchParams(location.search);
+      const paramCaseId = urlParams.get('caseId');
 
-      // 3. Retrieve existing AI Analysis details in background
-      setIsLoadingFindings(true);
-      try {
-        const findings = await aiService.analyzeCase(selectedCaseId);
-        setAiFindings(findings);
-        
-        // Initialize default welcome message in chat matching case context
-        const welcome = `Hello analyst. I have modeled the threat indicators for Case #${selectedCaseId} (${details.title}). The risk score is evaluated at ${findings.riskScore}%. I suggest isolates at host node [${details.targetHost || 'WORKSTATION'}]. Ask me anything about suspicious files, MITRE ATT&CK techniques, or response mitigation steps.`;
-        setChatMessages([
-          { role: 'assistant', content: welcome, timestamp: new Date() }
-        ]);
-      } catch (err) {
-        setAiFindings(null);
-        setChatMessages([
-          { role: 'assistant', content: `Hello analyst. AI analysis has not been executed yet for Case #${selectedCaseId}. Click "Start Investigation" at the top of the console to correlate threat telemetry logs.`, timestamp: new Date() }
-        ]);
-      } finally {
-        setIsLoadingFindings(false);
+      if (paramCaseId && items.some(c => c.caseId === paramCaseId || c._id === paramCaseId)) {
+        setSelectedCaseId(paramCaseId);
+      } else if (items.length > 0) {
+        setSelectedCaseId(items[0].caseId || items[0]._id);
       }
     } catch (err) {
-      console.error('[AIInvestigation] Failed to fetch case details:', err);
+      console.error('Failed to fetch user cases:', err);
+      setErrorMessage(err.message || 'Failed to load cases from database.');
+    } finally {
+      setLoadingCases(false);
     }
   };
 
   useEffect(() => {
-    fetchActiveCaseTelemetry();
-  }, [selectedCaseId]);
+    if (hasSession) {
+      probeAIReadiness();
+      loadUserCases();
+    }
+  }, [hasSession]);
+
+  // When selectedCaseId changes, load case context & reset or initialize chat
+  useEffect(() => {
+    if (!selectedCaseId) {
+      setSelectedCase(null);
+      setMessages([]);
+      return;
+    }
+
+    const found = cases.find(c => c.caseId === selectedCaseId || c._id === selectedCaseId);
+    setSelectedCase(found || null);
+
+    if (found) {
+      // Initialize friendly greeting grounded in actual case context
+      const initialGreeting = {
+        role: 'assistant',
+        content: `👋 Hello! I am your TRACE AI DFIR Copilot. 
+
+I am ready to assist you with **Case #${found.caseId}**: "${found.title}".
+- **Severity**: ${found.severity}
+- **Incident Type**: ${found.incidentType || 'General Security Incident'}
+- **Target Host**: ${found.targetHost || 'N/A'}
+
+You can ask me questions about triage steps, suspicious file artifacts, root cause hypotheses, or response playbooks. How can I help you investigate?`,
+        timestamp: new Date()
+      };
+      setMessages([initialGreeting]);
+    }
+  }, [selectedCaseId, cases]);
+
+  // Send Chat Message
+  const handleSendMessage = async (e) => {
+    if (e) e.preventDefault();
+    if (!inputPrompt.trim() || isSending || !selectedCaseId) return;
+
+    const userText = inputPrompt.trim();
+    setInputPrompt('');
+    setErrorMessage('');
+
+    const userMessage = {
+      role: 'user',
+      content: userText,
+      timestamp: new Date()
+    };
+
+    const newHistory = [...messages, userMessage];
+    setMessages(newHistory);
+    setIsSending(true);
+
+    try {
+      // Map messages for backend API
+      const apiMessages = newHistory.map(m => ({
+        role: m.role,
+        content: m.content
+      }));
+
+      const assistantReply = await aiService.chatCopilot(selectedCaseId, apiMessages);
+      
+      setMessages(prev => [
+        ...prev,
+        {
+          role: 'assistant',
+          content: assistantReply.content || 'Analysis complete.',
+          timestamp: new Date()
+        }
+      ]);
+    } catch (err) {
+      console.error('Chat Copilot failed:', err);
+      setErrorMessage(`AI Chat error: ${err.message || 'Unable to connect to AI engine.'}`);
+      setMessages(prev => [
+        ...prev,
+        {
+          role: 'assistant',
+          content: `⚠️ Error: ${err.message || 'Failed to generate response. Please verify server connection.'}`,
+          timestamp: new Date(),
+          isError: true
+        }
+      ]);
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  // Run LangGraph Deep Investigation
+  const handleRunLangGraphWorkflow = async () => {
+    if (!selectedCaseId || isRunningInvestigation) return;
+    setIsRunningInvestigation(true);
+    setErrorMessage('');
+    setNotification('Executing LangGraph multi-stage forensic reasoning graph...');
+
+    const triggerMsg = {
+      role: 'user',
+      content: 'Execute full LangGraph forensic workflow investigation and hypothesis validation on this case.',
+      timestamp: new Date()
+    };
+    setMessages(prev => [...prev, triggerMsg]);
+
+    try {
+      const result = await aiService.startInvestigation(selectedCaseId);
+      
+      const summaryContent = `🎯 **LangGraph AI Investigation Completed** [Run ID: \`${result.runId}\`]
+
+**Executive Summary**:
+${result.executiveSummary || 'Workflow completed.'}
+
+${result.hypotheses && result.hypotheses.length > 0 ? `**Validated Candidate Hypotheses (${result.hypotheses.length})**:
+${result.hypotheses.map((h, i) => `${i + 1}. **${h.title}** (Confidence: ${h.confidence?.score || 50}%) — ${h.statement}`).join('\n')}` : ''}
+
+${result.evidenceGaps && result.evidenceGaps.length > 0 ? `**Visibility Blindspots & Gaps**:
+${result.evidenceGaps.map(g => `- ${g}`).join('\n')}` : ''}
+
+${result.suggestedFollowUps && result.suggestedFollowUps.length > 0 ? `**Recommended Next Steps**:
+${result.suggestedFollowUps.map(s => `- ${s}`).join('\n')}` : ''}
+`;
+
+      setMessages(prev => [
+        ...prev,
+        {
+          role: 'assistant',
+          content: summaryContent,
+          timestamp: new Date()
+        }
+      ]);
+      setNotification('Investigation completed and findings persisted.');
+      setTimeout(() => setNotification(''), 4000);
+    } catch (err) {
+      console.error('LangGraph run error:', err);
+      setErrorMessage(`Investigation workflow error: ${err.message}`);
+      setMessages(prev => [
+        ...prev,
+        {
+          role: 'assistant',
+          content: `⚠️ Investigation workflow error: ${err.message}`,
+          timestamp: new Date(),
+          isError: true
+        }
+      ]);
+    } finally {
+      setIsRunningInvestigation(false);
+    }
+  };
+
+  // New Chat action
+  const handleNewChat = () => {
+    if (!selectedCase) return;
+    setMessages([
+      {
+        role: 'assistant',
+        content: `New chat session started for Case #${selectedCase.caseId} (${selectedCase.title}). How can I assist your investigation?`,
+        timestamp: new Date()
+      }
+    ]);
+    setInputPrompt('');
+    setErrorMessage('');
+  };
 
   if (!hasSession) return null;
 
-  // Search filter
-  const filteredCases = cases.filter(c => 
-    c.caseId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    c.title.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  // Trigger simulated AI Analysis run with progression bar
-  const handleRunAIAnalysis = () => {
-    if (isThinking || !selectedCaseId) return;
-    setIsThinking(true);
-    setThinkingProgress(0);
-    
-    const steps = [
-      "Correlating IP threat signatures with global intelligence databases...",
-      "Extracting cryptographic hash patterns from memory dump archives...",
-      "Mapping network PCAP nodes to MITRE ATT&CK adversarial matrices...",
-      "Analyzing user access directories and active session payloads...",
-      "Compiling digital forensics summary and threat probability metrics..."
-    ];
-
-    let currentStepIdx = 0;
-    setThinkingStep(steps[0]);
-
-    const interval = setInterval(() => {
-      setThinkingProgress(prev => {
-        const nextProgress = prev + 5;
-        if (nextProgress >= 100) {
-          clearInterval(interval);
-          // Trigger the actual API call once the loading animation completes
-          aiService.analyzeCase(selectedCaseId)
-            .then(findings => {
-              setAiFindings(findings);
-              setIsThinking(false);
-              setThinkingStep('Analysis complete!');
-              triggerToast('Incident analysis generated successfully!');
-              
-              // Also update chat
-              setChatMessages(prevChat => [
-                ...prevChat,
-                { role: 'assistant', content: `Forensic analysis compiled. Threat signature identified: ${findings.summary}. Risk level calculated at ${findings.riskScore}%.`, timestamp: new Date() }
-              ]);
-            })
-            .catch(err => {
-              console.error('[AIInvestigation] Analysis failure:', err);
-              setIsThinking(false);
-              setThinkingStep('Analysis failed.');
-              triggerToast(`Analysis failed: ${err.message}`);
-            });
-          return 100;
-        }
-        
-        const stepIndex = Math.floor((nextProgress / 100) * steps.length);
-        if (stepIndex !== currentStepIdx && steps[stepIndex]) {
-          currentStepIdx = stepIndex;
-          setThinkingStep(steps[stepIndex]);
-        }
-        return nextProgress;
-      });
-    }, 150);
-  };
-
-  // Close Case Action
-  const handleCloseInvestigation = async () => {
-    if (!activeCaseDetails) return;
-    if (!window.confirm(`Are you sure you want to CLOSE case ${selectedCaseId}?`)) {
-      return;
-    }
-    try {
-      await casesService.updateCase(activeCaseDetails._id, {
-        status: 'Closed'
-      });
-      triggerToast(`Case ${selectedCaseId} status updated to Closed.`);
-      fetchCasesList();
-    } catch (err) {
-      console.error('[AIInvestigation] Close failure:', err);
-      triggerToast(`Failed to close case: ${err.message}`);
-    }
-  };
-
-  const handleGenerateTimeline = () => {
-    triggerToast(`Interactive triage timeline generated for ${selectedCaseId}.`);
-  };
-
-  const handleExportReport = () => {
-    triggerToast(`Redirecting to Reports center to compile summary for ${selectedCaseId}...`);
-    setTimeout(() => {
-      navigate('/reports');
-    }, 1000);
-  };
-
-  // Chat message submit
-  const handleSendChatMessage = async (e) => {
-    e.preventDefault();
-    if (!chatInput.trim() || isSendingChat || !selectedCaseId) return;
-
-    const userPrompt = chatInput.trim();
-    setChatInput('');
-    
-    const userMsg = { role: 'user', content: userPrompt, timestamp: new Date() };
-    setChatMessages(prev => [...prev, userMsg]);
-    setIsSendingChat(true);
-
-    try {
-      const updatedMessages = [...chatMessages, userMsg].map(msg => ({
-        role: msg.role,
-        content: msg.content
-      }));
-
-      const assistantReply = await aiService.chatCopilot(selectedCaseId, updatedMessages);
-      setChatMessages(prev => [...prev, {
-        role: 'assistant',
-        content: assistantReply.content,
-        timestamp: new Date()
-      }]);
-    } catch (err) {
-      console.error('[AIInvestigation] Chat error:', err);
-      setChatMessages(prev => [...prev, {
-        role: 'assistant',
-        content: `Error: Unable to connect with the AI security assistant. ${err.message}`,
-        timestamp: new Date()
-      }]);
-    } finally {
-      setIsSendingChat(false);
-    }
-  };
-
-  // Drag & drop upload handler
-  const handleDrag = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.type === "dragenter" || e.type === "dragover") {
-      setDragActive(true);
-    } else if (e.type === "dragleave") {
-      setDragActive(false);
-    }
-  };
-
-  const handleDrop = async (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
-    
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      const file = e.dataTransfer.files[0];
-      await handleEvidenceUpload(file);
-    }
-  };
-
-  const handleManualUpload = async (e) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      await handleEvidenceUpload(file);
-    }
-  };
-
-  const handleEvidenceUpload = async (file) => {
-    try {
-      triggerToast(`Ingesting file ${file.name}...`);
-      const formData = new FormData();
-      formData.append('caseId', selectedCaseId);
-      formData.append('fileType', 'Other');
-      formData.append('files', file);
-
-      await evidenceService.uploadEvidence(formData);
-      triggerToast('Evidence file uploaded and hashed successfully.');
-      
-      // Refresh case files list
-      fetchActiveCaseTelemetry();
-    } catch (err) {
-      console.error('[AIInvestigation] File upload failed:', err);
-      triggerToast(`Upload failed: ${err.message}`);
-    }
-  };
+  const isOllamaOnline = readiness?.ready === true;
 
   return (
-    <div className="trace-ai-investigation-layout flex flex-col min-h-screen text-[#F8FAFC]">
-      {toastMsg && (
-        <div className="fixed top-20 right-6 z-50 bg-[#0f1425] border border-[#47faf3] text-[#47faf3] text-xs px-4 py-2.5 rounded-lg shadow-xl font-bold">
-          {toastMsg}
+    <div className="trace-ai-chat-page flex flex-col h-[calc(100vh-70px)] w-full bg-[#060913] text-white select-none box-border overflow-hidden">
+      
+      {/* Toast Notification */}
+      {notification && (
+        <div className="fixed top-20 right-6 z-50 bg-[#0f1425] border border-[#10b981] text-[#10b981] text-xs px-4 py-2.5 rounded-lg shadow-xl font-bold animate-fade-in">
+          {notification}
         </div>
       )}
 
-      {/* Scope-contained custom styles */}
-      <style dangerouslySetInnerHTML={{
-        __html: `
-          .trace-right-panel-tabs {
-            display: flex;
-            background: rgba(0, 0, 0, 0.2);
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            border-radius: 8px;
-            padding: 3px;
-            gap: 4px;
-          }
-
-          .trace-right-panel-tab {
-            flex: 1;
-            background: transparent;
-            border: none;
-            border-radius: 6px;
-            color: #94A3B8;
-            font-size: 0.725rem;
-            font-weight: 600;
-            padding: 6px 12px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-          }
-
-          .trace-right-panel-tab.active {
-            background: #141C2B;
-            color: #00E5FF;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
-          }
-
-          .trace-chat-container {
-            display: flex;
-            flex-direction: column;
-            height: 380px;
-            background: rgba(20, 28, 43, 0.1);
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            border-radius: 12px;
-            overflow: hidden;
-            margin-top: 10px;
-          }
-
-          .trace-chat-messages {
-            flex-grow: 1;
-            overflow-y: auto;
-            padding: 14px;
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-          }
-
-          .trace-chat-bubble {
-            max-width: 85%;
-            padding: 10px 14px;
-            border-radius: 12px;
-            font-size: 0.775rem;
-            line-height: 1.45;
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-            text-align: left;
-          }
-
-          .trace-chat-bubble.user {
-            background: rgba(0, 229, 255, 0.1);
-            border: 1px solid rgba(0, 229, 255, 0.2);
-            color: #FFFFFF;
-            align-self: flex-end;
-            border-bottom-right-radius: 2px;
-          }
-
-          .trace-chat-bubble.assistant {
-            background: #141C2B;
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            color: #cbd5e1;
-            align-self: flex-start;
-            border-bottom-left-radius: 2px;
-          }
-
-          .trace-chat-input-area {
-            display: flex;
-            gap: 8px;
-            padding: 10px;
-            border-top: 1px solid rgba(255, 255, 255, 0.05);
-            background: rgba(10, 15, 30, 0.6);
-          }
-
-          .trace-chat-input {
-            flex-grow: 1;
-            background: #070C16;
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            border-radius: 8px;
-            padding: 8px 12px;
-            font-size: 0.775rem;
-            color: #FFFFFF;
-            outline: none;
-          }
-
-          .trace-chat-input:focus {
-            border-color: rgba(0, 229, 255, 0.3);
-          }
-
-          .trace-chat-send-btn {
-            background: linear-gradient(135deg, #00E5FF 0%, #3B82F6 100%);
-            border: none;
-            border-radius: 8px;
-            color: #0A0F1E;
-            padding: 8px 14px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-          }
-
-          .trace-chat-send-btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-          }
-
-          .trace-chat-typing {
-            display: inline-flex;
-            gap: 3px;
-            align-items: center;
-            padding: 10px 14px;
-            background: #141C2B;
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            border-radius: 12px;
-            align-self: flex-start;
-            border-bottom-left-radius: 2px;
-          }
-
-          .trace-chat-dot {
-            width: 5px;
-            height: 5px;
-            background-color: #00E5FF;
-            border-radius: 50%;
-            animation: bounce-dot 1.4s infinite ease-in-out both;
-          }
-
-          .trace-chat-dot:nth-child(1) { animation-delay: -0.32s; }
-          .trace-chat-dot:nth-child(2) { animation-delay: -0.16s; }
-
-          @keyframes bounce-dot {
-            0%, 80%, 100% { transform: scale(0); }
-            40% { transform: scale(1.0); }
-          }
-        `
-      }} />
-      
-      {/* 1. TOP HEADER */}
-      <header className="trace-ai-header flex flex-col md:flex-row justify-between items-stretch md:items-center px-6 py-4 border-b border-[#00E5FF]/15 gap-4">
-        <div className="text-left">
+      {/* Top Header Bar */}
+      <div className="bg-[#0B1220] px-6 py-3.5 border-b border-white/10 shrink-0">
+        <div className="max-w-6xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-3 text-left">
+          
+          {/* Title & Engine Status */}
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-white to-[#CBD5E1] bg-clip-text text-transparent">
-              AI Investigation
-            </h1>
-            <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#00E5FF]/10 border border-[#00E5FF]/20 text-[10px] text-[#00E5FF] font-bold tracking-wider animate-pulse">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#00E5FF]"></span>
-              AI INSTANCE ONLINE
+            <div className="w-9 h-9 rounded-xl bg-[#00E5FF]/10 border border-[#00E5FF]/30 flex items-center justify-center text-[#00E5FF]">
+              <Bot className="w-5 h-5" />
             </div>
-          </div>
-          <p className="text-xs text-[#94A3B8] mt-0.5 font-medium">
-            AI-Powered Threat Modeling & Incident Triage
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="relative flex items-center bg-[#070C16] px-4 py-2.5 rounded-xl border border-white/5 focus-within:border-[#00E5FF] focus-within:shadow-[0_0_15px_rgba(0,229,255,0.15)] transition-all duration-250">
-            <Search className="text-[#94A3B8] w-4 h-4 mr-2" />
-            <input
-              type="text"
-              placeholder="Search case queue..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="bg-transparent border-none text-sm outline-none w-48 text-white placeholder:text-[#94A3B8]/40"
-            />
-          </div>
-
-          <button
-            type="button"
-            disabled={isThinking || !selectedCaseId}
-            onClick={handleRunAIAnalysis}
-            className="flex items-center gap-2 px-4 py-2.5 trace-action-btn-primary text-xs border-none"
-          >
-            <Play className="w-3.5 h-3.5 fill-current" />
-            Start Investigation
-          </button>
-
-          <label className="flex items-center gap-2 px-4 py-2.5 trace-action-btn-secondary text-xs cursor-pointer border border-white/10 text-white rounded-lg">
-            <Upload className="w-3.5 h-3.5" />
-            Upload Evidence
-            <input type="file" className="hidden" onChange={handleManualUpload} />
-          </label>
-        </div>
-      </header>
-
-      {/* THREE-PANEL CORE WORKSPACE */}
-      <div className="flex-grow flex flex-col lg:flex-row overflow-hidden w-full h-[calc(100vh-77px)] bg-[#0A0F1E]">
-        
-        {/* 2. LEFT PANEL: Investigation Queue */}
-        <aside className="w-full lg:w-80 flex-shrink-0 border-r border-[#00E5FF]/10 flex flex-col bg-[#080D18]">
-          <div className="p-4 border-b border-white/5 text-left">
-            <span className="text-[10px] font-bold text-[#94A3B8] uppercase tracking-wider">
-              Investigation Queue ({filteredCases.length})
-            </span>
-          </div>
-          <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
-            {isLoadingCases ? (
-              <div className="text-center py-8 text-xs text-[#00E5FF] animate-pulse">
-                Loading case queue...
-              </div>
-            ) : filteredCases.map((c) => {
-              const active = c.caseId === selectedCaseId;
-              const isClosed = c.status?.toLowerCase() === 'closed';
-              const isCritical = c.severity?.toLowerCase() === 'critical';
-              return (
-                <div
-                  key={c.caseId}
-                  onClick={() => setSelectedCaseId(c.caseId)}
-                  className={`p-4 rounded-xl cursor-pointer border transition-all duration-200 select-none text-left ${
-                    active 
-                      ? 'bg-[#141C2B] border-[#00E5FF] shadow-[0_0_15px_rgba(0,229,255,0.08)]' 
-                      : 'bg-[#111827]/40 border-white/5 hover:border-white/10 hover:bg-[#111827]/60'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-mono text-xs text-[#00E5FF] font-semibold">{c.caseId}</span>
-                    <span className={`px-2 py-0.5 rounded text-[8px] font-bold border ${
-                      isClosed 
-                        ? 'bg-white/5 border-white/10 text-[#94A3B8]' 
-                        : isCritical 
-                          ? 'bg-[#EF4444]/10 border-[#EF4444]/20 text-[#EF4444]' 
-                          : 'bg-[#00E5FF]/10 border-[#00E5FF]/20 text-[#00E5FF]'
-                    }`}>
-                      {c.severity}
-                    </span>
-                  </div>
-                  <h3 className="text-xs font-bold text-white mt-2 truncate font-sans" title={c.title}>
-                    {c.title}
-                  </h3>
-                  <div className="flex items-center justify-between text-[9px] text-[#94A3B8] mt-3 pt-3 border-t border-white/5">
-                    <span className="flex items-center gap-1">
-                      <User className="w-2.5 h-2.5" />
-                      {c.assignedAnalyst || 'System Auto'}
-                    </span>
-                    <span className="flex items-center gap-1 font-mono">
-                      <Clock className="w-2.5 h-2.5" />
-                      {new Date(c.createdAt).toLocaleDateString()}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-            {filteredCases.length === 0 && !isLoadingCases && (
-              <div className="p-8 text-center text-xs text-[#94A3B8]/60">
-                No active cases found.
-              </div>
-            )}
-          </div>
-        </aside>
-
-        {/* 3. CENTER PANEL: AI Investigation Workspace */}
-        <main className="flex-grow flex flex-col overflow-hidden bg-[#0A0F1E] p-6 space-y-6">
-          
-          {/* Workspace Title & Risk Score Section */}
-          {activeCaseDetails && (
-            <div className="bg-[#141C2B] rounded-xl p-6 border border-white/5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-              <div className="flex-1 min-w-0 text-left">
-                <span className="text-[10px] font-mono text-[#00E5FF] tracking-widest uppercase font-bold">Active Case workspace</span>
-                <h2 className="text-base font-bold text-white mt-1 truncate" title={activeCaseDetails.title}>
-                  {activeCaseDetails.title}
-                </h2>
-                <div className="text-xs text-[#94A3B8] mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                  <span className="whitespace-nowrap">
-                    <span className="font-semibold text-[#94A3B8]">Owner:</span> <span className="text-white">{activeCaseDetails.assignedAnalyst || 'Analyst'}</span>
-                  </span>
-                  <span className="text-white/10 hidden sm:inline">|</span>
-                  <span className="whitespace-nowrap">
-                    <span className="font-semibold text-[#94A3B8]">Target host:</span> <span className="text-white font-mono">{activeCaseDetails.targetHost || 'N/A'}</span>
-                  </span>
-                  <span className="text-white/10 hidden sm:inline">|</span>
-                  <span className="whitespace-nowrap">
-                    <span className="font-semibold text-[#94A3B8]">Status:</span> <span className="text-white">{activeCaseDetails.status}</span>
-                  </span>
-                </div>
-              </div>
-              
-              <div className="flex-shrink-0 flex items-center gap-4">
-                <div className="h-10 w-[1px] bg-white/10 hidden md:block"></div>
-                <div className="flex items-center gap-3">
-                  <div className="text-right min-w-[110px]">
-                    <span className="text-[9px] text-[#94A3B8] uppercase font-bold tracking-widest">Risk Level</span>
-                    <p className="text-[10px] text-[#94A3B8] font-medium mt-0.5">Threat Level Assessed</p>
-                  </div>
-                  <div className="w-12 h-12 rounded-full border-2 border-[#00E5FF] flex items-center justify-center font-bold text-xs bg-[#00E5FF]/5 shadow-[0_0_15px_rgba(0,229,255,0.2)] flex-shrink-0">
-                    {aiFindings ? aiFindings.riskScore : (activeCaseDetails.severity === 'Critical' ? 90 : 50)}%
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Workspace Tab Triggers */}
-          <div className="flex border-b border-white/5 gap-6">
-            <button
-              type="button"
-              onClick={() => setWorkspaceTab('timeline')}
-              className={`trace-workspace-tab ${workspaceTab === 'timeline' ? 'active' : ''}`}
-            >
-              Timeline Summary
-            </button>
-            <button
-              type="button"
-              onClick={() => setWorkspaceTab('evidence')}
-              className={`trace-workspace-tab ${workspaceTab === 'evidence' ? 'active' : ''}`}
-            >
-              Correlated files ({evidenceItems.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setWorkspaceTab('iocs')}
-              className={`trace-workspace-tab ${workspaceTab === 'iocs' ? 'active' : ''}`}
-            >
-              Extracted IOCs
-            </button>
-            <button
-              type="button"
-              onClick={() => setWorkspaceTab('mitre')}
-              className={`trace-workspace-tab ${workspaceTab === 'mitre' ? 'active' : ''}`}
-            >
-              MITRE ATT&amp;CK Mapping
-            </button>
-          </div>
-
-          {/* Active Workspace Viewport */}
-          <div className="flex-grow overflow-y-auto custom-scrollbar pr-1">
-            
-            {/* VIEWPORT 1: Timeline */}
-            {workspaceTab === 'timeline' && activeCaseDetails && (
-              <div className="space-y-4">
-                <div className="relative border-l border-[#00E5FF]/20 pl-6 ml-3 space-y-6 text-left">
-                  <div className="relative group">
-                    <span className="absolute -left-[31px] top-1.5 w-3 h-3 rounded-full bg-[#00E5FF] border-2 border-[#0A0F1E] group-hover:scale-125 transition-transform duration-200"></span>
-                    <div className="bg-[#141C2B] p-4 rounded-xl border border-white/5 hover:border-white/10 transition-colors">
-                      <span className="text-[10px] font-mono text-[#00E5FF] font-semibold">
-                        {new Date(activeCaseDetails.createdAt).toLocaleString()}
-                      </span>
-                      <p className="text-xs text-white mt-1 leading-relaxed">Incident case ingested into threat dashboard.</p>
-                      <p className="text-[10px] text-on-surface-variant font-mono mt-2">Source: {activeCaseDetails.sourceIP || 'N/A'} | Target: {activeCaseDetails.destinationIP || 'N/A'}</p>
-                    </div>
-                  </div>
-
-                  <div className="relative group">
-                    <span className="absolute -left-[31px] top-1.5 w-3 h-3 rounded-full bg-[#00E5FF] border-2 border-[#0A0F1E] group-hover:scale-125 transition-transform duration-200"></span>
-                    <div className="bg-[#141C2B] p-4 rounded-xl border border-white/5 hover:border-white/10 transition-colors">
-                      <span className="text-[10px] font-mono text-[#00E5FF] font-semibold">T+15 minutes</span>
-                      <p className="text-xs text-[#cbd5e1] mt-1 leading-relaxed">Automated EDR agents compiled local process footprints.</p>
-                    </div>
-                  </div>
-
-                  {aiFindings && (
-                    <div className="relative group">
-                      <span className="absolute -left-[31px] top-1.5 w-3 h-3 rounded-full bg-[#00E5FF] border-2 border-[#0A0F1E] group-hover:scale-125 transition-transform duration-200"></span>
-                      <div className="bg-[#141C2B] p-4 rounded-xl border border-white/5 hover:border-white/10 transition-colors">
-                        <span className="text-[10px] font-mono text-[#00E5FF] font-semibold">AI MODEL TIMELINE</span>
-                        <p className="text-xs text-[#cbd5e1] mt-1 leading-relaxed">{aiFindings.summary}</p>
-                        <p className="text-[10px] text-[#00E5FF] font-medium mt-2">Root Cause identified: {aiFindings.rootCause}</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* VIEWPORT 2: Evidence & Files */}
-            {workspaceTab === 'evidence' && (
-              <div className="space-y-6 text-left">
-                
-                {/* Drag and Drop Zone */}
-                <div
-                  onDragEnter={handleDrag}
-                  onDragOver={handleDrag}
-                  onDragLeave={handleDrag}
-                  onDrop={handleDrop}
-                  onClick={() => document.getElementById('ai-file-browser').click()}
-                  className={`border-2 border-dashed rounded-xl p-8 text-center flex flex-col items-center justify-center gap-3 transition-colors cursor-pointer ${
-                    dragActive 
-                      ? 'border-[#00E5FF] bg-[#00E5FF]/5' 
-                      : 'border-white/10 bg-[#141C2B] hover:border-[#00E5FF]/30'
-                  }`}
-                >
-                  <Upload className="w-8 h-8 text-[#00E5FF] opacity-80 animate-bounce" />
-                  <div>
-                    <p className="text-xs font-semibold text-white">Drag &amp; drop forensic evidence files here, or click to browse</p>
-                    <p className="text-[10px] text-[#94A3B8] mt-1">Supports EVTX, Memory Dumps, raw text logs, and PCAP packets (Max 2GB)</p>
-                  </div>
-                  <input
-                    id="ai-file-browser"
-                    type="file"
-                    className="hidden"
-                    onChange={handleManualUpload}
-                  />
-                </div>
-
-                {/* Evidence Artifacts List */}
-                <div className="space-y-2">
-                  <span className="text-[10px] font-bold text-[#94A3B8] uppercase tracking-wider block mb-2">Linked Case Evidence ({evidenceItems.length})</span>
-                  
-                  {evidenceItems.map((file) => (
-                    <div key={file._id} className="flex items-center justify-between p-3.5 bg-[#141C2B] rounded-xl border border-white/5 hover:border-white/10 transition-colors">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <File className="w-4 h-4 text-[#94A3B8] flex-shrink-0" />
-                        <div className="min-w-0">
-                          <p className="text-xs font-bold text-white truncate">{file.originalName}</p>
-                          <p className="text-[9px] text-[#94A3B8] mt-0.5">{file.fileType} | Size: {formatFileSize(file.fileSize)}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-4 text-xs font-mono text-[#94A3B8] flex-shrink-0">
-                        <span className="text-[10px] text-[#00E5FF]">{file.evidenceId}</span>
-                        <span className="bg-white/5 px-2 py-0.5 rounded text-[9px] font-bold text-white opacity-60">CORRELATED</span>
-                      </div>
-                    </div>
-                  ))}
-
-                  {evidenceItems.length === 0 && (
-                    <div className="bg-white/[0.01] border border-white/5 rounded-xl p-8 text-center text-xs text-on-surface-variant">
-                      No physical evidence uploaded to this case yet.
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* VIEWPORT 3: Indicators of Compromise */}
-            {workspaceTab === 'iocs' && (
-              <div className="space-y-6 text-left">
-                {!aiFindings ? (
-                  <div className="bg-white/[0.01] border border-white/5 rounded-xl p-8 text-center text-xs text-on-surface-variant">
-                    Execute "Run AI Analysis" at the bottom of the dashboard to extract Threat Indicators (IOCs).
-                  </div>
-                ) : (
-                  <div className="bg-[#141C2B] p-4 rounded-xl border border-white/5">
-                    <span className="text-[10px] font-bold text-[#94A3B8] uppercase tracking-wider block mb-3 border-b border-white/5 pb-2">
-                      Correlated Indicators of Compromise (IOCs)
-                    </span>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left text-xs font-mono">
-                        <thead>
-                          <tr className="text-[#94A3B8] border-b border-white/5">
-                            <th className="pb-2 font-bold uppercase text-[9px] tracking-wider w-[20%]">IOC Type</th>
-                            <th className="pb-2 font-bold uppercase text-[9px] tracking-wider w-[50%]">Value</th>
-                            <th className="pb-2 font-bold uppercase text-[9px] tracking-wider w-[30%]">Context</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-white/5">
-                          {aiFindings.iocs && aiFindings.iocs.map((ioc, idx) => (
-                            <tr key={idx} className="hover:bg-white/5">
-                              <td className="py-2.5 font-bold text-[#00E5FF] uppercase text-[10px]">{ioc.type}</td>
-                              <td className="py-2.5 text-white truncate max-w-xs pr-4 select-all" title={ioc.value}>{ioc.value}</td>
-                              <td className="py-2.5 text-[#94A3B8]">{ioc.description}</td>
-                            </tr>
-                          ))}
-                          {(!aiFindings.iocs || aiFindings.iocs.length === 0) && (
-                            <tr>
-                              <td colSpan="3" className="py-4 text-center text-[#94A3B8]">No critical indicators extracted.</td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* VIEWPORT 4: MITRE ATT&CK Mapping */}
-            {workspaceTab === 'mitre' && (
-              <div className="space-y-4 text-left">
-                {!aiFindings ? (
-                  <div className="bg-white/[0.01] border border-white/5 rounded-xl p-8 text-center text-xs text-on-surface-variant">
-                    Execute "Run AI Analysis" to dynamically compile MITRE ATT&amp;CK mappings.
-                  </div>
-                ) : (
-                  <div className="bg-[#141C2B] p-4 rounded-xl border border-white/5">
-                    <span className="text-[10px] font-bold text-[#94A3B8] uppercase tracking-wider block mb-3 border-b border-white/5 pb-2">
-                      MITRE ATT&amp;CK Technique Mapping Matrix
-                    </span>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-2">
-                      {aiFindings.mitre && aiFindings.mitre.map((tech, idx) => (
-                        <div key={idx} className="p-4 bg-[#070C16] border border-white/5 rounded-xl flex flex-col justify-between hover:border-[#00E5FF]/20 transition-all">
-                          <div>
-                            <span className="text-[9px] font-bold text-[#00E5FF] font-mono bg-[#00E5FF]/10 px-2 py-0.5 rounded">
-                              {tech.id}
-                            </span>
-                            <h4 className="text-xs font-bold text-white mt-2 leading-snug">
-                              {tech.name}
-                            </h4>
-                          </div>
-                          <p className="text-[9px] text-[#94A3B8] mt-3 uppercase tracking-wider font-semibold">
-                            Phase: {tech.phase}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-          </div>
-
-          {/* 5. BOTTOM SECTION: Action Buttons */}
-          <footer className="border-t border-white/5 pt-4 flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                disabled={isThinking || !selectedCaseId}
-                onClick={handleRunAIAnalysis}
-                className="flex items-center gap-2 px-4 py-2.5 trace-action-btn-primary text-xs border-none"
-              >
-                <Cpu className="w-3.5 h-3.5 fill-current" />
-                Run AI Analysis
-              </button>
-              <button
-                type="button"
-                onClick={handleGenerateTimeline}
-                className="flex items-center gap-2 px-4 py-2.5 trace-action-btn-secondary text-xs"
-              >
-                <Clock className="w-3.5 h-3.5" />
-                Generate Timeline
-              </button>
-            </div>
-            
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleExportReport}
-                className="flex items-center gap-2 px-4 py-2.5 trace-action-btn-secondary text-xs"
-              >
-                <Download className="w-3.5 h-3.5" />
-                Export Report
-              </button>
-              <button
-                type="button"
-                onClick={handleCloseInvestigation}
-                className="flex items-center gap-2 px-4 py-2.5 trace-action-btn-danger text-xs border-none"
-              >
-                <CheckCircle className="w-3.5 h-3.5" />
-                Close Investigation
-              </button>
-            </div>
-          </footer>
-
-        </main>
-
-        {/* 4. RIGHT PANEL: AI Assistant Panel */}
-        <aside className="w-full lg:w-96 flex-shrink-0 border-l border-[#00E5FF]/10 flex flex-col bg-[#080D18] p-6 space-y-4 overflow-hidden">
-          
-          <div className="flex items-center gap-2 pb-3 border-b border-white/5 text-left flex-shrink-0">
-            <Cpu className="w-5 h-5 text-[#00E5FF]" />
             <div>
-              <h3 className="text-sm font-bold text-white">AI Copilot assistant</h3>
-              <p className="text-[10px] text-[#94A3B8] font-medium mt-0.5">Incident correlation modeling</p>
+              <div className="flex items-center gap-2">
+                <h1 className="text-base font-bold text-white tracking-tight">AI Copilot Chat</h1>
+                <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase border ${
+                  isOllamaOnline 
+                    ? 'bg-[#10b981]/15 text-[#10b981] border-[#10b981]/30' 
+                    : 'bg-[#f59e0b]/15 text-[#f59e0b] border-[#f59e0b]/30'
+                }`}>
+                  {isOllamaOnline ? 'Ollama: Online' : 'DFIR Mode: Ready'}
+                </span>
+              </div>
+              <p className="text-[11px] text-[#94a3b8] mt-0.5">
+                Investigate security incidents using real LangGraph &amp; Ollama intelligence.
+              </p>
             </div>
           </div>
 
-          {/* Toggle Tab header: Report vs Chat */}
-          <div className="trace-right-panel-tabs flex-shrink-0">
+          {/* Case Context Selector & Actions */}
+          <div className="flex items-center gap-3">
+            {cases.length > 0 && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-[#94a3b8] font-semibold whitespace-nowrap">Case:</span>
+                <select
+                  className="h-9 px-3 bg-[#070C16] border border-white/15 focus:border-[#00E5FF] rounded-xl text-xs text-white outline-none cursor-pointer max-w-xs truncate"
+                  value={selectedCaseId}
+                  onChange={(e) => setSelectedCaseId(e.target.value)}
+                >
+                  {cases.map((c) => (
+                    <option key={c.caseId || c._id} value={c.caseId || c._id}>
+                      #{c.caseId} - {c.title}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             <button
               type="button"
-              className={`trace-right-panel-tab ${rightPanelTab === 'analysis' ? 'active' : ''}`}
-              onClick={() => setRightPanelTab('analysis')}
+              onClick={handleNewChat}
+              disabled={!selectedCaseId || isSending}
+              className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-white text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-40"
+              title="Reset conversation"
             >
-              <span className="flex items-center justify-center gap-1.5">
-                <FileText className="w-3.5 h-3.5" /> Analysis Report
-              </span>
+              <RefreshCw className="w-3.5 h-3.5 text-[#00E5FF]" />
+              <span>New Chat</span>
             </button>
+
             <button
               type="button"
-              className={`trace-right-panel-tab ${rightPanelTab === 'chat' ? 'active' : ''}`}
-              onClick={() => setRightPanelTab('chat')}
+              onClick={handleRunLangGraphWorkflow}
+              disabled={!selectedCaseId || isRunningInvestigation || isSending}
+              className="px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-[#00E5FF] to-[#3B82F6] hover:brightness-110 active:scale-95 text-[#0A0F1E] font-bold text-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              title="Execute full autonomous LangGraph DFIR reasoning graph"
             >
-              <span className="flex items-center justify-center gap-1.5">
-                <MessageSquare className="w-3.5 h-3.5" /> Interactive Chat
-              </span>
+              <Zap className={`w-3.5 h-3.5 ${isRunningInvestigation ? 'animate-bounce' : ''}`} />
+              <span>{isRunningInvestigation ? 'Analyzing...' : 'Deep Investigation'}</span>
             </button>
           </div>
 
-          {/* Toggle Screen rendering */}
-          {rightPanelTab === 'analysis' ? (
-            /* SCREEN A: Analysis report dashboard list */
-            <div className="flex-1 overflow-y-auto space-y-4 pr-1 custom-scrollbar">
-              
-              {/* AI Thinking Animation */}
-              {isThinking ? (
-                <div className="bg-[#141C2B] p-4 rounded-xl border border-[#00E5FF]/20 space-y-4 text-left">
-                  <div className="flex items-center gap-3">
-                    <div className="relative w-8 h-8 flex items-center justify-center flex-shrink-0">
-                      <div className="absolute inset-0 rounded-full border-2 border-t-[#00E5FF] border-r-transparent border-b-transparent border-l-transparent animate-spin"></div>
-                      <Cpu className="w-3.5 h-3.5 text-[#00E5FF]" />
-                    </div>
-                    <div className="min-w-0">
-                      <h4 className="text-xs font-bold text-white animate-pulse">Copilot running heuristics...</h4>
-                      <p className="text-[10px] text-[#00E5FF] truncate mt-0.5">{thinkingStep}</p>
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-[9px] font-mono text-[#94A3B8]">
-                      <span>triaging telemetry logs</span>
-                      <span>{thinkingProgress}%</span>
-                    </div>
-                    <div className="w-full h-1.5 bg-[#070C16] rounded-full overflow-hidden">
-                      <div 
-                        className="h-full bg-gradient-to-r from-[#00E5FF] to-[#3B82F6] transition-all duration-200" 
-                        style={{ width: `${thinkingProgress}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              ) : !aiFindings ? (
-                <div className="bg-[#141C2B] p-5 rounded-xl border border-white/5 space-y-3 text-left">
-                  <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
-                    <AlertTriangle className="w-3.5 h-3.5 text-[#00E5FF]" />
-                    Analysis Pending
-                  </h4>
-                  <p className="text-[11px] text-[#94A3B8] leading-relaxed">
-                    Click <span className="text-[#00E5FF] font-semibold">Run AI Analysis</span> at the bottom of the workspace to build threat models and MITRE mappings.
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {/* Detailed Analysis */}
-                  <div className="space-y-1 text-left">
-                    <span className="text-[9px] text-[#94A3B8] uppercase font-bold tracking-widest block">AI Threat Analysis</span>
-                    <div className="bg-[#141C2B] p-4 rounded-xl border border-white/5">
-                      <p className="text-xs text-white leading-relaxed font-medium">
-                        {aiFindings.analysis}
-                      </p>
-                    </div>
-                  </div>
+        </div>
+      </div>
 
-                  {/* Threat Summary */}
-                  <div className="space-y-1 text-left">
-                    <span className="text-[9px] text-[#94A3B8] uppercase font-bold tracking-widest block">Incident Summary</span>
-                    <div className="bg-[#141C2B] p-4 rounded-xl border border-white/5">
-                      <p className="text-xs text-[#94A3B8] leading-relaxed">
-                        {aiFindings.summary}
-                      </p>
-                    </div>
-                  </div>
+      {/* Main Chat Workspace */}
+      <div className="flex-grow flex flex-col max-w-5xl mx-auto w-full p-4 md:p-6 overflow-hidden">
+        
+        {/* If no cases in account */}
+        {!loadingCases && cases.length === 0 ? (
+          <div className="flex-grow flex flex-col items-center justify-center text-center p-8 glass-card rounded-2xl border border-white/10 bg-[#0B1220]/70 my-auto">
+            <div className="w-16 h-16 rounded-2xl bg-[#00E5FF]/10 border border-[#00E5FF]/20 flex items-center justify-center text-[#00E5FF] mb-4">
+              <FolderPlus className="w-8 h-8" />
+            </div>
+            <h3 className="font-bold text-white text-lg">No cases found</h3>
+            <p className="text-xs text-[#94a3b8] max-w-sm mt-1 mb-6">
+              Please create a case first to start an AI forensic investigation.
+            </p>
+            <Link
+              to="/cases/new"
+              className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#00E5FF] to-[#3B82F6] text-[#0A0F1E] font-bold text-xs uppercase tracking-wider shadow-[0_0_15px_rgba(0,229,255,0.25)]"
+            >
+              Create First Case
+            </Link>
+          </div>
+        ) : !selectedCase ? (
+          <div className="flex-grow flex flex-col items-center justify-center text-center p-8 glass-card rounded-2xl border border-white/10 bg-[#0B1220]/70 my-auto">
+            <ShieldAlert className="w-12 h-12 text-[#00E5FF] opacity-60 mb-3" />
+            <h3 className="font-bold text-white text-base">Select a case</h3>
+            <p className="text-xs text-[#94a3b8] max-w-sm mt-1">
+              Select an incident case from the dropdown above to begin an investigation.
+            </p>
+          </div>
+        ) : (
+          <div className="flex-grow flex flex-col min-h-0 glass-card rounded-2xl border border-white/10 bg-[#0B1220]/90 shadow-2xl overflow-hidden backdrop-blur-md">
+            
+            {/* Case Banner Context */}
+            <div className="px-5 py-3 bg-[#070C16] border-b border-white/10 flex flex-wrap items-center justify-between gap-2 text-xs text-left shrink-0">
+              <div className="flex items-center gap-2 truncate">
+                <span className="font-bold text-white">Investigating:</span>
+                <span className="font-mono text-[#00E5FF] font-semibold">#{selectedCase.caseId}</span>
+                <span className="text-white truncate font-medium max-w-sm">{selectedCase.title}</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-[11px] text-[#94a3b8]">
+                  Type: <strong className="text-white">{selectedCase.incidentType || 'General'}</strong>
+                </span>
+                <span className="text-[11px] text-[#94a3b8]">
+                  Host: <strong className="text-white font-mono">{selectedCase.targetHost || 'N/A'}</strong>
+                </span>
+              </div>
+            </div>
 
-                  {/* Root Cause */}
-                  <div className="space-y-1 text-left">
-                    <span className="text-[9px] text-[#94A3B8] uppercase font-bold tracking-widest block">Root Cause</span>
-                    <div className="bg-[#141C2B] p-4 rounded-xl border border-white/5">
-                      <p className="text-xs text-white opacity-90 leading-relaxed font-semibold">
-                        {aiFindings.rootCause}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Recommended Actions */}
-                  <div className="space-y-1 text-left">
-                    <span className="text-[9px] text-[#94A3B8] uppercase font-bold tracking-widest block">Recommended Mitigations</span>
-                    <div className="bg-[#141C2B] p-4 rounded-xl border border-white/5 space-y-2">
-                      {aiFindings.recommendedActions && aiFindings.recommendedActions.map((action, idx) => (
-                        <div key={idx} className="flex gap-2 text-xs">
-                          <span className="text-[#00E5FF] font-bold">{idx + 1}.</span>
-                          <p className="text-[#94A3B8] leading-relaxed">{action}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Suggested Next Steps */}
-                  <div className="space-y-1 text-left">
-                    <span className="text-[9px] text-[#94A3B8] uppercase font-bold tracking-widest block">Suggested Next Steps</span>
-                    <div className="bg-[#141C2B] p-4 rounded-xl border border-white/5">
-                      <div className="flex gap-2 text-xs">
-                        <ArrowRight className="w-4 h-4 text-[#00E5FF] flex-shrink-0 mt-0.5" />
-                        <p className="text-white font-medium leading-relaxed">{aiFindings.nextSteps}</p>
+            {/* Chat Message Scrollable Viewport */}
+            <div className="flex-grow overflow-y-auto p-5 space-y-4 custom-scrollbar text-left">
+              {messages.map((msg, idx) => {
+                const isUser = msg.role === 'user';
+                return (
+                  <div
+                    key={idx}
+                    className={`flex gap-3 ${isUser ? 'justify-end' : 'justify-start'}`}
+                  >
+                    {!isUser && (
+                      <div className="w-8 h-8 rounded-xl bg-[#00E5FF]/10 border border-[#00E5FF]/20 flex items-center justify-center text-[#00E5FF] shrink-0 mt-0.5">
+                        <Bot className="w-4 h-4" />
+                      </div>
+                    )}
+                    
+                    <div className={`max-w-[85%] md:max-w-[75%] rounded-2xl px-4 py-3 text-xs leading-relaxed ${
+                      isUser
+                        ? 'bg-gradient-to-r from-[#00E5FF]/20 to-[#3B82F6]/20 border border-[#00E5FF]/30 text-white rounded-br-none shadow-[0_0_15px_rgba(0,229,255,0.08)]'
+                        : msg.isError
+                        ? 'bg-[#ef4444]/10 border border-[#ef4444]/30 text-[#fca5a5] rounded-bl-none'
+                        : 'bg-[#070C16] border border-white/10 text-[#cbd5e1] rounded-bl-none shadow-md'
+                    }`}>
+                      <div className="whitespace-pre-wrap font-sans">
+                        {msg.content}
+                      </div>
+                      <div className="text-[9px] text-[#64748b] mt-1.5 font-mono text-right">
+                        {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </div>
                     </div>
+                  </div>
+                );
+              })}
+
+              {/* Thinking Indicator */}
+              {(isSending || isRunningInvestigation) && (
+                <div className="flex gap-3 justify-start items-center">
+                  <div className="w-8 h-8 rounded-xl bg-[#00E5FF]/10 border border-[#00E5FF]/20 flex items-center justify-center text-[#00E5FF] shrink-0">
+                    <Bot className="w-4 h-4" />
+                  </div>
+                  <div className="bg-[#070C16] border border-white/10 rounded-2xl px-4 py-3 text-xs text-[#00E5FF] flex items-center gap-2 shadow-md">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-[#00E5FF]" />
+                    <span className="font-medium animate-pulse">
+                      {isRunningInvestigation 
+                        ? 'LangGraph DFIR agent is reasoning over evidence & validating hypotheses...' 
+                        : 'AI Copilot is analyzing case context and formulating response...'}
+                    </span>
                   </div>
                 </div>
               )}
+
+              <div ref={chatEndRef} />
             </div>
-          ) : (
-            /* SCREEN B: Interactive AI Chat console */
-            <div className="flex-1 flex flex-col min-h-0 bg-[#070c16]/50 border border-white/5 rounded-xl overflow-hidden">
-              <div className="trace-chat-messages custom-scrollbar">
-                {chatMessages.map((msg, idx) => (
-                  <div
-                    key={idx}
-                    className={`trace-chat-bubble ${msg.role === 'user' ? 'user' : 'assistant'}`}
+
+            {/* Quick Prompts Suggestions (if few messages) */}
+            {messages.length <= 2 && !isSending && (
+              <div className="px-5 py-2.5 bg-[#070C16]/60 border-t border-white/5 flex flex-wrap items-center gap-2 text-left shrink-0">
+                <span className="text-[10px] font-bold text-[#94a3b8] uppercase tracking-wider flex items-center gap-1 mr-1">
+                  <Sparkles className="w-3 h-3 text-[#00E5FF]" />
+                  Suggested Prompts:
+                </span>
+                {QUICK_PROMPTS.slice(0, 3).map((prompt, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => {
+                      setInputPrompt(prompt);
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-[#00E5FF]/10 border border-white/10 hover:border-[#00E5FF]/30 text-[#cbd5e1] hover:text-[#00E5FF] text-[11px] transition-all cursor-pointer truncate max-w-xs"
                   >
-                    <p className="m-0 leading-normal">{msg.content}</p>
-                    <span className="text-[8px] text-[#94A3B8] self-end mt-1 font-mono">
-                      {new Date(msg.timestamp).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                  </div>
+                    {prompt}
+                  </button>
                 ))}
-                
-                {isSendingChat && (
-                  <div className="trace-chat-typing">
-                    <span className="trace-chat-dot"></span>
-                    <span className="trace-chat-dot"></span>
-                    <span className="trace-chat-dot"></span>
-                  </div>
-                )}
-                
-                <div ref={chatEndRef} />
               </div>
+            )}
 
-              {/* Chat Input form */}
-              <form onSubmit={handleSendChatMessage} className="trace-chat-input-area">
-                <input
-                  type="text"
-                  placeholder="Ask about mitigations, IOCs, root causes..."
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  disabled={isSendingChat || !selectedCaseId}
-                  className="trace-chat-input"
-                />
-                <button
-                  type="submit"
-                  disabled={isSendingChat || !chatInput.trim() || !selectedCaseId}
-                  className="trace-chat-send-btn"
-                  title="Send prompt"
-                >
-                  <Send className="w-3.5 h-3.5" />
-                </button>
-              </form>
-            </div>
-          )}
+            {/* Chat Input Form */}
+            <form onSubmit={handleSendMessage} className="p-3 bg-[#070C16] border-t border-white/10 flex items-center gap-2 shrink-0">
+              <input
+                type="text"
+                className="flex-grow bg-[#0B1220] border border-white/15 focus:border-[#00E5FF] focus:shadow-[0_0_12px_rgba(0,229,255,0.15)] rounded-xl px-4 py-3 text-xs text-white placeholder:text-[#64748b] outline-none transition-all"
+                placeholder="Ask about suspicious files, MITRE tactics, mitigation playbooks, or evidence artifacts..."
+                value={inputPrompt}
+                onChange={(e) => setInputPrompt(e.target.value)}
+                disabled={isSending || isRunningInvestigation || !selectedCaseId}
+              />
+              <button
+                type="submit"
+                disabled={!inputPrompt.trim() || isSending || isRunningInvestigation || !selectedCaseId}
+                className="px-5 py-3 rounded-xl bg-gradient-to-r from-[#00E5FF] to-[#3B82F6] hover:brightness-110 active:scale-95 text-[#0A0F1E] font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-[0_0_15px_rgba(0,229,255,0.2)] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                title="Send Message"
+              >
+                <Send className="w-4 h-4" />
+                <span className="hidden sm:inline">Send</span>
+              </button>
+            </form>
 
-        </aside>
+          </div>
+        )}
 
       </div>
     </div>
   );
 }
-
-// Helpers
-const formatFileSize = (bytes) => {
-  if (bytes === 0 || !bytes) return '0 Bytes';
-  const k = 1024;
-  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-};

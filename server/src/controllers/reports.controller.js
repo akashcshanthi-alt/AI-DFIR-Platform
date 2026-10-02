@@ -4,14 +4,25 @@ const path = require('path');
 const Report = require('../models/Report');
 const Case = require('../models/Case');
 const User = require('../models/User');
+const AuditLog = require('../models/AuditLog');
+const Evidence = require('../models/Evidence');
+const IOC = require('../models/IOC');
+const TimelineEvent = require('../models/TimelineEvent');
+const InvestigationRun = require('../models/InvestigationRun');
+const MitreMapping = require('../models/MitreMapping');
 const { generatePDF, generateCSV } = require('../services/reportGenerator');
+
+/**
+ * Resolve the authenticated user's ID from the JWT payload.
+ */
+const getUserId = (req) => req.user?.id || req.user?._id;
 
 /**
  * POST /api/reports/generate
  */
 const generateReport = async (req, res, next) => {
   try {
-    const { title, caseId, format, reportType } = req.body;
+    const { title, caseId, format, reportType, analystConclusion } = req.body;
 
     if (!caseId || !format || !reportType) {
       return res.status(400).json({
@@ -33,12 +44,13 @@ const generateReport = async (req, res, next) => {
       });
     }
 
-    // 1. Fetch case details
+    // 1. Fetch case details — user MUST own the case to generate a report for it
+    const userId = getUserId(req);
     const isObjectId = mongoose.Types.ObjectId.isValid(caseId);
     const activeCase = await Case.findOne({
-      $or: [
-        isObjectId ? { _id: caseId } : { _id: null },
-        { caseId }
+      $and: [
+        { $or: [isObjectId ? { _id: caseId } : { _id: null }, { caseId }] },
+        { createdBy: userId }
       ]
     });
 
@@ -46,14 +58,14 @@ const generateReport = async (req, res, next) => {
       return res.status(404).json({
         success: false,
         error: {
-          message: 'Related incident case not found.',
+          message: 'Related incident case not found or you do not have access to it.',
           status: 404
         }
       });
     }
 
     // 2. Fetch operator details
-    const user = await User.findById(req.user.id);
+    const user = await User.findById(userId);
 
     // 3. Setup directories & file path
     const reportsDir = path.join(__dirname, '../uploads/reports');
@@ -75,6 +87,15 @@ const generateReport = async (req, res, next) => {
     const fileName = `${reportId}_${Date.now()}.${format.toLowerCase()}`;
     const filePath = path.join(reportsDir, fileName);
 
+    // Fetch live case telemetry in parallel
+    const [evidenceList, iocList, timelineList, latestAiRun, mitreList] = await Promise.all([
+      Evidence.find({ caseId: activeCase.caseId }).lean(),
+      IOC.find({ caseId: activeCase.caseId }).lean(),
+      TimelineEvent.find({ caseId: activeCase.caseId }).sort({ timestamp: 1 }).lean(),
+      InvestigationRun.findOne({ caseId: activeCase.caseId, status: 'completed' }).sort({ createdAt: -1 }).lean(),
+      MitreMapping.find({ caseId: activeCase.caseId }).lean()
+    ]);
+
     const reportData = {
       reportId,
       title: title || `Forensic Report - Case ${activeCase.caseId}`,
@@ -85,11 +106,17 @@ const generateReport = async (req, res, next) => {
       status: activeCase.status,
       sourceIP: activeCase.sourceIP,
       destinationIP: activeCase.destinationIP,
-      evidenceCount: activeCase.evidenceCount,
+      evidenceCount: evidenceList.length || activeCase.evidenceCount || 0,
       targetHost: activeCase.targetHost,
       operatorName: user ? user.fullName : 'Security Analyst',
       operatorEmail: user ? user.email : 'analyst@trace.ai',
       reportType,
+      evidenceList,
+      iocList,
+      timelineList,
+      latestAiRun,
+      mitreList: mitreList || [],
+      analystConclusion: analystConclusion || '',
       createdAt: new Date()
     };
 
@@ -117,6 +144,23 @@ const generateReport = async (req, res, next) => {
 
     await report.save();
 
+    try {
+      const actorEmail = user?.email || req.user?.email || 'Operator';
+      await AuditLog.create({
+        user: actorEmail,
+        role: user?.role || req.user?.role || 'Investigator',
+        action: 'GENERATE_REPORT',
+        module: 'REPORTS',
+        resource: `Report ${reportId}`,
+        ipAddress: req.ip || req.headers['x-forwarded-for'] || '127.0.0.1',
+        status: 'Success',
+        severity: 'Low',
+        description: `Forensic report [${reportId}] (${format}) generated for Case [${activeCase.caseId}].`
+      });
+    } catch (auditErr) {
+      console.warn('[Audit Log Warning] Failed to log report generation:', auditErr.message);
+    }
+
     return res.status(201).json({
       success: true,
       message: 'Report synthesized successfully.',
@@ -133,7 +177,9 @@ const generateReport = async (req, res, next) => {
  */
 const getReports = async (req, res, next) => {
   try {
-    const query = {};
+    const userId = getUserId(req);
+    // Always scope to the authenticated user's reports
+    const query = { generatedBy: userId };
 
     // Search filter
     if (req.query.search) {
@@ -194,12 +240,13 @@ const getReports = async (req, res, next) => {
 const getReportById = async (req, res, next) => {
   try {
     const { id } = req.params;
+    const userId = getUserId(req);
 
     const isObjectId = mongoose.Types.ObjectId.isValid(id);
     const report = await Report.findOne({
-      $or: [
-        isObjectId ? { _id: id } : { _id: null },
-        { reportId: id }
+      $and: [
+        { $or: [isObjectId ? { _id: id } : { _id: null }, { reportId: id }] },
+        { generatedBy: userId }
       ]
     }).populate('generatedBy', 'fullName email');
 
@@ -229,12 +276,13 @@ const getReportById = async (req, res, next) => {
 const downloadReport = async (req, res, next) => {
   try {
     const { id } = req.params;
+    const userId = getUserId(req);
 
     const isObjectId = mongoose.Types.ObjectId.isValid(id);
     const report = await Report.findOne({
-      $or: [
-        isObjectId ? { _id: id } : { _id: null },
-        { reportId: id }
+      $and: [
+        { $or: [isObjectId ? { _id: id } : { _id: null }, { reportId: id }] },
+        { generatedBy: userId }
       ]
     });
 
@@ -276,12 +324,13 @@ const downloadReport = async (req, res, next) => {
 const deleteReport = async (req, res, next) => {
   try {
     const { id } = req.params;
+    const userId = getUserId(req);
 
     const isObjectId = mongoose.Types.ObjectId.isValid(id);
     const report = await Report.findOne({
-      $or: [
-        isObjectId ? { _id: id } : { _id: null },
-        { reportId: id }
+      $and: [
+        { $or: [isObjectId ? { _id: id } : { _id: null }, { reportId: id }] },
+        { generatedBy: userId }
       ]
     });
 
@@ -307,6 +356,23 @@ const deleteReport = async (req, res, next) => {
 
     // Remove DB document
     await Report.deleteOne({ _id: report._id });
+
+    try {
+      const actorEmail = req.user?.email || 'Operator';
+      await AuditLog.create({
+        user: actorEmail,
+        role: req.user?.role || 'Investigator',
+        action: 'DELETE_REPORT',
+        module: 'REPORTS',
+        resource: `Report ${report.reportId}`,
+        ipAddress: req.ip || req.headers['x-forwarded-for'] || '127.0.0.1',
+        status: 'Success',
+        severity: 'Low',
+        description: `Forensic report [${report.reportId}] deleted.`
+      });
+    } catch (auditErr) {
+      console.warn('[Audit Log Warning] Failed to log report deletion:', auditErr.message);
+    }
 
     return res.status(200).json({
       success: true,

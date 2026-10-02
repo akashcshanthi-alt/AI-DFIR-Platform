@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Shield, Mail, ArrowLeft, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
-import { sendPasswordResetEmail } from 'firebase/auth';
-import { auth } from '../../services/firebase';
+import { authService } from '../../services/auth.service';
 
 /**
  * ForgotPassword Component
@@ -49,20 +48,7 @@ export default function ForgotPassword() {
     return Object.keys(tempErrors).length === 0;
   };
 
-  const mapFirebaseError = (error) => {
-    switch (error.code) {
-      case 'auth/user-not-found':
-        return 'No operator record found with this email address.';
-      case 'auth/invalid-email':
-        return 'Please enter a valid operator email address.';
-      case 'auth/too-many-requests':
-        return 'Access blocked due to excessive attempts. Please try again later.';
-      default:
-        return error.message || 'An unexpected error occurred. Please try again.';
-    }
-  };
-
-  // Firebase sendPasswordResetEmail submit handler
+  // Submit handler using backend authService
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (isLoading || isSent) return;
@@ -72,14 +58,13 @@ export default function ForgotPassword() {
       setErrors({});
 
       try {
-        await sendPasswordResetEmail(auth, email.trim());
+        await authService.forgotPassword(email.trim());
         setIsLoading(false);
         setIsSent(true);
       } catch (error) {
         console.error('[ForgotPassword] Error occurred:', error);
         setIsLoading(false);
-        const userFriendlyMessage = mapFirebaseError(error);
-        setErrors({ auth: userFriendlyMessage });
+        setErrors({ auth: error.message || 'An unexpected error occurred. Please try again.' });
       }
     }
   };
@@ -91,13 +76,12 @@ export default function ForgotPassword() {
     setResendToast(null);
 
     try {
-      await sendPasswordResetEmail(auth, email.trim());
-      setResendToast({ type: 'success', text: 'Password reset email sent again successfully.' });
-      setCountdown(30);
+      await authService.forgotPassword(email.trim());
+      setResendToast({ type: 'success', text: 'Password reset link sent again successfully.' });
+      setCountdown(60);
     } catch (error) {
       console.error('[ForgotPassword] Resend Error:', error);
-      const userFriendlyMessage = mapFirebaseError(error);
-      setResendToast({ type: 'error', text: userFriendlyMessage });
+      setResendToast({ type: 'error', text: error.message || 'Failed to resend reset email.' });
     } finally {
       setIsResending(false);
     }

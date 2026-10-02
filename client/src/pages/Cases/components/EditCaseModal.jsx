@@ -241,7 +241,7 @@ export default function EditCaseModal({ isOpen, onClose, caseItem, onUpdated }) 
           <div className="pt-4 border-t border-white/5 flex justify-end gap-3">
             <button
               type="button"
-              className="px-5 py-2 rounded-lg border border-white/10 text-on-surface-variant hover:text-white hover:bg-white/5 transition-all text-xs font-semibold cursor-pointer"
+              className="px-5 py-2 rounded-xl bg-[#0F172A] border border-white/10 hover:border-[#00E5FF]/40 text-[#94a3b8] hover:text-white hover:bg-[#1E293B] transition-all text-xs font-semibold cursor-pointer focus-visible:ring-2 focus-visible:ring-[#00E5FF]"
               onClick={onClose}
               disabled={loading}
             >
@@ -249,7 +249,7 @@ export default function EditCaseModal({ isOpen, onClose, caseItem, onUpdated }) 
             </button>
             <button
               type="submit"
-              className="px-6 py-2 rounded-lg bg-primary hover:brightness-110 text-slate-900 font-bold transition-all text-xs flex items-center gap-2 cursor-pointer"
+              className="px-6 py-2 rounded-xl bg-gradient-to-r from-[#00E5FF] to-[#3B82F6] hover:brightness-110 active:scale-95 text-[#0A0F1E] font-bold transition-all text-xs flex items-center gap-2 cursor-pointer shadow-[0_0_12px_rgba(0,229,255,0.25)] focus-visible:ring-2 focus-visible:ring-[#00E5FF] disabled:opacity-50 disabled:cursor-not-allowed"
               disabled={loading}
             >
               {loading ? (

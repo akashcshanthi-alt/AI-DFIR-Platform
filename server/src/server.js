@@ -8,6 +8,13 @@ const PORT = process.env.PORT || 5000;
 
 const startServer = async () => {
   try {
+    // Fail closed in production if required cryptographic secrets are not set
+    if (process.env.NODE_ENV === 'production') {
+      if (!process.env.JWT_SECRET || !process.env.JWT_REFRESH_SECRET) {
+        throw new Error('Critical Security Failure: JWT_SECRET and JWT_REFRESH_SECRET must be configured in production.');
+      }
+    }
+
     // Invoke configuration setup (connecting Mongo is deferred)
     await connectDB();
     const seedDatabase = require('./utils/seeder');

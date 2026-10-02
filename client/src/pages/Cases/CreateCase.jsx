@@ -1,16 +1,31 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, ChevronLeft, ChevronRight, Rocket, Loader2 } from 'lucide-react';
+import { 
+  ArrowLeft, 
+  ShieldAlert, 
+  Upload, 
+  X, 
+  File, 
+  Loader2, 
+  CheckCircle2, 
+  AlertCircle 
+} from 'lucide-react';
 import './CreateCase.css';
 import { casesService } from '../../services/cases.service';
+import { evidenceService } from '../../services/evidence.service';
 
-// Import modular wizard steps
-import StepBasicInfo from './components/StepBasicInfo';
-import StepIncidentScope from './components/StepIncidentScope';
-import StepEvidenceIntake from './components/StepEvidenceIntake';
-import StepTeamAssign from './components/StepTeamAssign';
-import StepAugmentation from './components/StepAugmentation';
-import StepReviewSubmit from './components/StepReviewSubmit';
+const INCIDENT_TYPES = [
+  'General Security Incident',
+  'Malware Outbreak',
+  'Ransomware Attack',
+  'Unauthorized Access',
+  'Phishing & Credential Harvesting',
+  'Data Exfiltration',
+  'DDoS Attack',
+  'Insider Threat',
+  'Network Intrusion',
+  'Cloud Infrastructure Compromise'
+];
 
 export default function CreateCase() {
   const navigate = useNavigate();
@@ -24,312 +39,354 @@ export default function CreateCase() {
     }
   }, [hasSession, navigate]);
 
-  // Unified Wizard State
-  const [currentStep, setCurrentStep] = useState(1);
-  const totalSteps = 6;
-  const [errorMsg, setErrorMsg] = useState('');
-  const [isSuccess, setIsSuccess] = useState(false);
-
-  // Form Field States
-  const [caseTitle, setCaseTitle] = useState('');
-  const [incidentType, setIncidentType] = useState('Malware Outbreak');
-  const [severity, setSeverity] = useState('HIGH');
-  const [department, setDepartment] = useState('Network Security Ops');
-  const [priority, setPriority] = useState(50);
-  
+  // Form Fields
+  const [title, setTitle] = useState('');
+  const [incidentType, setIncidentType] = useState('General Security Incident');
+  const [severity, setSeverity] = useState('High');
   const [description, setDescription] = useState('');
-  const [timelineStart, setTimelineStart] = useState('');
-  const [mitreId, setMitreId] = useState('');
-  const [assets, setAssets] = useState('');
-  const [iocs, setIocs] = useState('');
-  
-  const [leadInvestigator, setLeadInvestigator] = useState('Dr. Elena Kozlov (Senior Lead)');
-  const [deadline, setDeadline] = useState('');
-  const [collaborators, setCollaborators] = useState(['Liam Hughes', 'Marcus Thorne']);
-  
-  const [aiOptions, setAiOptions] = useState({
-    malware: true,
-    ioc: true,
-    timeline: true,
-    risk: false,
-    report: true
-  });
+  const [evidenceFiles, setEvidenceFiles] = useState([]);
 
-  // Action Button States
+  // UI States
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [statusStep, setStatusStep] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
+  const [dragActive, setDragActive] = useState(false);
 
   if (!hasSession) return null;
 
-  // Navigation handlers
-  const handleNext = () => {
-    if (currentStep === 1) {
-      if (!caseTitle.trim()) {
-        setErrorMsg('Please specify a Case Title to proceed.');
-        return;
-      }
+  // File selection handler
+  const handleFileChange = (e) => {
+    if (e.target.files) {
+      const selected = Array.from(e.target.files);
+      setEvidenceFiles(prev => [...prev, ...selected]);
     }
+  };
+
+  const removeFile = (indexToRemove) => {
+    setEvidenceFiles(prev => prev.filter((_, idx) => idx !== indexToRemove));
+  };
+
+  // Drag and drop handlers
+  const handleDrag = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === 'dragenter' || e.type === 'dragover') {
+      setDragActive(true);
+    } else if (e.type === 'dragleave') {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const dropped = Array.from(e.dataTransfer.files);
+      setEvidenceFiles(prev => [...prev, ...dropped]);
+    }
+  };
+
+  const formatFileSize = (bytes) => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  };
+
+  // Submit Handler
+  const handleSubmit = async (e) => {
+    e.preventDefault();
     setErrorMsg('');
-    if (currentStep < totalSteps) {
-      setCurrentStep(currentStep + 1);
+    setSuccessMsg('');
+
+    // Validation
+    if (!title.trim()) {
+      setErrorMsg('Case Title is required. Please provide a descriptive incident name.');
+      return;
     }
-  };
 
-  const handlePrev = () => {
-    if (currentStep > 1) {
-      setCurrentStep(currentStep - 1);
-    }
-  };
-
-  const handleGoToStep = (step) => {
-    setCurrentStep(step);
-  };
-
-  const handleSubmit = async () => {
-    if (isSubmitting) return;
     setIsSubmitting(true);
-    setErrorMsg('');
-    
-    try {
-      const mappedSeverity = severity === 'LOW' ? 'Low' : severity === 'MED' ? 'Medium' : severity === 'HIGH' ? 'High' : 'Critical';
-      const assetStr = assets || '';
-      const ipPattern = /\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/;
-      const ipMatch = assetStr.match(ipPattern);
-      const destinationIP = ipMatch ? ipMatch[0] : '';
+    setStatusStep('Creating investigation case in MongoDB...');
 
+    try {
+      // 1. Create Case in database
       const payload = {
-        title: caseTitle.trim(),
-        description: description.trim() || `Incident Type: ${incidentType}. Initial IOCs: ${iocs}`,
-        severity: mappedSeverity,
+        title: title.trim(),
+        incidentType,
+        severity,
         status: 'Open',
-        assignedAnalyst: leadInvestigator || 'Unassigned',
-        sourceIP: '',
-        destinationIP: destinationIP,
-        evidenceCount: 0,
-        targetHost: assetStr || 'N/A'
+        description: description.trim()
       };
 
-      await casesService.createCase(payload);
-      setIsSuccess(true);
+      const createdCase = await casesService.createCase(payload);
+      const caseRef = createdCase.caseId || createdCase._id;
+
+      // 2. Upload Evidence if any files attached
+      if (evidenceFiles.length > 0) {
+        setStatusStep(`Uploading ${evidenceFiles.length} evidence file(s)...`);
+        const formData = new FormData();
+        formData.append('caseId', caseRef);
+        formData.append('fileType', 'Other');
+        evidenceFiles.forEach((file) => {
+          formData.append('files', file);
+        });
+
+        await evidenceService.uploadEvidence(formData, (percent) => {
+          setUploadProgress(percent);
+        });
+      }
+
+      setSuccessMsg(`Case [${caseRef}] created successfully! Opening case workspace...`);
+      
+      // Navigate to the newly created case details page
       setTimeout(() => {
-        navigate('/cases');
-      }, 2000);
+        navigate(`/cases/${caseRef}`);
+      }, 1000);
+
     } catch (err) {
-      setErrorMsg(err.message || 'Failed to submit investigation.');
-    } finally {
+      console.error('Case creation error:', err);
+      setErrorMsg(err.message || 'Failed to create case. Please try again.');
       setIsSubmitting(false);
+      setStatusStep('');
     }
   };
 
-  // Progress line percent width
-  const progressPercent = ((currentStep - 1) / (totalSteps - 1)) * 100;
-
   return (
-    <div className="trace-create-layout flex flex-col min-h-screen w-full select-none create-case-grid-bg box-border p-6 md:p-8 relative">
-      {isSuccess && (
-        <div className="fixed top-20 right-6 z-50 bg-[#0f1425] border border-[#10b981] text-[#10b981] text-xs px-4 py-2.5 rounded-lg shadow-xl font-bold">
-          Investigation Case Successfully Initiated. Redirecting to SOC Command Center...
-        </div>
-      )}
-      <div className="max-w-7xl mx-auto w-full flex-grow flex flex-col justify-between">
+    <div className="trace-create-case-page flex flex-col min-h-screen w-full box-border p-6 md:p-8">
+      <div className="max-w-4xl mx-auto w-full">
         
-        {/* Back Link & Header */}
-        <div className="mb-8 text-left">
-          <Link to="/cases" className="inline-flex items-center gap-2 text-secondary font-label-caps text-xs mb-3 hover:brightness-110 transition-all">
-            <ArrowLeft className="w-3.5 h-3.5" />
-            <span>Back to Case Management</span>
+        {/* Navigation Breadcrumb */}
+        <div className="mb-6 text-left">
+          <Link to="/cases" className="inline-flex items-center gap-2 text-[#47faf3] text-xs font-semibold hover:underline transition-all">
+            <ArrowLeft className="w-4 h-4" />
+            <span>Back to Cases</span>
           </Link>
-          <h1 className="font-headline-lg text-headline-lg text-white font-bold leading-none">Initiate Forensic Investigation</h1>
-          <p className="text-on-surface-variant mt-2 text-sm">Configure parameters for a new AI-augmented threat analysis workflow.</p>
         </div>
 
-        {/* Wizard Progress Track */}
-        <div className="mb-10 relative select-none">
-          <div className="flex justify-between items-center relative z-10">
-            {[
-              { step: 1, label: 'Basic Info' },
-              { step: 2, label: 'Incidents' },
-              { step: 3, label: 'Evidence' },
-              { step: 4, label: 'Team' },
-              { step: 5, label: 'AI Options' },
-              { step: 6, label: 'Review' }
-            ].map((s) => {
-              const isCompleted = s.step < currentStep;
-              const isActive = s.step === currentStep;
-              return (
-                <div 
-                  key={s.step} 
-                  className="flex flex-col items-center group cursor-pointer" 
-                  onClick={() => handleGoToStep(s.step)}
-                >
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all duration-300 font-bold ${
-                    isCompleted 
-                      ? 'border-primary bg-primary text-on-primary shadow-[0_0_15px_rgba(174,198,255,0.4)]' 
-                      : isActive 
-                        ? 'border-primary bg-primary text-on-primary shadow-[0_0_15px_rgba(174,198,255,0.4)]' 
-                        : 'border-outline bg-surface text-outline'
-                  }`}>
-                    {isCompleted ? '✓' : s.step}
-                  </div>
-                  <span className={`mt-2 text-[10px] font-label-caps font-bold transition-colors ${
-                    isActive || isCompleted ? 'text-primary' : 'text-outline'
-                  }`}>
-                    {s.label}
-                  </span>
-                </div>
-              );
-            })}
+        {/* Page Header */}
+        <div className="mb-8 text-left">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-[#00E5FF]/10 border border-[#00E5FF]/30 flex items-center justify-center text-[#00E5FF]">
+              <ShieldAlert className="w-5 h-5" />
+            </div>
+            <div>
+              <h1 className="text-2xl md:text-3xl font-bold text-white tracking-tight">Create New Case</h1>
+              <p className="text-xs md:text-sm text-[#94a3b8] mt-0.5">
+                Initiate a security investigation case and attach initial forensic evidence.
+              </p>
+            </div>
           </div>
-          {/* Connecting Track Background Line */}
-          <div className="absolute top-5 left-0 w-full h-[2px] bg-outline-variant/30 -z-10"></div>
-          {/* Active Track Progress Line */}
-          <div 
-            className="absolute top-5 left-0 h-[2px] bg-primary shadow-[0_0_10px_rgba(174,198,255,0.5)] transition-all duration-500 -z-10" 
-            style={{ width: `${progressPercent}%` }}
-          />
         </div>
 
-        {/* Wizard Main Card Container */}
-        <div className="glass-card rounded-xl overflow-hidden shadow-2xl flex-grow flex flex-col justify-between min-h-[500px]">
+        {/* Alert Messages */}
+        {errorMsg && (
+          <div className="mb-6 p-4 rounded-xl bg-[#ef4444]/10 border border-[#ef4444]/30 text-[#fca5a5] text-xs flex items-center gap-3 animate-fade-in text-left">
+            <AlertCircle className="w-4 h-4 shrink-0 text-[#ef4444]" />
+            <span className="font-medium">{errorMsg}</span>
+          </div>
+        )}
+
+        {successMsg && (
+          <div className="mb-6 p-4 rounded-xl bg-[#10b981]/10 border border-[#10b981]/30 text-[#6ee7b7] text-xs flex items-center gap-3 animate-fade-in text-left">
+            <CheckCircle2 className="w-4 h-4 shrink-0 text-[#10b981]" />
+            <span className="font-semibold">{successMsg}</span>
+          </div>
+        )}
+
+        {/* Single Create Case Form Card */}
+        <form onSubmit={handleSubmit} className="glass-card rounded-2xl border border-white/10 p-6 md:p-8 space-y-6 text-left bg-[#101726]/90 shadow-2xl backdrop-blur-md">
           
-          {/* Step Form Viewport */}
-          <div className="p-8 md:p-10 flex-grow">
-            {errorMsg && (
-              <div className="mb-6 bg-[#ffb3ae]/10 border border-[#ffb3ae]/30 text-[#ffb3ae] text-xs px-4 py-2.5 rounded-lg">
-                {errorMsg}
-              </div>
-            )}
-            {currentStep === 1 && (
-              <StepBasicInfo 
-                title={caseTitle} setTitle={setCaseTitle}
-                incidentType={incidentType} setIncidentType={setIncidentType}
-                severity={severity} setSeverity={setSeverity}
-                department={department} setDepartment={setDepartment}
-                priority={priority} setPriority={setPriority}
-              />
-            )}
-            
-            {currentStep === 2 && (
-              <StepIncidentScope 
-                description={description} setDescription={setDescription}
-                timelineStart={timelineStart} setTimelineStart={setTimelineStart}
-                mitreId={mitreId} setMitreId={setMitreId}
-                assets={assets} setAssets={setAssets}
-                iocs={iocs} setIocs={setIocs}
-              />
-            )}
-
-            {currentStep === 3 && (
-              <StepEvidenceIntake />
-            )}
-
-            {currentStep === 4 && (
-              <StepTeamAssign 
-                leadInvestigator={leadInvestigator} setLeadInvestigator={setLeadInvestigator}
-                deadline={deadline} setDeadline={setDeadline}
-                collaborators={collaborators} setCollaborators={setCollaborators}
-              />
-            )}
-
-            {currentStep === 5 && (
-              <StepAugmentation 
-                aiOptions={aiOptions} setAiOptions={setAiOptions}
-              />
-            )}
-
-            {currentStep === 6 && (
-              <StepReviewSubmit 
-                title={caseTitle}
-                incidentType={incidentType}
-                severity={severity}
-                leadInvestigator={leadInvestigator}
-                collaborators={collaborators}
-                deadline={deadline}
-                aiOptions={aiOptions}
-              />
-            )}
+          {/* Field 1: Case Title */}
+          <div className="space-y-2">
+            <label className="block text-xs font-bold text-white uppercase tracking-wider">
+              Case Title <span className="text-[#ef4444]">*</span>
+            </label>
+            <input 
+              type="text" 
+              className="trace-form-input w-full"
+              placeholder="e.g. Unauthorized RDP Lateral Movement on DC-01"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              disabled={isSubmitting}
+              autoFocus
+            />
+            <span className="text-[11px] text-[#94a3b8]">
+              A concise, descriptive summary of the security incident.
+            </span>
           </div>
 
-          {/* Wizard Footer Nav Actions */}
-          <div className="p-6 md:px-10 border-t border-white/10 flex justify-between items-center bg-surface-container-low/50 shrink-0">
-            <button 
-              type="button"
-              className={`flex items-center gap-2 px-6 py-2.5 rounded-lg border border-outline-variant text-on-surface-variant hover:bg-white/5 transition-all outline-none cursor-pointer ${
-                currentStep === 1 ? 'opacity-0 pointer-events-none' : 'opacity-100'
-              }`}
-              onClick={handlePrev}
-            >
-              <ChevronLeft className="w-4 h-4" />
-              Previous
-            </button>
+          {/* Row: Incident Type & Severity */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             
-            <div className="flex gap-4">
-              <button 
-                type="button" 
-                className="px-6 py-2.5 rounded-lg text-on-surface-variant hover:text-white transition-colors outline-none cursor-pointer text-xs font-semibold"
-                onClick={() => navigate('/cases')}
+            {/* Field 2: Incident Type */}
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-white uppercase tracking-wider">
+                Incident Type
+              </label>
+              <select 
+                className="trace-form-select w-full"
+                value={incidentType}
+                onChange={(e) => setIncidentType(e.target.value)}
+                disabled={isSubmitting}
               >
-                Save as Draft
-              </button>
-              
-              {currentStep < totalSteps ? (
-                <button 
-                  type="button"
-                  className="flex items-center gap-2 px-8 py-2.5 rounded-lg bg-primary-container text-white font-bold hover:brightness-110 active:scale-95 transition-all shadow-lg outline-none cursor-pointer text-xs"
-                  onClick={handleNext}
-                >
-                  Next Step
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              ) : (
-                <button 
-                  type="button"
-                  className="flex items-center gap-2 px-10 py-2.5 rounded-lg bg-secondary-container text-on-secondary-container font-black tracking-widest glow-cyan hover:brightness-110 active:scale-95 transition-all outline-none cursor-pointer text-xs"
-                  onClick={handleSubmit}
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      INITIATING...
-                    </>
-                  ) : (
-                    <>
-                      SUBMIT INVESTIGATION
-                      <Rocket className="w-4 h-4" />
-                    </>
-                  )}
-                </button>
+                {INCIDENT_TYPES.map((type) => (
+                  <option key={type} value={type}>
+                    {type}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Field 3: Severity */}
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-white uppercase tracking-wider">
+                Severity Level
+              </label>
+              <select 
+                className="trace-form-select w-full font-semibold"
+                value={severity}
+                onChange={(e) => setSeverity(e.target.value)}
+                disabled={isSubmitting}
+              >
+                <option value="Low">Low - Minor anomaly or false positive</option>
+                <option value="Medium">Medium - Suspicious single-host activity</option>
+                <option value="High">High - Confirmed threat or breach attempt</option>
+                <option value="Critical">Critical - Active breach, ransomware, or domain compromise</option>
+              </select>
+            </div>
+
+          </div>
+
+          {/* Field 4: Description */}
+          <div className="space-y-2">
+            <label className="block text-xs font-bold text-white uppercase tracking-wider">
+              Incident Description
+            </label>
+            <textarea 
+              rows={4}
+              className="trace-form-textarea w-full"
+              placeholder="Provide context regarding how the incident was detected, suspected compromised endpoints, observed attacker IPs, and initial findings..."
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              disabled={isSubmitting}
+            />
+          </div>
+
+          {/* Field 5: Upload Evidence (Optional) */}
+          <div className="space-y-3 pt-2">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-bold text-white uppercase tracking-wider">
+                Upload Evidence <span className="text-[#94a3b8] font-normal lowercase">(optional during case creation)</span>
+              </label>
+              {evidenceFiles.length > 0 && (
+                <span className="text-xs text-[#00E5FF] font-semibold">
+                  {evidenceFiles.length} file(s) selected
+                </span>
               )}
             </div>
+
+            {/* Dropzone */}
+            <div
+              onDragEnter={handleDrag}
+              onDragOver={handleDrag}
+              onDragLeave={handleDrag}
+              onDrop={handleDrop}
+              onClick={() => document.getElementById('evidence-upload-input').click()}
+              className={`border-2 border-dashed rounded-xl p-6 text-center flex flex-col items-center justify-center gap-2 transition-all cursor-pointer ${
+                dragActive 
+                  ? 'border-[#00E5FF] bg-[#00E5FF]/10' 
+                  : 'border-white/10 bg-[#0B1220]/60 hover:border-[#00E5FF]/40 hover:bg-[#0B1220]'
+              }`}
+            >
+              <Upload className="w-7 h-7 text-[#00E5FF] opacity-80" />
+              <p className="text-xs font-semibold text-white">
+                Drag and drop forensic files here, or <span className="text-[#00E5FF] underline">browse files</span>
+              </p>
+              <p className="text-[11px] text-[#94a3b8]">
+                Supports PCAP, EVTX, memory dumps, logs, and disk images.
+              </p>
+              <input 
+                id="evidence-upload-input"
+                type="file" 
+                multiple 
+                className="hidden" 
+                onChange={handleFileChange}
+                disabled={isSubmitting}
+              />
+            </div>
+
+            {/* Selected File List */}
+            {evidenceFiles.length > 0 && (
+              <div className="space-y-2 mt-3 max-h-48 overflow-y-auto custom-scrollbar pr-1">
+                {evidenceFiles.map((file, idx) => (
+                  <div 
+                    key={idx} 
+                    className="flex items-center justify-between p-3 rounded-lg bg-[#0B1220] border border-white/5 text-xs text-white"
+                  >
+                    <div className="flex items-center gap-2.5 truncate">
+                      <File className="w-4 h-4 text-[#00E5FF] shrink-0" />
+                      <span className="truncate font-medium">{file.name}</span>
+                      <span className="text-[10px] text-[#94a3b8] font-mono shrink-0">
+                        ({formatFileSize(file.size)})
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeFile(idx);
+                      }}
+                      disabled={isSubmitting}
+                      className="text-[#94a3b8] hover:text-[#ef4444] p-1 transition-colors cursor-pointer"
+                      title="Remove file"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
-        </div>
+          {/* Actions Bar */}
+          <div className="pt-6 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <button
+              type="button"
+              onClick={() => navigate('/cases')}
+              disabled={isSubmitting}
+              className="w-full sm:w-auto px-6 py-2.5 rounded-xl border border-white/10 text-[#94a3b8] hover:text-white hover:bg-white/5 font-semibold text-xs transition-all cursor-pointer"
+            >
+              Cancel
+            </button>
 
-        {/* Decorative Analytics Preview Footer */}
-        <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6 opacity-40 hover:opacity-100 transition-all select-none">
-          <div className="glass-card p-4 rounded-lg text-left">
-            <p className="text-[10px] font-label-caps text-on-surface-variant font-bold">SYSTEM LOAD</p>
-            <div className="h-8 flex items-end gap-1 mt-2">
-              <div className="w-2 bg-primary h-[40%] rounded-t-sm"></div>
-              <div className="w-2 bg-primary h-[70%] rounded-t-sm"></div>
-              <div className="w-2 bg-primary h-[50%] rounded-t-sm"></div>
-              <div className="w-2 bg-primary h-[90%] rounded-t-sm"></div>
-              <div className="w-2 bg-primary h-[60%] rounded-t-sm"></div>
+            <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+              {isSubmitting && statusStep && (
+                <span className="text-xs text-[#00E5FF] font-medium animate-pulse">
+                  {statusStep} {uploadProgress > 0 && `(${uploadProgress}%)`}
+                </span>
+              )}
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full sm:w-auto px-8 py-2.5 rounded-xl bg-gradient-to-r from-[#00E5FF] to-[#3B82F6] hover:brightness-110 active:scale-95 text-[#0A0F1E] font-bold text-xs tracking-wider uppercase transition-all shadow-[0_0_20px_rgba(0,229,255,0.25)] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-[#0A0F1E]" />
+                    <span>Creating Case...</span>
+                  </>
+                ) : (
+                  <span>Create Case</span>
+                )}
+              </button>
             </div>
           </div>
-          <div className="glass-card p-4 rounded-lg text-left">
-            <p className="text-[10px] font-label-caps text-on-surface-variant font-bold">NODE STATUS</p>
-            <p className="text-lg font-bold text-secondary mt-2">ACTIVE</p>
-          </div>
-          <div className="glass-card p-4 rounded-lg text-left">
-            <p className="text-[10px] font-label-caps text-on-surface-variant font-bold">THREAT FEED</p>
-            <p className="text-lg font-bold text-error mt-2">STABLE</p>
-          </div>
-          <div className="glass-card p-4 rounded-lg text-left">
-            <p className="text-[10px] font-label-caps text-on-surface-variant font-bold">UPLINK SPEED</p>
-            <p className="text-lg font-bold text-on-surface mt-2 font-mono">10 GBPS</p>
-          </div>
-        </div>
+
+        </form>
 
       </div>
     </div>

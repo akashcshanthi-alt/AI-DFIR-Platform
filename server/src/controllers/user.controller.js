@@ -51,10 +51,10 @@ const updateProfile = async (req, res, next) => {
       });
     }
 
-    if (fullName) user.fullName = fullName;
-    if (phone) user.phone = phone;
-    if (department) user.department = department;
-    if (profileImage) user.profileImage = profileImage;
+    if (typeof fullName === 'string' && fullName.trim()) user.fullName = fullName.trim();
+    if (phone !== undefined) user.phone = typeof phone === 'string' ? phone.trim() : '';
+    if (department !== undefined) user.department = typeof department === 'string' ? department.trim() : '';
+    if (profileImage !== undefined) user.profileImage = typeof profileImage === 'string' ? profileImage.trim() : '';
 
     await user.save();
 

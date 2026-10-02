@@ -2,10 +2,14 @@
   "name": "ai-dfir-platform",
   "version": "1.0.0",
   "scripts": {
-    "dev": "npm run dev --prefix client",
-    "server": "node server/server.js"
+    "dev": "concurrently -n \"SERVER,CLIENT\" -c \"cyan,magenta\" \"npm run server\" \"npm run client\"",
+    "client": "npm run dev --prefix client",
+    "server": "node server/src/server.js"
   },
   "dependencies": {
     "lucide-react": "^1.28.0"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.5"
   }
 }

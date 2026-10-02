@@ -73,8 +73,12 @@ AuditLogSchema.pre('save', async function (next) {
   try {
     if (this.isNew) {
       if (!this.logId || !this.eventId) {
-        const count = await mongoose.model('AuditLog').countDocuments();
-        const num = 1001 + count;
+        const lastLog = await mongoose.model('AuditLog').findOne({}, { logId: 1 }, { sort: { logId: -1 } });
+        let num = 1001;
+        if (lastLog && lastLog.logId) {
+          const m = lastLog.logId.match(/LOG-(\d+)/);
+          if (m) num = parseInt(m[1], 10) + 1;
+        }
         if (!this.logId) this.logId = `LOG-${num}`;
         if (!this.eventId) this.eventId = `EVT-${num}`;
       }
@@ -101,8 +105,6 @@ AuditLogSchema.pre('save', async function (next) {
 });
 
 // Single-field indexes for sorting/filtering
-AuditLogSchema.index({ logId: 1 });
-AuditLogSchema.index({ eventId: 1 });
 AuditLogSchema.index({ user: 1 });
 AuditLogSchema.index({ status: 1 });
 AuditLogSchema.index({ severity: 1 });

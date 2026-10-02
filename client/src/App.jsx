@@ -9,8 +9,8 @@ import Cases from './pages/Cases/Cases';
 import CreateCase from './pages/Cases/CreateCase';
 import CaseDetails from './pages/Cases/CaseDetails';
 import AuditLogs from './pages/AuditLogs/AuditLogs';
-import Settings from './pages/Settings/Settings';
 import ForgotPassword from './pages/ForgotPassword/ForgotPassword';
+import ResetPassword from './pages/ResetPassword/ResetPassword';
 import AIInvestigation from './pages/AIInvestigation/AIInvestigation';
 import ReportsCenter from './pages/Reports/ReportsCenter';
 import Profile from './pages/Profile/Profile';
@@ -21,26 +21,31 @@ import Sidebar from './components/layout/Sidebar';
 import Header from './components/layout/Header';
 import { auth, getResolvedUserName } from './services/firebase';
 import { signOut } from 'firebase/auth';
-
-// Local development auth guard — checks if user is authenticated in localStorage
-const isAuthenticated = () => localStorage.getItem('isAuthenticated') === 'true';
+import { authService } from './services/auth.service';
 
 /**
  * ProtectedRoute Wrapper
- * Re-routes unauthenticated users to the operator login portal.
+ * Validates JWT clearance session and enforces optional RBAC constraints.
  */
-function ProtectedRoute({ children }) {
-  // Prototype development guard — replace with real authentication later.
-  return isAuthenticated() ? children : <Navigate to="/login" replace />;
+function ProtectedRoute({ children, allowedRoles }) {
+  if (!authService.isAuthenticated()) {
+    return <Navigate to="/login" replace />;
+  }
+  if (allowedRoles && allowedRoles.length > 0) {
+    const userRole = localStorage.getItem('operatorRole');
+    if (!allowedRoles.includes(userRole)) {
+      return <Navigate to="/dashboard" replace />;
+    }
+  }
+  return children;
 }
 
 /**
  * PublicRoute Wrapper
- * Restricts authenticated analysts from returning to login/register screens,
- * re-routing them to the SOC dashboard telemetry.
+ * Prevents authenticated analysts from revisiting login/register pages.
  */
 function PublicRoute({ children }) {
-  return isAuthenticated() ? <Navigate to="/dashboard" replace /> : children;
+  return authService.isAuthenticated() ? <Navigate to="/dashboard" replace /> : children;
 }
 
 /**
@@ -92,11 +97,12 @@ function MainLayout() {
   // Terminate developer session and redirect to Login
   const handleLogout = async () => {
     try {
+      await authService.logout();
       await signOut(auth);
     } catch (err) {
       console.error('Logout error:', err);
     } finally {
-      localStorage.clear();
+      authService.clearAuth();
       navigate('/login', { replace: true });
     }
   };
@@ -110,9 +116,8 @@ function MainLayout() {
     if (path.startsWith('/cases/')) return 'Case Investigation';
     if (path === '/ai-investigation') return 'AI Investigation';
     if (path === '/audit-logs') return 'Audit Logs';
-    if (path === '/settings') return 'Settings';
-    if (path === '/reports') return 'Reports Center';
-    if (path === '/profile') return 'Analyst Workspace';
+    if (path === '/reports') return 'Reports';
+    if (path === '/profile') return 'My Profile';
     return 'Dashboard';
   };
 
@@ -227,6 +232,7 @@ export default function App() {
         <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
         <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
         <Route path="/forgot-password" element={<PublicRoute><ForgotPassword /></PublicRoute>} />
+        <Route path="/reset-password" element={<PublicRoute><ResetPassword /></PublicRoute>} />
         <Route path="/verify" element={<PublicRoute><VerificationCenter /></PublicRoute>} />
 
         {/* Protected Authenticated Routing Layout */}
@@ -236,7 +242,7 @@ export default function App() {
           <Route path="/cases/new" element={<CreateCase />} />
           <Route path="/cases/:id" element={<CaseDetails />} />
           <Route path="/audit-logs" element={<AuditLogs />} />
-          <Route path="/settings" element={<Settings />} />
+          <Route path="/settings" element={<Navigate to="/profile" replace />} />
           <Route path="/ai-investigation" element={<AIInvestigation />} />
           <Route path="/reports" element={<ReportsCenter />} />
           <Route path="/profile" element={<Profile />} />

@@ -19,7 +19,28 @@ const error = (res, message = 'An error occurred', status = 500) => {
   });
 };
 
+const notFound = (res, message = 'Resource not found') => {
+  return error(res, message, 404);
+};
+
+const badRequest = (res, message = 'Bad request') => {
+  return error(res, message, 400);
+};
+
+const unauthorized = (res, message = 'Unauthorized') => {
+  return error(res, message, 401);
+};
+
+const forbidden = (res, message = 'Forbidden') => {
+  return error(res, message, 403);
+};
+
 module.exports = {
   success,
-  error
+  error,
+  notFound,
+  badRequest,
+  unauthorized,
+  forbidden
 };
+

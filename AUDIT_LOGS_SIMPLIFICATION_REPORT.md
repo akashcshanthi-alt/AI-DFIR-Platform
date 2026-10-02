@@ -1,0 +1,97 @@
+# TRACE AI DFIR Platform — Audit Logs Simplification & Verification Report
+
+## Executive Summary
+
+The **Audit Logs** module of the TRACE AI DFIR Platform has been simplified, corrected, and strictly secured. All hardcoded/simulated telemetry, uncalculated risk meters ("72 Elevated"), fake anomaly alerts, live ticker feeds, and foreign demo activity (`cso@trace.ai`, `s.keller`, `attacker@scam.org`) have been completely eliminated from non-admin / investigator views. The audit log system now records and displays genuine, authorized user actions with strict backend RBAC enforcement.
+
+---
+
+## 1. Root Cause of Demo / Unrelated Audit Data
+
+Investigation into the codebase identified two primary root causes:
+
+1. **Unscoped Backend Queries in Audit Controller (`audit.controller.js`)**:
+   - `getAuditLogs`, `getAuditLogById`, and `exportAuditLogs` previously executed un-scoped queries against the `AuditLog` collection, returning all records in MongoDB (including seeded CSO logs, simulated test logs, and other users' records) regardless of the requester's role or clearance.
+2. **Hardcoded Simulated Telemetry in React Component (`AuditLogs.jsx`)**:
+   - The frontend rendered a static interval-driven ticker (`streamEvents`), artificial risk gauge (`AI RISK INDEX: 72 ELEVATED`), and hardcoded anomaly cards (`ANOMALIES FLAGGED: Multiple Failed Logins`, `Credential Scan Drill`).
+
+---
+
+## 2. Files Changed
+
+| File | Changes Made |
+| :--- | :--- |
+| `server/src/controllers/audit.controller.js` | Enforced strict user-level scoping in `getAuditLogs`, `getAuditLogById`, `deleteAuditLog`, and `exportAuditLogs`. Non-admin investigators can only view, retrieve, or export audit records matching their own authenticated identities. |
+| `server/src/controllers/auth.controller.js` | Added real, non-blocking `AuditLog.create` events on `LOGIN_SUCCESS`, `GOOGLE_LOGIN_SUCCESS`, and `LOGOUT_SUCCESS`. |
+| `server/src/controllers/cases.controller.js` | Added real `AuditLog.create` events on `CREATE_CASE`, `UPDATE_CASE`, and `DELETE_CASE`. |
+| `server/src/controllers/evidence.controller.js` | Added real `AuditLog.create` events on `UPLOAD_EVIDENCE`. |
+| `server/src/controllers/reports.controller.js` | Added real `AuditLog.create` events on `GENERATE_REPORT` and `DELETE_REPORT`. |
+| `client/src/pages/AuditLogs/AuditLogs.jsx` | Completely rewritten to remove fake telemetry, risk meters, and anomaly cards. Replaced with a clean, focused, real-time audit table, simple search, real CSV/PDF export, clean empty state, and event details modal. |
+| `server/src/scratch/test_audit_simplification.js` | End-to-end integration and user-isolation test suite for audit log verification. |
+
+---
+
+## 3. UI Elements Removed
+
+The following fake or decorative UI elements were removed from `AuditLogs.jsx`:
+
+- ❌ **AI Risk Index Card ("72 Elevated")**: Removed circular SVG gauge and fake warning text.
+- ❌ **Anomalies Flagged Panel**: Removed fake cards ("Multiple Failed Logins", "Credential Scan Drill").
+- ❌ **Log Stream Telemetry**: Removed fake recurring ticker (`SOC_WEBSOCKET_UPLINK`) and SLA metrics.
+- ❌ **Live Uplink Badge ("LIVE UPLINK ACTIVE")**: Removed decorative pulsing cyan indicator.
+- ❌ **Mock Avatars**: Removed hardcoded Unsplash profile images.
+- ❌ **Unnecessary Advanced Filters**: Removed redundant 4-column filter drawer in favor of a clean, responsive search toolbar.
+
+---
+
+## 4. Real Audit Events Verified
+
+The system now records and displays genuine, timestamped audit events:
+
+| Event Action | Module | Trigger Condition | Status |
+| :--- | :--- | :--- | :--- |
+| `LOGIN_SUCCESS` | `AUTH` | Authenticated operator logs into platform | **PASS** |
+| `LOGOUT_SUCCESS` | `AUTH` | Authenticated operator logs out | **PASS** |
+| `CREATE_CASE` | `CASE_MANAGEMENT` | New forensic investigation case is created | **PASS** |
+| `UPDATE_CASE` | `CASE_MANAGEMENT` | Existing case metadata is updated | **PASS** |
+| `DELETE_CASE` | `CASE_MANAGEMENT` | Case workspace is archived / deleted | **PASS** |
+| `UPLOAD_EVIDENCE` | `EVIDENCE` | Forensic evidence files are uploaded and parsed | **PASS** |
+| `RUN_IOC_DETECTION` | `IOC_ENGINE` | Deterministic IOC extraction and matching runs | **PASS** |
+| `GENERATE_TIMELINE` | `TIMELINE_ENGINE` | Forensic chronological timeline is generated | **PASS** |
+| `GENERATE_MITRE_MAPPINGS` | `MITRE_ENGINE` | MITRE ATT&CK technique mapping is executed | **PASS** |
+| `AI_INVESTIGATION_RUN` | `AI_INVESTIGATION_ENGINE` | Multi-agent investigation workflow executes | **PASS** |
+| `GENERATE_REPORT` | `REPORTS` | PDF or CSV forensic report is synthesized | **PASS** |
+| `DELETE_REPORT` | `REPORTS` | Generated report document is deleted | **PASS** |
+
+---
+
+## 5. User Isolation & Security Boundaries
+
+Verification performed between `AKASH C` (`akash.demo@trace.local`, Investigator) and Administrator (`cso@trace.ai`):
+
+1. **Investigator Scoping**: `AKASH C` sees only audit logs generated by their own session and authorized cases. Unrelated/seeded demo logs (`cso@trace.ai`, `s.keller`, `attacker@scam.org`) are **not returned**.
+2. **Query Parameter Tampering Defense**: Passing `?user=cso@trace.ai` as an Investigator is ignored by the backend; the query remains strictly bound to `AKASH C`.
+3. **Direct ID Access Defense**: Attempting to fetch another user's audit log entry by ID (`GET /api/audit-logs/LOG-1001`) returns `HTTP 404 Not Found / Unauthorized`.
+4. **Export Scoping**: CSV and PDF exports generated by an Investigator contain only the operator's authorized audit entries.
+
+---
+
+## 6. Comprehensive Test Results
+
+| Test Item | Command / Test Suite | Result |
+| :--- | :--- | :--- |
+| **Audit Logs Scoping & Action Logging** | `node server/src/scratch/test_audit_simplification.js` | **PASS** |
+| **Audit API Regression Suite** | `npm run test:audit` | **PASS** |
+| **Authentication & Clearance Gate Suite** | `node server/src/scratch/test_auth_suite.js` | **PASS** |
+| **Reports Simplification & Isolation** | `node server/src/scratch/test_reports_simplification.js` | **PASS** |
+| **Frontend Production Build** | `npm run build` (in `client/`) | **PASS** |
+| **Empty-State Display Verification** | Zero-log account displays clean empty state | **PASS** |
+| **Real Case Creation Audit Flow** | Real `CREATE_CASE` log appears immediately after action | **PASS** |
+| **Real Report Generation Audit Flow** | Real `GENERATE_REPORT` log appears immediately after action | **PASS** |
+
+---
+
+## 7. Remaining Limitations
+
+- **Log Retention Policy**: Audit logs currently persist indefinitely in MongoDB; an automatic log rotation or TTL index can be configured if compliance demands a specific retention duration (e.g. 365 days).
+- **Admin Visibility**: Privileged administrators (`Super Admin` and `Admin`) retain full clearance to audit across all operators when compliance reviews are required.

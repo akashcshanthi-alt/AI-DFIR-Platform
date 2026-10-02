@@ -63,14 +63,37 @@ async function testAuditAPIs() {
 
   // 3. Test GET /audit-logs search
   try {
-    const res = await fetch(`${BASE_URL}/audit-logs?search=escalation`, { headers: authHeaders });
-    const data = await res.json();
+    let res = await fetch(`${BASE_URL}/audit-logs?search=escalation`, { headers: authHeaders });
+    let data = await res.json();
 
     if (!res.ok || !data.success) {
       throw new Error(`Search GET /audit-logs failed: ${JSON.stringify(data)}`);
     }
 
-    const hasEscalation = data.data.logs.some(l => l.action.toLowerCase().includes('escalation') || l.description.toLowerCase().includes('escalation'));
+    let hasEscalation = data.data.logs.some(l => l.action.toLowerCase().includes('escalation') || l.description.toLowerCase().includes('escalation'));
+    if (!hasEscalation) {
+      // Re-seed escalation log if previously deleted
+      const mongoose = require('mongoose');
+      const AuditLog = require('../models/AuditLog');
+      if (mongoose.connection.readyState === 0) {
+        await mongoose.connect('mongodb://127.0.0.1:27017/arclight_dfir');
+      }
+      await AuditLog.create({
+        user: 'attacker@scam.org',
+        role: 'Investigator',
+        action: 'Unauthorized privilege escalation attempt',
+        module: 'ACCESS',
+        resource: 'IAM User Config',
+        ipAddress: '198.51.100.99',
+        status: 'Failed',
+        severity: 'Critical',
+        description: 'A suspicious API key escalate command was rejected from an untrusted subnet.'
+      });
+      res = await fetch(`${BASE_URL}/audit-logs?search=escalation`, { headers: authHeaders });
+      data = await res.json();
+      hasEscalation = data.data.logs.some(l => l.action.toLowerCase().includes('escalation') || l.description.toLowerCase().includes('escalation'));
+    }
+
     if (!hasEscalation) {
       throw new Error('Search failed to filter records containing "escalation"');
     }
@@ -160,7 +183,26 @@ async function testAuditAPIs() {
 
   // 8. Test DELETE /audit-logs/:id
   try {
-    const res = await fetch(`${BASE_URL}/audit-logs/${testLogId}`, {
+    // Create dedicated disposable log for deletion test
+    const mongoose = require('mongoose');
+    const AuditLog = require('../models/AuditLog');
+    if (mongoose.connection.readyState === 0) {
+      await mongoose.connect('mongodb://127.0.0.1:27017/arclight_dfir');
+    }
+    const disposable = await AuditLog.create({
+      user: 'temp@trace.ai',
+      role: 'Analyst',
+      action: 'Disposable test action for deletion',
+      module: 'TEST',
+      resource: 'Test Resource',
+      ipAddress: '127.0.0.1',
+      status: 'Success',
+      severity: 'Low',
+      description: 'Temporary log to test deletion API'
+    });
+    const deleteTargetId = disposable.logId;
+
+    const res = await fetch(`${BASE_URL}/audit-logs/${deleteTargetId}`, {
       method: 'DELETE',
       headers: authHeaders
     });
@@ -171,13 +213,13 @@ async function testAuditAPIs() {
     }
 
     // Verify deletion check
-    const checkRes = await fetch(`${BASE_URL}/audit-logs/${testLogId}`, { headers: authHeaders });
+    const checkRes = await fetch(`${BASE_URL}/audit-logs/${deleteTargetId}`, { headers: authHeaders });
     const checkData = await checkRes.json();
     if (checkRes.ok && checkData.success) {
       throw new Error(`Log entry still exists after deletion command returned success`);
     }
 
-    console.log(`[PASS] 8. Verified audit log delete command (logId: ${testLogId}).`);
+    console.log(`[PASS] 8. Verified audit log delete command (logId: ${deleteTargetId}).`);
   } catch (err) {
     console.error(`[FAIL] Delete log test failed: ${err.message}`);
     process.exit(1);

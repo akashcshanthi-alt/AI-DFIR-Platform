@@ -1,1140 +1,665 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { 
-  FiCpu, 
-  FiActivity, 
-  FiAlertTriangle, 
-  FiFileText, 
-  FiCheckCircle, 
-  FiSend, 
-  FiInfo 
-} from 'react-icons/fi';
+import React, { useState, useEffect } from 'react';
+import {
+  Cpu,
+  Activity,
+  AlertTriangle,
+  FileText,
+  CheckCircle2,
+  AlertOctagon,
+  Info,
+  RefreshCw,
+  Clock,
+  Layers,
+  ExternalLink,
+  ShieldAlert,
+  ShieldCheck,
+  Check,
+  X,
+  ChevronDown,
+  ChevronUp,
+  HelpCircle,
+  Zap,
+  Terminal,
+  Server
+} from 'lucide-react';
+import { aiService } from '../../services/ai.service';
 
-import StatusBadge from '../../components/common/StatusBadge';
-
-// The six structured stages in the simulated triage timeline
-const ANALYSIS_STAGES = [
-  'Processing Evidence',
-  'Detecting Suspicious Indicators',
-  'Correlating Events',
-  'Calculating Risk Score',
-  'Building Attack Timeline',
-  'Generating AI Summary',
+const WORKFLOW_STAGES = [
+  'Load Case Context',
+  'Prepare & Redact Evidence',
+  'Build Candidate Hypotheses',
+  'Validate Hypotheses & Provenance',
+  'Synthesize Summary & Gaps',
+  'Persist Run & Audit Trail'
 ];
 
-// Grounded answers dictionary for prototype Ask TRACE AI chatbot
-const GROUNDED_ANSWERS = {
-  'why is this case high risk?': 
-    'The case is assessed as HIGH risk because the evidence shows correlated authentication anomalies, suspicious PowerShell execution, and an external network connection. Authentication risk is the strongest contributor at 88/100.',
-  
-  'what is the most suspicious activity?': 
-    'The most severe finding is the suspicious process execution identified in memory.raw at 10:34:27, which is classified as Critical.',
-  
-  'which evidence contributed most to the risk score?': 
-    'security.evtx contributed strongly to the assessment because it contains the authentication anomaly associated with an Authentication Risk score of 88.',
-  
-  'summarize the attack sequence.': 
-    'The observed sequence begins with an authentication anomaly at 10:31:14, followed by suspicious process execution at 10:34:27, and then an external network connection at 10:36:52.'
-};
+export default function AIAnalysisTab({ caseId }) {
+  const [readiness, setReadiness] = useState(null);
+  const [runs, setRuns] = useState([]);
+  const [activeRun, setActiveRun] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [investigating, setInvestigating] = useState(false);
+  const [activeStage, setActiveStage] = useState(0);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [error, setError] = useState(null);
+  const [actionSuccess, setActionSuccess] = useState(null);
 
-/**
- * AIAnalysisTab Component
- * Renders the primary AI Investigation findings, threat metrics gauges,
- * chronological indicators lists, and grounded question triggers.
- *
- * @param {Object} props
- * @param {string} [props.caseId] - Parent case unique identifier
- */
-export default function AIAnalysisTab({ caseId = 'TRC-2026-0042' }) {
-  // Main states: 'idle' | 'analyzing' | 'complete'
-  const [analysisState, setAnalysisState] = useState('idle');
-  const [currentStageIndex, setCurrentStageIndex] = useState(0);
-  const [progress, setProgress] = useState(0);
+  // Referenced evidence modal
+  const [referencedEvidence, setReferencedEvidence] = useState(null);
+  const [loadingEvidence, setLoadingEvidence] = useState(false);
+  const [isEvidenceModalOpen, setIsEvidenceModalOpen] = useState(false);
 
-  // Chatbot states
-  const [question, setQuestion] = useState('');
-  const [answer, setAnswer] = useState('');
-  const [isAnswering, setIsAnswering] = useState(false);
+  // Collapsible sections
+  const [showRejected, setShowRejected] = useState(false);
 
-  // Timer reference to avoid leaks
-  const timerRef = useRef(null);
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
 
-  // Clean up timers on unmount
+      const [readinessRes, runsRes] = await Promise.all([
+        aiService.getReadiness().catch(err => ({
+          ready: false,
+          status: 'OFFLINE',
+          error: err.message
+        })),
+        aiService.getInvestigationRuns({ caseId, limit: 20 })
+      ]);
+
+      setReadiness(readinessRes);
+      const fetchedRuns = runsRes.items || [];
+      setRuns(fetchedRuns);
+
+      if (fetchedRuns.length > 0) {
+        setActiveRun(prev => prev || fetchedRuns[0]);
+      }
+    } catch (err) {
+      console.error('Failed to load AI investigation data:', err);
+      setError(err.message || 'Failed to load AI data.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, []);
+    if (caseId) {
+      loadData();
+    }
+  }, [caseId]);
 
-  // Triggers the simulated multi-stage timeline sequence
-  const handleRunAnalysis = () => {
-    if (timerRef.current) clearInterval(timerRef.current);
-    
-    setAnalysisState('analyzing');
-    setProgress(0);
-    setCurrentStageIndex(0);
-    setQuestion('');
-    setAnswer('');
+  const handleStartInvestigation = async () => {
+    let timerInterval = null;
+    const stageTimeoutIds = [];
+    try {
+      setInvestigating(true);
+      setError(null);
+      setActionSuccess(null);
+      setActiveStage(0);
+      setElapsedSeconds(0);
 
-    let currentProgress = 0;
+      const startTime = Date.now();
+      timerInterval = setInterval(() => {
+        setElapsedSeconds(Math.floor((Date.now() - startTime) / 1000));
+      }, 1000);
 
-    timerRef.current = setInterval(() => {
-      currentProgress += 5;
-      
-      if (currentProgress <= 100) {
-        setProgress(currentProgress);
-        
-        // Map percentages to active stage indexes
-        if (currentProgress <= 15) {
-          setCurrentStageIndex(0);
-        } else if (currentProgress <= 35) {
-          setCurrentStageIndex(1);
-        } else if (currentProgress <= 55) {
-          setCurrentStageIndex(2);
-        } else if (currentProgress <= 75) {
-          setCurrentStageIndex(3);
-        } else if (currentProgress <= 90) {
-          setCurrentStageIndex(4);
-        } else {
-          setCurrentStageIndex(5);
-        }
-      }
+      // Realistic milestone progression:
+      // Stage 0 (Load Case Context): 0 - 2s
+      // Stage 1 (Prepare & Redact): 2 - 5s
+      // Stage 2 (Build Candidate Hypotheses): 5 - 12s
+      // Stage 3 (Validate Hypotheses & Provenance): 12 - 20s
+      // Stage 4 (Synthesize Summary & Gaps with Ollama LLM): 20s+ (stays here until API responds!)
+      stageTimeoutIds.push(setTimeout(() => setActiveStage(1), 2000));
+      stageTimeoutIds.push(setTimeout(() => setActiveStage(2), 5000));
+      stageTimeoutIds.push(setTimeout(() => setActiveStage(3), 12000));
+      stageTimeoutIds.push(setTimeout(() => setActiveStage(4), 20000));
 
-      if (currentProgress >= 100) {
-        clearInterval(timerRef.current);
-        // Short pause on completion state before drawing results
-        setTimeout(() => {
-          setAnalysisState('complete');
-        }, 500);
-      }
-    }, 120); // Simulated lifecycle finishes in ~2.4s
+      const newRun = await aiService.startInvestigation(caseId);
+
+      // Clear pending stage increments
+      stageTimeoutIds.forEach(id => clearTimeout(id));
+      if (timerInterval) clearInterval(timerInterval);
+
+      // Upon API resolution, advance to final persist stage (100%)
+      setActiveStage(WORKFLOW_STAGES.length - 1);
+      setActionSuccess(`Investigation run [${newRun.runId}] completed successfully.`);
+      setActiveRun(newRun);
+      setRuns(prev => [newRun, ...prev.filter(r => r.runId !== newRun.runId)]);
+
+      // Brief transition delay so operator sees 100% completion before settling
+      await new Promise(r => setTimeout(r, 600));
+      setTimeout(() => setActionSuccess(null), 4000);
+    } catch (err) {
+      console.error('Investigation failed:', err);
+      stageTimeoutIds.forEach(id => clearTimeout(id));
+      if (timerInterval) clearInterval(timerInterval);
+      setError(err.message || 'Investigation run failed.');
+    } finally {
+      if (timerInterval) clearInterval(timerInterval);
+      setInvestigating(false);
+      setActiveStage(0);
+      setElapsedSeconds(0);
+    }
   };
 
-  // Submit grounded question
-  const handleAskQuestion = (e) => {
-    if (e) e.preventDefault();
-    const cleanQuery = question.trim().toLowerCase();
-    if (!cleanQuery || isAnswering) return;
-
-    setIsAnswering(true);
-    setAnswer('');
-
-    // Simulate standard model processing lag
-    setTimeout(() => {
-      const groundedResponse = GROUNDED_ANSWERS[cleanQuery];
-      if (groundedResponse) {
-        setAnswer(groundedResponse);
-      } else {
-        setAnswer('I can answer questions only about the findings, risk data, evidence, and timeline available in this case.');
-      }
-      setIsAnswering(false);
-    }, 600);
+  const handleInspectReferencedEvidence = async (runId) => {
+    try {
+      setLoadingEvidence(true);
+      setIsEvidenceModalOpen(true);
+      const data = await aiService.getReferencedEvidence(runId);
+      setReferencedEvidence(data.evidenceItems || []);
+    } catch (err) {
+      console.error('Failed to fetch evidence:', err);
+      setError(err.message || 'Failed to fetch referenced evidence.');
+    } finally {
+      setLoadingEvidence(false);
+    }
   };
 
-  // Preset question selectors click trigger
-  const handleSelectSuggestion = (suggestedText) => {
-    setQuestion(suggestedText);
-    // Prepare for direct submission
-    setIsAnswering(true);
-    setAnswer('');
-    setTimeout(() => {
-      const groundedResponse = GROUNDED_ANSWERS[suggestedText.trim().toLowerCase()];
-      setAnswer(groundedResponse || 'I can answer questions only about the findings, risk data, evidence, and timeline available in this case.');
-      setIsAnswering(false);
-    }, 600);
-  };
-
-  // Reset/Replay
-  const handleRerun = () => {
-    handleRunAnalysis();
-  };
+  const isOllamaOnline = readiness?.ready === true;
 
   return (
-    <div className="trace-ai-tab">
-      {/* Component styles module */}
-      <style dangerouslySetInnerHTML={{
-        __html: `
-          .trace-ai-tab {
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-            width: 100%;
-            box-sizing: border-box;
-          }
-
-          /* Idle State Cards */
-          .trace-ai-idle-card {
-            background-color: var(--bg-surface, #0e1626);
-            border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
-            border-radius: var(--radius-md, 8px);
-            padding: 40px 32px;
-            text-align: center;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 16px;
-            max-width: 580px;
-            margin: 20px auto;
-            box-shadow: var(--shadow-sm);
-            box-sizing: border-box;
-            user-select: none;
-          }
-
-          .trace-ai-idle-icon {
-            font-size: 3rem;
-            color: var(--color-primary, #3b82f6);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-          }
-
-          .trace-ai-idle-title {
-            font-size: 1.3rem;
-            font-weight: 700;
-            color: var(--text-primary, #f8fafc);
-            margin: 0;
-          }
-
-          .trace-ai-idle-desc {
-            font-size: 0.875rem;
-            color: var(--text-secondary, #cbd5e1);
-            line-height: 1.55;
-            margin: 0;
-          }
-
-          .trace-ai-idle-info {
-            display: flex;
-            gap: 16px;
-            background-color: var(--bg-secondary, #0a0f1d);
-            border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
-            border-radius: var(--radius-sm, 4px);
-            padding: 10px 16px;
-            font-size: 0.8125rem;
-            font-weight: 500;
-            color: var(--text-secondary, #cbd5e1);
-            margin-top: 4px;
-            flex-wrap: wrap;
-            justify-content: center;
-          }
-
-          .trace-ai-idle-info span strong {
-            color: var(--text-primary, #f8fafc);
-          }
-
-          .trace-ai-run-btn {
-            background-color: var(--color-primary, #3b82f6);
-            color: #ffffff;
-            border: none;
-            border-radius: var(--radius-sm, 4px);
-            padding: 10px 24px;
-            font-size: 0.875rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background-color var(--transition-speed, 200ms) ease;
-            outline: none;
-            margin-top: 8px;
-          }
-
-          .trace-ai-run-btn:hover {
-            background-color: var(--color-primary-hover, #2563eb);
-          }
-
-          .trace-ai-run-btn:focus-visible {
-            outline: 2px solid var(--color-secondary, #06b6d4);
-            outline-offset: 2px;
-          }
-
-          /* Analyzing Triage Progress Panel */
-          .trace-ai-progress-card {
-            background-color: var(--bg-surface, #0e1626);
-            border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
-            border-radius: var(--radius-md, 8px);
-            padding: 32px;
-            max-width: 580px;
-            margin: 20px auto;
-            box-shadow: var(--shadow-sm);
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-            box-sizing: border-box;
-            width: 100%;
-          }
-
-          .trace-ai-progress-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            user-select: none;
-          }
-
-          .trace-ai-progress-title {
-            font-size: 1rem;
-            font-weight: 600;
-            color: var(--text-primary, #f8fafc);
-            margin: 0;
-          }
-
-          .trace-ai-progress-percent {
-            font-family: 'SFMono-Regular', Consolas, monospace;
-            font-weight: 700;
-            color: var(--color-secondary, #06b6d4);
-            font-size: 0.875rem;
-          }
-
-          .trace-ai-progress-bar-track {
-            width: 100%;
-            height: 6px;
-            background-color: var(--bg-secondary, #0a0f1d);
-            border-radius: var(--radius-full, 9999px);
-            overflow: hidden;
-          }
-
-          .trace-ai-progress-bar-fill {
-            height: 100%;
-            background-color: var(--color-primary, #3b82f6);
-            transition: width 120ms linear;
-          }
-
-          .trace-ai-stages-list {
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-            margin-top: 8px;
-            user-select: none;
-          }
-
-          .trace-ai-stage-item {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            font-size: 0.875rem;
-            font-weight: 500;
-            color: var(--text-muted, #64748b);
-          }
-
-          .trace-ai-stage-item.complete {
-            color: var(--text-secondary, #cbd5e1);
-          }
-
-          .trace-ai-stage-item.active {
-            color: var(--color-primary, #3b82f6);
-            font-weight: 600;
-          }
-
-          .trace-ai-stage-dot {
-            width: 18px;
-            height: 18px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 0.65rem;
-            font-weight: 700;
-            box-sizing: border-box;
-            flex-shrink: 0;
-          }
-
-          .trace-ai-stage-dot.complete {
-            background-color: var(--status-low-bg, rgba(34, 197, 94, 0.15));
-            border: 1px solid var(--status-low, #22c55e);
-            color: var(--status-low, #22c55e);
-          }
-
-          .trace-ai-stage-dot.active {
-            background-color: var(--color-primary-light, rgba(59, 130, 246, 0.15));
-            border: 1px solid var(--color-primary, #3b82f6);
-            color: var(--color-primary, #3b82f6);
-            animation: trace-ai-pulse-dot 1s infinite alternate;
-          }
-
-          .trace-ai-stage-dot.pending {
-            border: 1px dashed var(--text-muted, #64748b);
-            color: var(--text-muted, #64748b);
-          }
-
-          @keyframes trace-ai-pulse-dot {
-            from { opacity: 0.55; }
-            to { opacity: 1; }
-          }
-
-          /* Results workspace template */
-          .trace-ai-results-grid {
-            display: grid;
-            grid-template-columns: 1fr 1.8fr;
-            gap: 20px;
-            box-sizing: border-box;
-          }
-
-          .trace-ai-card {
-            background-color: var(--bg-surface, #0e1626);
-            border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
-            border-radius: var(--radius-md, 8px);
-            padding: 20px;
-            box-shadow: var(--shadow-sm);
-            box-sizing: border-box;
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-          }
-
-          .trace-ai-card-title {
-            font-size: 0.95rem;
-            font-weight: 600;
-            color: var(--text-primary, #f8fafc);
-            margin: 0;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
-            padding-bottom: 10px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            user-select: none;
-          }
-
-          .trace-ai-rerun-btn {
-            background: transparent;
-            border: none;
-            color: var(--text-muted, #64748b);
-            font-size: 0.75rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: color var(--transition-speed, 200ms);
-            text-decoration: underline;
-            outline: none;
-            padding: 0;
-          }
-
-          .trace-ai-rerun-btn:hover {
-            color: var(--color-primary, #3b82f6);
-          }
-
-          .trace-ai-rerun-btn:focus-visible {
-            outline: 2px solid var(--color-primary, #3b82f6);
-            outline-offset: 1px;
-          }
-
-          /* Gauge styling */
-          .trace-ai-gauge-container {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 12px;
-            padding: 8px 0;
-            box-sizing: border-box;
-          }
-
-          .trace-ai-gauge-svg {
-            width: 100px;
-            height: 100px;
-            display: block;
-          }
-
-          .trace-ai-gauge-bg {
-            stroke: rgba(255, 255, 255, 0.03);
-            stroke-width: 8;
-            fill: none;
-          }
-
-          .trace-ai-gauge-fill {
-            stroke: var(--status-high, #f97316); /* orange High level code color */
-            stroke-width: 8;
-            stroke-linecap: round;
-            fill: none;
-            transform: rotate(-90deg);
-            transform-origin: 50% 50%;
-            stroke-dasharray: 251.32;
-            stroke-dashoffset: 45.24; /* (1 - 0.82) * 251.32 = 82% */
-            animation: trace-gauge-fill-anim 1s ease-out;
-          }
-
-          @keyframes trace-gauge-fill-anim {
-            from { stroke-dashoffset: 251.32; }
-            to { stroke-dashoffset: 45.24; }
-          }
-
-          .trace-ai-gauge-text {
-            fill: var(--text-primary, #f8fafc);
-            font-size: 19px;
-            font-weight: 700;
-            text-anchor: middle;
-            font-family: 'SFMono-Regular', Consolas, monospace;
-          }
-
-          .trace-ai-gauge-subtext {
-            fill: var(--text-muted, #64748b);
-            font-size: 8px;
-            font-weight: 600;
-            text-anchor: middle;
-            text-transform: uppercase;
-            letter-spacing: 0.06em;
-          }
-
-          /* Risk breakdown categories */
-          .trace-ai-breakdown-list {
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-            box-sizing: border-box;
-          }
-
-          .trace-ai-breakdown-item {
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-          }
-
-          .trace-ai-breakdown-label-row {
-            display: flex;
-            justify-content: space-between;
-            font-size: 0.8125rem;
-            font-weight: 600;
-            color: var(--text-secondary, #cbd5e1);
-          }
-
-          .trace-ai-breakdown-bar-track {
-            width: 100%;
-            height: 4px;
-            background-color: var(--bg-secondary, #0a0f1d);
-            border-radius: var(--radius-full, 9999px);
-            overflow: hidden;
-          }
-
-          .trace-ai-breakdown-bar-fill {
-            height: 100%;
-            border-radius: var(--radius-full, 9999px);
-            background-color: var(--color-primary, #3b82f6);
-            transition: width 1s ease;
-          }
-
-          .trace-ai-breakdown-bar-fill.high {
-            background-color: var(--status-high, #f97316);
-          }
-
-          /* General summary list */
-          .trace-ai-meta-list {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            border-top: 1px solid rgba(255, 255, 255, 0.03);
-            padding-top: 14px;
-            box-sizing: border-box;
-          }
-
-          .trace-ai-meta-item {
-            display: flex;
-            justify-content: space-between;
-            font-size: 0.8125rem;
-          }
-
-          .trace-ai-meta-label {
-            color: var(--text-muted, #64748b);
-            font-weight: 500;
-          }
-
-          .trace-ai-meta-val {
-            color: var(--text-primary, #f8fafc);
-            font-weight: 600;
-          }
-
-          /* Suspicious Indicators finding cards */
-          .trace-ai-findings-list {
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-            box-sizing: border-box;
-          }
-
-          .trace-ai-finding-card {
-            background-color: var(--bg-secondary, #0a0f1d);
-            border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
-            border-radius: var(--radius-sm, 4px);
-            padding: 12px 14px;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            box-sizing: border-box;
-          }
-
-          .trace-ai-finding-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 12px;
-          }
-
-          .trace-ai-finding-title {
-            font-size: 0.875rem;
-            font-weight: 600;
-            color: var(--text-primary, #f8fafc);
-          }
-
-          .trace-ai-finding-meta-row {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            font-size: 0.75rem;
-            color: var(--text-muted, #64748b);
-            font-family: monospace;
-          }
-
-          .trace-ai-finding-meta-item span {
-            color: var(--text-secondary, #cbd5e1);
-          }
-
-          .trace-ai-finding-desc {
-            font-size: 0.8125rem;
-            line-height: 1.45;
-            color: var(--text-secondary, #cbd5e1);
-            margin: 0;
-          }
-
-          /* Summary details text */
-          .trace-ai-summary-text {
-            font-size: 0.875rem;
-            line-height: 1.5;
-            color: var(--text-secondary, #cbd5e1);
-            margin: 0;
-          }
-
-          .trace-ai-summary-badge {
-            background-color: rgba(6, 182, 212, 0.1);
-            border: 1px solid rgba(6, 182, 212, 0.15);
-            color: var(--color-secondary, #06b6d4);
-            font-size: 0.65rem;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            padding: 2px 6px;
-            border-radius: 3px;
-            width: fit-content;
-            user-select: none;
-          }
-
-          /* Ask TRACE AI chatbot capsule */
-          .trace-ai-chat-card {
-            margin-top: 8px;
-            box-sizing: border-box;
-          }
-
-          .trace-ai-chat-subtitle {
-            font-size: 0.8125rem;
-            color: var(--text-secondary, #cbd5e1);
-            margin: 4px 0 12px 0;
-          }
-
-          .trace-ai-chat-suggestions {
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-            margin-bottom: 12px;
-          }
-
-          .trace-ai-chat-suggestion-btn {
-            background-color: var(--bg-secondary, #0a0f1d);
-            border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
-            border-radius: var(--radius-full, 9999px);
-            color: var(--text-secondary, #cbd5e1);
-            padding: 5px 12px;
-            font-size: 0.725rem;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all var(--transition-speed, 200ms) ease;
-            outline: none;
-          }
-
-          .trace-ai-chat-suggestion-btn:hover {
-            border-color: var(--color-primary, #3b82f6);
-            background-color: rgba(59, 130, 246, 0.02);
-            color: var(--text-primary, #f8fafc);
-          }
-
-          .trace-ai-chat-suggestion-btn:focus-visible {
-            outline: 2px solid var(--color-primary, #3b82f6);
-          }
-
-          .trace-ai-chat-input-row {
-            display: flex;
-            gap: 12px;
-            align-items: center;
-          }
-
-          .trace-ai-chat-input-wrap {
-            position: relative;
-            display: flex;
-            align-items: center;
-            flex: 1;
-          }
-
-          .trace-ai-chat-input {
-            width: 100%;
-            background-color: var(--bg-secondary, #0a0f1d);
-            border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
-            border-radius: var(--radius-sm, 4px);
-            padding: 10px 14px;
-            color: var(--text-primary, #f8fafc);
-            font-size: 0.875rem;
-            outline: none;
-            transition: border-color var(--transition-speed, 200ms) ease;
-            height: 38px;
-            box-sizing: border-box;
-          }
-
-          .trace-ai-chat-input:focus {
-            border-color: var(--color-primary, #3b82f6);
-            box-shadow: 0 0 0 1px var(--color-primary-light, rgba(59, 130, 246, 0.1));
-          }
-
-          .trace-ai-chat-ask-btn {
-            background-color: var(--color-primary, #3b82f6);
-            color: #ffffff;
-            border: none;
-            border-radius: var(--radius-sm, 4px);
-            padding: 8px 16px;
-            font-size: 0.875rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background-color var(--transition-speed, 200ms) ease;
-            outline: none;
-            height: 38px;
-            box-sizing: border-box;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-            user-select: none;
-            flex-shrink: 0;
-          }
-
-          .trace-ai-chat-ask-btn:hover:not(:disabled) {
-            background-color: var(--color-primary-hover, #2563eb);
-          }
-
-          .trace-ai-chat-ask-btn:disabled {
-            opacity: 0.65;
-            cursor: not-allowed;
-          }
-
-          .trace-ai-chat-ask-btn:focus-visible {
-            outline: 2px solid var(--color-secondary, #06b6d4);
-            outline-offset: 2px;
-          }
-
-          /* Chat Response Balloon card */
-          .trace-ai-chat-response-box {
-            background-color: var(--bg-secondary, #0a0f1d);
-            border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
-            border-radius: var(--radius-sm, 4px);
-            padding: 16px;
-            margin-top: 16px;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            box-sizing: border-box;
-            animation: trace-ai-slideDown 250ms ease;
-          }
-
-          .trace-ai-chat-response-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            font-size: 0.725rem;
-            font-weight: 700;
-            user-select: none;
-          }
-
-          .trace-ai-chat-response-badge {
-            color: var(--color-primary, #3b82f6);
-            text-transform: uppercase;
-            letter-spacing: 0.06em;
-            display: flex;
-            align-items: center;
-            gap: 4px;
-          }
-
-          .trace-ai-chat-response-source {
-            color: var(--text-muted, #64748b);
-            font-weight: 500;
-          }
-
-          .trace-ai-chat-response-body {
-            font-size: 0.875rem;
-            line-height: 1.45;
-            color: var(--text-secondary, #cbd5e1);
-            margin: 0;
-          }
-
-          .trace-ai-chat-spinner {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            border: 2px solid rgba(255, 255, 255, 0.15);
-            border-top-color: var(--color-primary, #3b82f6);
-            animation: trace-btn-spin 0.75s linear infinite;
-            flex-shrink: 0;
-            display: inline-block;
-          }
-
-          @keyframes trace-ai-slideDown {
-            from { opacity: 0; transform: translateY(-4px); }
-            to { opacity: 1; transform: translateY(0); }
-          }
-
-          /* Responsive Layout */
-          @media (max-width: 992px) {
-            .trace-ai-results-grid {
-              grid-template-columns: 1fr;
-            }
-          }
-
-          @media (max-width: 768px) {
-            .trace-ai-idle-card,
-            .trace-ai-progress-card {
-              padding: 24px 16px;
-              margin: 10px 0;
-            }
-          }
-        `
-      }} />
-
-      {/* State 1: IDLE Intro State */}
-      {analysisState === 'idle' && (
-        <section className="trace-ai-idle-card" aria-label="Run Triage introduction">
-          <div className="trace-ai-idle-icon" aria-hidden="true">
-            <FiCpu />
+    <div className="space-y-6">
+      {/* Toast Notifications */}
+      {actionSuccess && (
+        <div className="bg-[#10b981]/15 border border-[#10b981]/40 text-[#10b981] px-4 py-3 rounded-xl flex items-center justify-between shadow-lg backdrop-blur-sm animate-fade-in text-xs font-semibold">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 shrink-0 text-[#10b981]" />
+            <span>{actionSuccess}</span>
           </div>
-          <h3 className="trace-ai-idle-title">AI Investigation</h3>
-          <p className="trace-ai-idle-desc">
-            Analyze case evidence to identify suspicious activity, correlate events, and assess investigation risk score.
+          <button onClick={() => setActionSuccess(null)} className="text-[#10b981] hover:opacity-80">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {error && (
+        <div className="bg-error/15 border border-error/40 text-error px-4 py-3 rounded-xl flex items-center justify-between shadow-lg backdrop-blur-sm animate-fade-in text-xs font-semibold">
+          <div className="flex items-center gap-2">
+            <AlertOctagon className="w-4 h-4 shrink-0 text-error" />
+            <span>{error}</span>
+          </div>
+          <button onClick={() => setError(null)} className="text-error hover:opacity-80">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Ollama Readiness Status Banner */}
+      <div className={`p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs ${
+        isOllamaOnline
+          ? 'bg-[#10b981]/10 border-[#10b981]/30 text-[#6ee7b7]'
+          : 'bg-[#f59e0b]/10 border-[#f59e0b]/30 text-[#fcd34d]'
+      }`}>
+        <div className="flex items-start sm:items-center gap-3">
+          <Server className={`w-5 h-5 shrink-0 ${isOllamaOnline ? 'text-[#10b981]' : 'text-[#f59e0b]'}`} />
+          <div>
+            <div className="font-bold text-white flex items-center gap-2">
+              <span>Local Ollama LLM Service:</span>
+              <span className={`px-2 py-0.5 rounded text-[10px] font-mono uppercase ${
+                isOllamaOnline ? 'bg-[#10b981]/20 text-[#10b981]' : 'bg-[#f59e0b]/20 text-[#f59e0b]'
+              }`}>
+                {readiness?.status || 'OFFLINE'}
+              </span>
+              <span className="text-[#8b90a0] font-normal">({readiness?.model || 'mistral:latest'})</span>
+            </div>
+            <p className="text-[11px] text-[#cbd5e1] mt-0.5">
+              {isOllamaOnline
+                ? readiness.message || 'Ollama server is active and ready for local inference.'
+                : 'Ollama is offline or unreachable. Start Ollama locally with: "ollama run mistral:latest". Ordinary DFIR ingestion, timeline, and MITRE mapping remain fully functional.'}
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={loadData}
+          disabled={loading}
+          className="self-start sm:self-auto px-3 py-1.5 rounded-lg bg-surface-container-high border border-white/10 text-white hover:bg-white/10 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+          <span>Probe Status</span>
+        </button>
+      </div>
+
+      {/* Mandatory Operational Warning Banner */}
+      <div className="bg-surface-container-low border border-white/5 rounded-xl p-4 flex items-start gap-3 text-xs leading-relaxed text-[#94a3b8]">
+        <Info className="w-5 h-5 text-[#38bdf8] shrink-0 mt-0.5" />
+        <div>
+          <div className="font-bold text-white mb-0.5 flex items-center gap-2">
+            <span>AI Investigation Engine Architecture (LangGraph + Ollama)</span>
+            <span className="bg-[#38bdf8]/15 text-[#38bdf8] text-[10px] font-mono px-2 py-0.5 rounded border border-[#38bdf8]/30">
+              UNTRUSTED EVIDENCE SANDBOX
+            </span>
+          </div>
+          <p className="text-[#cbd5e1] text-[11px]">
+            The investigation workflow enforces deterministic stage gates. Evidence payloads are sandboxed as untrusted data with credentials redacted.
+            Every candidate hypothesis is verified against persisted evidence IDs—unsupported or hallucinated claims are strictly rejected.
           </p>
+        </div>
+      </div>
 
-          <div className="trace-ai-idle-info">
-            <span>Evidence Ready: <strong>4 files</strong></span>
-            <span>Case: <strong>{caseId}</strong></span>
-            <span>Analysis Status: <strong>Ready</strong></span>
-          </div>
+      {/* Top Header & Investigation Control Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-white/5">
+        <div>
+          <h2 className="text-lg font-bold text-white tracking-wide flex items-center gap-2.5">
+            <Cpu className="w-5 h-5 text-[#47faf3]" />
+            <span>AI Forensic Investigation Engine</span>
+            <span className="text-[10px] uppercase font-mono px-2.5 py-0.5 bg-[#47faf3]/10 text-[#47faf3] rounded-full border border-[#47faf3]/20">
+              LangGraph DFIR Workflow
+            </span>
+          </h2>
+          <p className="text-xs text-[#8b90a0] mt-1">
+            Deterministic reasoning graph analyzing persisted evidence records, timeline chronology, and threat indicators.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          {/* Previous runs selector */}
+          {runs.length > 0 && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-[#8b90a0]">Run:</span>
+              <select
+                value={activeRun?.runId || ''}
+                onChange={(e) => {
+                  const selected = runs.find(r => r.runId === e.target.value);
+                  if (selected) setActiveRun(selected);
+                }}
+                className="bg-surface-container-highest border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#47faf3]"
+              >
+                {runs.map(r => (
+                  <option key={r.runId} value={r.runId}>
+                    {r.runId} ({new Date(r.createdAt).toLocaleDateString()} {new Date(r.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}) - {r.status}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <button
             type="button"
-            className="trace-ai-run-btn"
-            onClick={handleRunAnalysis}
-            title="Start simulated AI triangulation"
+            onClick={handleStartInvestigation}
+            disabled={investigating}
+            className="px-4 py-2 rounded-lg bg-[#47faf3]/15 hover:bg-[#47faf3]/25 border border-[#47faf3]/40 text-[#47faf3] text-xs font-bold transition-all shadow-[0_0_15px_rgba(71,250,243,0.15)] flex items-center gap-2 cursor-pointer disabled:opacity-50"
           >
-            Run AI Analysis
+            <Zap className={`w-4 h-4 ${investigating ? 'animate-bounce text-[#47faf3]' : ''}`} />
+            <span>{investigating ? 'Running LangGraph Workflow...' : 'Execute AI Investigation'}</span>
           </button>
-        </section>
+        </div>
+      </div>
+
+      {/* Live Stage Progress Indicator while running */}
+      {investigating && (
+        <div className="glass-panel p-5 rounded-xl border border-[#47faf3]/30 bg-[#47faf3]/5 space-y-3 animate-fade-in">
+          <div className="flex justify-between items-center text-xs">
+            <span className="font-bold text-white flex items-center gap-2">
+              <RefreshCw className="w-4 h-4 animate-spin text-[#47faf3]" />
+              <span>Executing Stage {activeStage + 1} of {WORKFLOW_STAGES.length}: {WORKFLOW_STAGES[activeStage]}</span>
+            </span>
+            <span className="font-mono text-[#47faf3] font-bold">
+              {activeStage === WORKFLOW_STAGES.length - 1
+                ? 100
+                : Math.min(85, Math.round(((activeStage + 1) / WORKFLOW_STAGES.length) * 100))}%
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-2 pt-1">
+            {WORKFLOW_STAGES.map((stg, i) => (
+              <div
+                key={i}
+                className={`p-2 rounded-lg text-center text-[10px] font-semibold border transition-all ${
+                  i < activeStage
+                    ? 'bg-[#10b981]/20 border-[#10b981]/40 text-[#10b981]'
+                    : i === activeStage
+                    ? 'bg-[#47faf3]/20 border-[#47faf3]/50 text-[#47faf3] animate-pulse'
+                    : 'bg-surface-container-high border-white/5 text-[#8b90a0]'
+                }`}
+              >
+                {stg}
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
-      {/* State 2: ANALYZING Simulated Progress Ticker State */}
-      {analysisState === 'analyzing' && (
-        <section 
-          className="trace-ai-progress-card" 
-          aria-label="AI triage in progress"
-          role="status"
-          aria-live="polite"
-          aria-busy="true"
-        >
-          <div className="trace-ai-progress-header">
-            <h3 className="trace-ai-progress-title">Analyzing evidence...</h3>
-            <span className="trace-ai-progress-percent">{progress}%</span>
+      {/* Main Display: Active Run Findings */}
+      {investigating ? (
+        <div className="glass-panel rounded-xl p-8 sm:p-12 text-center text-[#8b90a0] flex flex-col items-center justify-center gap-4 border border-[#47faf3]/30 bg-[#47faf3]/5 animate-fade-in">
+          <div className="relative">
+            <Cpu className="w-14 h-14 text-[#47faf3] animate-bounce" />
+            <RefreshCw className="w-5 h-5 animate-spin text-white absolute -bottom-1 -right-1" />
+          </div>
+          <div className="space-y-1.5 max-w-md">
+            <h3 className="font-bold text-white text-base">
+              Executing LangGraph Multi-Stage Investigation
+            </h3>
+            <p className="text-xs text-[#8b90a0] leading-relaxed">
+              Stage {activeStage + 1} of {WORKFLOW_STAGES.length}:{' '}
+              <strong className="text-[#47faf3]">{WORKFLOW_STAGES[activeStage]}</strong>
+            </p>
+            <p className="text-[11px] text-[#cbd5e1]">
+              Analyzing case evidence records, testing hypothesis provenance, and synthesizing incident narrative using local Ollama model <span className="font-mono text-white">mistral:latest</span>.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 text-xs font-mono text-[#47faf3] bg-surface-container-high/80 px-3 py-1.5 rounded-lg border border-white/10 mt-1">
+            <Clock className="w-3.5 h-3.5 animate-spin" />
+            <span>Execution Elapsed: {elapsedSeconds}s</span>
+          </div>
+        </div>
+      ) : loading ? (
+        <div className="glass-panel rounded-xl p-12 text-center text-[#8b90a0] flex flex-col items-center justify-center gap-3">
+          <RefreshCw className="w-8 h-8 animate-spin text-[#47faf3]" />
+          <p className="text-xs font-semibold text-white">Loading forensic investigation findings...</p>
+        </div>
+      ) : !activeRun ? (
+        <div className="glass-panel rounded-xl p-12 text-center text-[#8b90a0] flex flex-col items-center justify-center gap-3 border border-white/5">
+          <Cpu className="w-12 h-12 text-outline mb-1 opacity-50" />
+          <h3 className="font-semibold text-white text-sm">No AI Investigation Executed Yet</h3>
+          <p className="text-xs max-w-md text-[#8b90a0] leading-relaxed">
+            Execute the LangGraph investigation workflow to synthesize candidate hypotheses, validate evidence references, and identify visibility gaps for this case.
+          </p>
+          <button
+            onClick={handleStartInvestigation}
+            disabled={investigating}
+            className="mt-2 px-4 py-2 rounded-lg bg-[#47faf3]/15 hover:bg-[#47faf3]/25 border border-[#47faf3]/30 text-[#47faf3] text-xs font-bold transition-all cursor-pointer"
+          >
+            Start Investigation Run
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {/* Run Header Badges & Execution Metadata */}
+          <div className="flex flex-wrap items-center justify-between gap-3 text-xs bg-surface-container-high/40 p-3.5 rounded-xl border border-white/5">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="font-mono font-bold text-white px-2 py-0.5 rounded bg-surface-container-highest border border-white/10">
+                Run ID: {activeRun.runId}
+              </span>
+              <span className={`px-2 py-0.5 rounded font-bold uppercase text-[10px] border ${
+                activeRun.status === 'completed'
+                  ? 'bg-[#10b981]/15 text-[#10b981] border-[#10b981]/40'
+                  : 'bg-error/15 text-error border-error/40'
+              }`}>
+                {activeRun.status}
+              </span>
+              <span className="text-[#8b90a0]">
+                Model: <strong className="text-white font-mono">{activeRun.model}</strong>
+              </span>
+              <span className="text-[#8b90a0]">
+                Workflow: <strong className="text-white">{activeRun.workflowVersion}</strong>
+              </span>
+              <span className="text-[#8b90a0]">
+                Duration: <strong className="text-white">{activeRun.runDurationMs}ms</strong>
+              </span>
+            </div>
+
+            <button
+              onClick={() => handleInspectReferencedEvidence(activeRun.runId)}
+              className="text-[#38bdf8] hover:underline flex items-center gap-1 font-semibold text-xs"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span>Inspect Analyzed Evidence ({activeRun.referencedEvidence?.length || 0} files)</span>
+            </button>
           </div>
 
-          <div className="trace-ai-progress-bar-track">
-            <div 
-              className="trace-ai-progress-bar-fill"
-              style={{ width: `${progress}%` }}
-            />
+          {/* Executive Summary Card */}
+          <div className="glass-panel p-6 rounded-xl border border-white/5 bg-surface-container-low space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <FileText className="w-4 h-4 text-[#47faf3]" />
+                <span>Executive Summary</span>
+              </h3>
+              <span className="text-[10px] font-mono text-[#f59e0b] bg-[#f59e0b]/10 px-2 py-0.5 rounded border border-[#f59e0b]/30">
+                CANDIDATE AI SYNTHESIS
+              </span>
+            </div>
+            <p className="text-xs text-[#cbd5e1] leading-relaxed">
+              {activeRun.executiveSummary}
+            </p>
+
+            {activeRun.candidateNarrative && (
+              <div className="mt-4 pt-4 border-t border-white/5">
+                <h4 className="text-xs font-bold text-white mb-2 flex items-center gap-2">
+                  <Activity className="w-3.5 h-3.5 text-secondary" />
+                  <span>Adversary Intrusion Narrative Flow</span>
+                </h4>
+                <p className="text-xs text-[#94a3b8] leading-relaxed">
+                  {activeRun.candidateNarrative}
+                </p>
+              </div>
+            )}
           </div>
 
-          {/* Verification checklist tracker */}
-          <div className="trace-ai-stages-list">
-            {ANALYSIS_STAGES.map((stage, idx) => {
-              const isComplete = idx < currentStageIndex;
-              const isActive = idx === currentStageIndex;
-              
-              let stepClass = 'pending';
-              if (isComplete) stepClass = 'complete';
-              else if (isActive) stepClass = 'active';
+          {/* Validated Candidate Hypotheses */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between px-1">
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <ShieldAlert className="w-4 h-4 text-[#10b981]" />
+                <span>Validated Candidate Hypotheses ({activeRun.hypotheses?.length || 0})</span>
+              </h3>
+              <span className="text-xs text-[#8b90a0]">
+                Strict provenance verified: zero fabricated IDs
+              </span>
+            </div>
 
-              return (
-                <div key={stage} className={`trace-ai-stage-item ${stepClass}`}>
-                  <div className={`trace-ai-stage-dot ${stepClass}`} aria-hidden="true">
-                    {isComplete ? <FiCheckCircle /> : idx + 1}
+            <div className="grid grid-cols-1 gap-4">
+              {activeRun.hypotheses?.map((hyp, idx) => {
+                const isObserved = hyp.classification === 'observed_fact';
+                return (
+                  <div
+                    key={idx}
+                    className="glass-panel p-5 rounded-xl border border-white/10 hover:border-white/20 transition-all space-y-3 bg-surface-container-low"
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-mono text-xs font-bold text-[#47faf3]">
+                            {hyp.hypothesisId}
+                          </span>
+                          <h4 className="text-sm font-bold text-white">{hyp.title}</h4>
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-medium border ${
+                            isObserved
+                              ? 'bg-[#38bdf8]/10 text-[#38bdf8] border-[#38bdf8]/30'
+                              : 'bg-[#c084fc]/10 text-[#c084fc] border-[#c084fc]/30'
+                          }`}>
+                            {isObserved ? 'Observed Fact' : 'Candidate Hypothesis'}
+                          </span>
+                          {hyp.techniqueId && (
+                            <span className="font-mono text-[10px] px-2 py-0.5 bg-surface-container-highest rounded text-white border border-white/10">
+                              {hyp.techniqueId}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-[#cbd5e1] leading-relaxed pt-1">
+                          {hyp.statement}
+                        </p>
+                      </div>
+
+                      {/* Confidence Gauge */}
+                      <div className="bg-surface-container-highest/60 p-2.5 rounded-lg border border-white/5 shrink-0 min-w-[140px] text-right">
+                        <span className="text-[10px] text-[#8b90a0] block">Confidence Estimate</span>
+                        <span className="font-mono font-bold text-xs text-[#10b981]">
+                          {hyp.confidence?.score}% ({hyp.confidence?.level})
+                        </span>
+                        <div className="w-full bg-surface-container-low h-1 rounded-full mt-1.5 overflow-hidden">
+                          <div
+                            className="bg-[#10b981] h-full rounded-full"
+                            style={{ width: `${hyp.confidence?.score || 50}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Supporting References */}
+                    <div className="bg-black/30 p-3 rounded-lg border border-white/5 text-xs space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-[11px] font-semibold text-[#8b90a0]">Supporting Evidence:</span>
+                        {hyp.supportingEvidenceIds?.map(id => (
+                          <span key={id} className="font-mono text-[11px] px-2 py-0.5 rounded bg-[#38bdf8]/10 text-[#38bdf8] border border-[#38bdf8]/30 font-bold">
+                            {id}
+                          </span>
+                        ))}
+                        {hyp.supportingTimelineEventIds?.length > 0 && (
+                          <>
+                            <span className="text-white/20 mx-1">•</span>
+                            <span className="text-[11px] font-semibold text-[#8b90a0]">Timeline Events:</span>
+                            {hyp.supportingTimelineEventIds.map(tid => (
+                              <span key={tid} className="font-mono text-[11px] px-2 py-0.5 rounded bg-[#f59e0b]/10 text-[#f59e0b] border border-[#f59e0b]/30 font-bold">
+                                {tid}
+                              </span>
+                            ))}
+                          </>
+                        )}
+                      </div>
+
+                      {/* Uncertainty Rationale */}
+                      {hyp.confidence?.uncertaintyRationale && (
+                        <div className="text-[11px] text-[#94a3b8] italic">
+                          Rationale: {hyp.confidence.uncertaintyRationale}
+                        </div>
+                      )}
+
+                      {/* Missing Information / Contradictions */}
+                      {(hyp.contradictoryEvidence !== 'None observed' || hyp.missingInformation !== 'None identified') && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-white/5 text-[11px]">
+                          <div>
+                            <span className="text-[#8b90a0]">Contradictory Telemetry:</span>{' '}
+                            <span className="text-white">{hyp.contradictoryEvidence}</span>
+                          </div>
+                          <div>
+                            <span className="text-[#8b90a0]">Missing Telemetry:</span>{' '}
+                            <span className="text-white">{hyp.missingInformation}</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <span>{stage}</span>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-      )}
-
-      {/* State 3: COMPLETE Results State */}
-      {analysisState === 'complete' && (
-        <div className="trace-ai-results-grid" role="region" aria-label="Investigation findings report">
-          
-          {/* Left Column: Risk scores & gauge metrics */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            
-            {/* Risk Score gauge card */}
-            <section className="trace-ai-card" aria-label="Threat Assessment Gauge">
-              <div className="trace-ai-card-title">
-                <span>Risk Assessment</span>
-                <button 
-                  type="button" 
-                  className="trace-ai-rerun-btn"
-                  onClick={handleRerun}
-                  title="Replay simulated analysis sequence"
-                >
-                  Re-run Analysis
-                </button>
-              </div>
-
-              <div className="trace-ai-gauge-container">
-                <svg className="trace-ai-gauge-svg" viewBox="0 0 100 100">
-                  <circle cx="50" cy="50" r="40" className="trace-ai-gauge-bg" />
-                  <circle cx="50" cy="50" r="40" className="trace-ai-gauge-fill" />
-                  <text x="50" y="52" className="trace-ai-gauge-text">82</text>
-                  <text x="50" y="68" className="trace-ai-gauge-subtext">Risk Score</text>
-                </svg>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
-                  <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
-                    Threat Level:
-                  </span>
-                  <StatusBadge status="High" />
-                </div>
-              </div>
-
-              {/* Risk Category Breakdown Progress Bars */}
-              <div className="trace-ai-breakdown-list" aria-label="Risk category breakdown details">
-                
-                {/* Category 1: Auth Risk */}
-                <div className="trace-ai-breakdown-item">
-                  <div className="trace-ai-breakdown-label-row">
-                    <span>Authentication Risk</span>
-                    <span>88</span>
-                  </div>
-                  <div className="trace-ai-breakdown-bar-track">
-                    <div className="trace-ai-breakdown-bar-fill high" style={{ width: '88%' }} />
-                  </div>
-                </div>
-
-                {/* Category 2: Process Risk */}
-                <div className="trace-ai-breakdown-item">
-                  <div className="trace-ai-breakdown-label-row">
-                    <span>Process Risk</span>
-                    <span>79</span>
-                  </div>
-                  <div className="trace-ai-breakdown-bar-track">
-                    <div className="trace-ai-breakdown-bar-fill" style={{ width: '79%' }} />
-                  </div>
-                </div>
-
-                {/* Category 3: Network Risk */}
-                <div className="trace-ai-breakdown-item">
-                  <div className="trace-ai-breakdown-label-row">
-                    <span>Network Risk</span>
-                    <span>74</span>
-                  </div>
-                  <div className="trace-ai-breakdown-bar-track">
-                    <div className="trace-ai-breakdown-bar-fill" style={{ width: '74%' }} />
-                  </div>
-                </div>
-
-              </div>
-
-              {/* General Metadata Metrics list */}
-              <div className="trace-ai-meta-list">
-                <div className="trace-ai-meta-item">
-                  <span className="trace-ai-meta-label">Evidence Analyzed</span>
-                  <span className="trace-ai-meta-val">4</span>
-                </div>
-                <div className="trace-ai-meta-item">
-                  <span className="trace-ai-meta-label">Indicators Found</span>
-                  <span className="trace-ai-meta-val">3</span>
-                </div>
-                <div className="trace-ai-meta-item">
-                  <span className="trace-ai-meta-label">Assessed Threat Level</span>
-                  <span className="trace-ai-meta-val">High</span>
-                </div>
-              </div>
-            </section>
-
+                );
+              })}
+            </div>
           </div>
 
-          {/* Right Column: AI Triage Summary and Findings timeline list */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            
-            {/* AI Summary card */}
-            <section className="trace-ai-card" aria-label="Investigation Summary Report">
-              <div className="trace-ai-card-title">
-                <span>AI Investigation Summary</span>
-                <span className="trace-ai-summary-badge">Prototype Analysis</span>
-              </div>
-              <p className="trace-ai-summary-text">
-                The available case evidence indicates a sequence beginning with abnormal authentication activity, followed by suspicious process execution and an external network connection. The correlated events produce a HIGH threat assessment with a risk score of 82/100. The authentication and process findings contributed most strongly to the current assessment.
-              </p>
-            </section>
-
-            {/* Suspicious Indicators directory card */}
-            <section className="trace-ai-card" aria-label="Suspicious indicators timeline list">
-              <h4 className="trace-ai-card-title" style={{ borderBottom: 'none', paddingBottom: 0 }}>
-                Suspicious Indicators (3)
-              </h4>
-
-              <div className="trace-ai-findings-list">
-                
-                {/* Finding 1: Auth anomaly */}
-                <div className="trace-ai-finding-card">
-                  <div className="trace-ai-finding-header">
-                    <span className="trace-ai-finding-title">Authentication Anomaly</span>
-                    <StatusBadge status="High" />
-                  </div>
-                  <div className="trace-ai-finding-meta-row">
-                    <span className="trace-ai-finding-meta-item">
-                      Time: <span>10:31:14</span>
-                    </span>
-                    <span className="trace-ai-finding-meta-item">
-                      Evidence: <span>security.evtx</span>
-                    </span>
-                  </div>
-                  <p className="trace-ai-finding-desc">
-                    Multiple failed authentication attempts were followed by a successful login from an unusual source.
-                  </p>
+          {/* Rejected Hypotheses (Hallucination Defense) */}
+          {activeRun.rejectedHypotheses?.length > 0 && (
+            <div className="glass-panel p-4 rounded-xl border border-error/30 bg-error/5">
+              <button
+                type="button"
+                onClick={() => setShowRejected(!showRejected)}
+                className="w-full flex items-center justify-between text-xs font-bold text-error cursor-pointer"
+              >
+                <div className="flex items-center gap-2">
+                  <AlertOctagon className="w-4 h-4 text-error" />
+                  <span>Rejected Model Statements ({activeRun.rejectedHypotheses.length} unverified / fabricated references filtered out)</span>
                 </div>
+                {showRejected ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
 
-                {/* Finding 2: PowerShell process execution */}
-                <div className="trace-ai-finding-card">
-                  <div className="trace-ai-finding-header">
-                    <span className="trace-ai-finding-title">Suspicious Process Execution</span>
-                    <StatusBadge status="Critical" />
-                  </div>
-                  <div className="trace-ai-finding-meta-row">
-                    <span className="trace-ai-finding-meta-item">
-                      Time: <span>10:34:27</span>
-                    </span>
-                    <span className="trace-ai-finding-meta-item">
-                      Evidence: <span>memory.raw</span>
-                    </span>
-                  </div>
-                  <p className="trace-ai-finding-desc">
-                    An unusual PowerShell process pattern was identified during evidence review.
-                  </p>
-                </div>
-
-                {/* Finding 3: Network Connection */}
-                <div className="trace-ai-finding-card">
-                  <div className="trace-ai-finding-header">
-                    <span className="trace-ai-finding-title">External Network Connection</span>
-                    <StatusBadge status="Medium" />
-                  </div>
-                  <div className="trace-ai-finding-meta-row">
-                    <span className="trace-ai-finding-meta-item">
-                      Time: <span>10:36:52</span>
-                    </span>
-                    <span className="trace-ai-finding-meta-item">
-                      Evidence: <span>network.pcap</span>
-                    </span>
-                  </div>
-                  <p className="trace-ai-finding-desc">
-                    An outbound connection to an uncommon external destination was observed shortly after the suspicious process event.
-                  </p>
-                </div>
-
-              </div>
-            </section>
-
-            {/* Ask TRACE AI Lite chatbot card */}
-            <section className="trace-ai-card trace-ai-chat-card" aria-label="TRACE AI Investigation assistant">
-              <h4 className="trace-ai-card-title" style={{ borderBottom: 'none', paddingBottom: 0 }}>
-                <label htmlFor="trace-chatbot-input-field">Ask TRACE AI</label>
-              </h4>
-              <p className="trace-ai-chat-subtitle">
-                Ask one question about the current investigation.
-              </p>
-
-              {/* suggested preset questions buttons */}
-              <div className="trace-ai-chat-suggestions">
-                <button 
-                  type="button" 
-                  className="trace-ai-chat-suggestion-btn"
-                  onClick={() => handleSelectSuggestion('Why is this case HIGH risk?')}
-                  disabled={isAnswering}
-                >
-                  Why is this case HIGH risk?
-                </button>
-                <button 
-                  type="button" 
-                  className="trace-ai-chat-suggestion-btn"
-                  onClick={() => handleSelectSuggestion('What is the most suspicious activity?')}
-                  disabled={isAnswering}
-                >
-                  What is the most suspicious activity?
-                </button>
-                <button 
-                  type="button" 
-                  className="trace-ai-chat-suggestion-btn"
-                  onClick={() => handleSelectSuggestion('Which evidence contributed most to the risk score?')}
-                  disabled={isAnswering}
-                >
-                  Which evidence contributed most to the risk score?
-                </button>
-                <button 
-                  type="button" 
-                  className="trace-ai-chat-suggestion-btn"
-                  onClick={() => handleSelectSuggestion('Summarize the attack sequence?')}
-                  disabled={isAnswering}
-                >
-                  Summarize the attack sequence.
-                </button>
-              </div>
-
-              {/* Chat Input form */}
-              <form onSubmit={handleAskQuestion} className="trace-ai-chat-input-row" noValidate>
-                <div className="trace-ai-chat-input-wrap">
-                  <input
-                    id="trace-chatbot-input-field"
-                    type="text"
-                    className="trace-ai-chat-input"
-                    placeholder="Ask TRACE AI about this investigation..."
-                    value={question}
-                    onChange={(e) => setQuestion(e.target.value)}
-                    disabled={isAnswering}
-                    required
-                  />
-                </div>
-                <button
-                  type="submit"
-                  className="trace-ai-chat-ask-btn"
-                  disabled={isAnswering || !question.trim()}
-                >
-                  {isAnswering ? (
-                    <span className="trace-ai-chat-spinner" aria-hidden="true" />
-                  ) : (
-                    <FiSend aria-hidden="true" />
-                  )}
-                  <span>Ask</span>
-                </button>
-              </form>
-
-              {/* Chat Answer Box balloon */}
-              {answer && (
-                <div className="trace-ai-chat-response-box" role="status" aria-live="polite">
-                  <div className="trace-ai-chat-response-header">
-                    <span className="trace-ai-chat-response-badge">
-                      <FiCpu aria-hidden="true" style={{ fontSize: '0.8rem' }} /> TRACE AI
-                    </span>
-                    <span className="trace-ai-chat-response-source">
-                      Based on current case findings
-                    </span>
-                  </div>
-                  <p className="trace-ai-chat-response-body">
-                    {answer}
-                  </p>
+              {showRejected && (
+                <div className="mt-3 space-y-2 pt-2 border-t border-error/20">
+                  {activeRun.rejectedHypotheses.map((rh, i) => (
+                    <div key={i} className="bg-black/40 p-3 rounded text-xs space-y-1">
+                      <div className="font-bold text-white">{rh.title}</div>
+                      <div className="text-error text-[11px]">{rh.rejectionReason}</div>
+                      {rh.invalidReferences?.length > 0 && (
+                        <div className="font-mono text-[10px] text-slate-400">
+                          Invalid IDs: {rh.invalidReferences.join(', ')}
+                        </div>
+                      )}
+                    </div>
+                  ))}
                 </div>
               )}
-            </section>
+            </div>
+          )}
 
+          {/* Evidence Gaps & Recommended Analyst Checks */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Gaps */}
+            <div className="glass-panel p-5 rounded-xl border border-white/5 bg-surface-container-low space-y-2">
+              <h4 className="text-xs font-bold text-white flex items-center gap-2 uppercase tracking-wider">
+                <AlertTriangle className="w-4 h-4 text-[#f59e0b]" />
+                <span>Evidence Visibility Gaps</span>
+              </h4>
+              <ul className="space-y-1.5 text-xs text-[#cbd5e1]">
+                {activeRun.evidenceGaps?.length > 0 ? (
+                  activeRun.evidenceGaps.map((gap, i) => (
+                    <li key={i} className="flex items-start gap-2">
+                      <span className="text-[#f59e0b] mt-0.5">•</span>
+                      <span>{gap}</span>
+                    </li>
+                  ))
+                ) : (
+                  <li className="text-[#8b90a0] italic">No visibility blindspots identified.</li>
+                )}
+              </ul>
+            </div>
+
+            {/* Follow-ups */}
+            <div className="glass-panel p-5 rounded-xl border border-white/5 bg-surface-container-low space-y-2">
+              <h4 className="text-xs font-bold text-white flex items-center gap-2 uppercase tracking-wider">
+                <ShieldCheck className="w-4 h-4 text-[#10b981]" />
+                <span>Recommended Analyst Verification</span>
+              </h4>
+              <ul className="space-y-1.5 text-xs text-[#cbd5e1]">
+                {activeRun.suggestedFollowUps?.length > 0 ? (
+                  activeRun.suggestedFollowUps.map((action, i) => (
+                    <li key={i} className="flex items-start gap-2">
+                      <Check className="w-3.5 h-3.5 text-[#10b981] mt-0.5 shrink-0" />
+                      <span>{action}</span>
+                    </li>
+                  ))
+                ) : (
+                  <li className="text-[#8b90a0] italic">No pending analyst verification tasks.</li>
+                )}
+              </ul>
+            </div>
           </div>
+        </div>
+      )}
 
+      {/* Referenced Evidence Modal */}
+      {isEvidenceModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-[#0f1425] border border-white/15 rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden animate-scale-up">
+            <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between bg-surface-container-low">
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <FileText className="w-4 h-4 text-[#38bdf8]" />
+                <span>Evidence Artifacts Analyzed in this Run</span>
+              </h3>
+              <button
+                onClick={() => setIsEvidenceModalOpen(false)}
+                className="text-outline hover:text-white p-1 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto custom-scrollbar space-y-4 text-xs">
+              {loadingEvidence ? (
+                <div className="text-center py-8 text-[#8b90a0]">
+                  <RefreshCw className="w-6 h-6 animate-spin mx-auto text-[#47faf3] mb-2" />
+                  <span>Loading evidence metadata...</span>
+                </div>
+              ) : referencedEvidence?.length > 0 ? (
+                referencedEvidence.map((ev, idx) => (
+                  <div key={idx} className="bg-black/40 p-4 rounded-xl border border-white/5 space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="font-bold text-white">{ev.originalName || ev.fileName}</span>
+                      <span className="font-mono text-[10px] text-[#38bdf8]">{ev.evidenceId}</span>
+                    </div>
+                    <div className="text-[#8b90a0] text-[11px]">
+                      Path: <span className="font-mono text-white">{ev.relativePath || 'root'}</span> | Size: {ev.fileSize} bytes
+                    </div>
+                    {ev.sha256Hash && (
+                      <div className="font-mono text-[10px] text-[#cbd5e1] bg-black/60 p-2 rounded truncate">
+                        SHA-256: {ev.sha256Hash}
+                      </div>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <p className="text-[#8b90a0] italic">No evidence items returned.</p>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>

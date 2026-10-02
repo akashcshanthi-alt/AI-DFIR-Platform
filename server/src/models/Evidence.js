@@ -46,6 +46,15 @@ const EvidenceSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  relativePath: {
+    type: String,
+    default: ''
+  },
+  batchId: {
+    type: String,
+    default: '',
+    index: true
+  },
   fileType: {
     type: String,
     required: true
@@ -95,6 +104,46 @@ const EvidenceSchema = new mongoose.Schema({
     type: String,
     enum: ['Active', 'Archived', 'Processing', 'Deleted'],
     default: 'Active'
+  },
+  parsing: {
+    parserType: {
+      type: String,
+      enum: ['TEXT_LOG', 'JSON', 'JSONL', 'CSV', 'UNSUPPORTED', 'NONE'],
+      default: 'NONE'
+    },
+    status: {
+      type: String,
+      enum: ['Pending', 'Parsed', 'Partially Parsed', 'Failed', 'Unsupported'],
+      default: 'Pending'
+    },
+    recordCount: {
+      type: Number,
+      default: 0
+    },
+    artifacts: {
+      ips: { type: [String], default: [] },
+      domains: { type: [String], default: [] },
+      urls: { type: [String], default: [] },
+      emails: { type: [String], default: [] },
+      hashes: {
+        md5: { type: [String], default: [] },
+        sha1: { type: [String], default: [] },
+        sha256: { type: [String], default: [] }
+      },
+      users: { type: [String], default: [] },
+      hosts: { type: [String], default: [] },
+      processes: { type: [String], default: [] },
+      eventIds: { type: [String], default: [] }
+    },
+    records: [{
+      lineNumber: Number,
+      timestamp: String,
+      raw: String,
+      details: mongoose.Schema.Types.Mixed
+    }],
+    warnings: { type: [String], default: [] },
+    errors: { type: [String], default: [] },
+    parsedAt: { type: Date }
   }
 });
 

@@ -16,7 +16,12 @@ const initializeSocket = (server) => {
   io.use((socket, next) => {
     const token = socket.handshake.auth?.token || socket.handshake.query?.token;
     if (token) {
-      jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret-key-12345', (err, decoded) => {
+      const secret = process.env.JWT_SECRET;
+      if (!secret) {
+        console.error('[Socket Security Critical] JWT_SECRET environment variable is missing.');
+        return next(new Error('Authentication service configuration error'));
+      }
+      jwt.verify(token, secret, (err, decoded) => {
         if (err) {
           console.warn('[Socket] Connection authentication failed:', err.message);
           return next(new Error('Authentication error'));

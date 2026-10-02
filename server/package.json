@@ -9,7 +9,13 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "test:cases": "node src/scratch/test_cases.js",
     "test:dashboard": "node src/scratch/test_dashboard.js",
-    "test:audit": "node src/scratch/test_audit.js"
+    "test:audit": "node src/scratch/test_audit.js",
+    "test:evidence": "node src/scratch/test_folder_upload_and_parsing.js",
+    "test:ioc": "node src/scratch/test_ioc_detection.js",
+    "test:timeline": "node src/scratch/test_timeline_engine.js",
+    "test:mitre": "node src/scratch/test_mitre_mapping.js",
+    "test:ai": "node src/scratch/test_ai_investigation.js",
+    "test:ai:live": "node src/scratch/live_ai_verification.js"
   },
   "keywords": [
     "dfir",
@@ -20,6 +26,7 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@langchain/langgraph": "^1.4.18",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
@@ -31,6 +38,7 @@
     "mongoose": "^8.1.1",
     "morgan": "^1.10.0",
     "multer": "^2.2.0",
+    "nodemailer": "^10.0.10",
     "pdfkit": "^0.19.1",
     "socket.io": "^4.8.3",
     "socket.io-client": "^4.8.3"

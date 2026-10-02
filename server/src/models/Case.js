@@ -13,6 +13,11 @@ const CaseSchema = new mongoose.Schema({
     required: true,
     trim: true
   },
+  incidentType: {
+    type: String,
+    default: 'General Security Incident',
+    trim: true
+  },
   description: {
     type: String,
     default: ''

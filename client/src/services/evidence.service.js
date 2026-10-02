@@ -65,6 +65,22 @@ export const evidenceService = {
   },
 
   /**
+   * Fetch all evidence in a batch
+   */
+  async getEvidenceByBatch(batchId) {
+    const response = await fetch(`${API_URL}/evidence/batch/${batchId}`, {
+      method: 'GET',
+      headers: getHeaders()
+    });
+
+    const data = await response.json();
+    if (!response.ok || !data.success) {
+      throw new Error(data.error?.message || `Failed to retrieve batch ${batchId}`);
+    }
+    return data.data;
+  },
+
+  /**
    * Securely upload forensic evidence files using XMLHttpRequest to report progress
    * @param {FormData} formData - Multipart data holding target files
    * @param {Function} onProgress - Progress callback function (percent)
@@ -92,7 +108,7 @@ export const evidenceService = {
         try {
           const res = JSON.parse(xhr.responseText);
           if (xhr.status >= 200 && xhr.status < 300) {
-            resolve(res.data);
+            resolve(res);
           } else {
             reject(new Error(res.error?.message || 'Forensic file ingestion failed.'));
           }

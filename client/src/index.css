@@ -30,3 +30,78 @@ body {
 p {
   margin: 0;
 }
+
+/* Base control defaults for dark enterprise UI */
+select,
+option {
+  background-color: #0b1220;
+  color: #f8fafc;
+}
+
+button {
+  cursor: pointer;
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 14mm 12mm 14mm 12mm;
+  }
+
+  html,
+  body,
+  #root,
+  .trace-app-shell,
+  .trace-app-main,
+  .trace-app-content,
+  .trace-case-content,
+  .trace-case-page {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    position: static !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    box-shadow: none !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Completely hide app-level navigation, sidebar, top header, tabs, and action bars */
+  .trace-sidebar,
+  aside,
+  .trace-app-header,
+  header,
+  nav,
+  .trace-case-nav,
+  .trace-case-header,
+  .trace-tab-list,
+  .trace-report-toc,
+  .no-print {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    width: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Ensure page breaks don't tear cards apart or cause blank voids */
+  .print-page-break {
+    page-break-before: always !important;
+    break-before: page !important;
+  }
+
+  .avoid-break,
+  .trace-report-card,
+  table,
+  tr,
+  figure {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+}

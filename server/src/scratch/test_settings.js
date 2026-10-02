@@ -8,44 +8,24 @@ async function runSettingsTests() {
   let token = '';
   const testEmail = `analyst.settings.${Date.now()}@trace.ai`;
 
-  // 1. Register a test operator
+  // 1. Login with seeded CSO user
   try {
-    const regRes = await fetch(`${BASE_URL}/auth/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        fullName: 'Settings Auditor',
-        email: testEmail,
-        password: 'clearancepassword123',
-        role: 'Admin',
-        department: 'TRACE Settings Command'
-      })
-    });
-
-    const regData = await regRes.json();
-    if (!regRes.ok || !regData.success) {
-      throw new Error(`Registration failed: ${JSON.stringify(regData)}`);
-    }
-
-    console.log(`[PASS] 1. Settings operator registered. Email: ${testEmail}`);
-
-    // 2. Login to retrieve token
     const loginRes = await fetch(`${BASE_URL}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        email: testEmail,
+        email: 'cso@trace.ai',
         password: 'clearancepassword123'
       })
     });
 
     const loginData = await loginRes.json();
     if (!loginRes.ok || !loginData.success) {
-      throw new Error(`Login failed: ${JSON.stringify(loginData)}`);
+      throw new Error(`Login failed for seeded CSO: ${JSON.stringify(loginData)}`);
     }
 
     token = loginData.token;
-    console.log(`[PASS] 2. Login successful. Token obtained.`);
+    console.log(`[PASS] 1. Login successful as CSO. Token obtained.`);
   } catch (err) {
     console.error(`[FAIL] Authentication setup aborted: ${err.message}`);
     process.exit(1);
@@ -141,7 +121,7 @@ async function runSettingsTests() {
   }
 
   console.log('\n=== [ALL SETTINGS MODULE INTEGRATION TESTS SUCCESSFUL] ===');
-  process.exit(0);
+  return;
 }
 
 runSettingsTests();

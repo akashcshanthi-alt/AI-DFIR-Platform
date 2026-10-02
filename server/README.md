@@ -21,14 +21,51 @@ The backend follows clean enterprise separation rules:
 
 ### Prerequisites
 - Node.js (v18+)
-- MongoDB (Optional for Stage 1 stubs verification)
+- MongoDB Community Server (v6.0+ or v7.0+) installed locally
+- MongoDB Compass (optional GUI for browsing collections)
 
-### Running Development Server
-1. Install server dependencies:
-   ```bash
-   npm install
+### Local MongoDB Configuration
+The platform uses the local MongoDB Community Server database named `arclight_dfir`. No MongoDB Atlas or external cloud connection is required.
+
+1. **Verify or Start MongoDB Locally**:
+   - On Windows, MongoDB runs as a Windows Service:
+     ```powershell
+     # Check service status
+     Get-Service MongoDB
+
+     # Start service if stopped (Administrator PowerShell)
+     Start-Service MongoDB
+     ```
+   - Alternatively, start `mongod` manually from terminal:
+     ```powershell
+     mongod --dbpath "C:\data\db"
+     ```
+   - Verify connection in PowerShell:
+     ```powershell
+     Test-NetConnection -ComputerName 127.0.0.1 -Port 27017
+     ```
+
+2. **Environment Variables**:
+   In `server/.env` (created from `server/.env.example`):
+   ```env
+   PORT=5000
+   NODE_ENV=development
+   MONGO_URI=mongodb://127.0.0.1:27017/arclight_dfir
    ```
-2. Start development watch server:
+
+3. **Running the Server**:
    ```bash
-   npm run dev
+   # From the server directory:
+   npm start        # Standard start
+   # or
+   npm run dev      # Development with nodemon
    ```
+   The backend will connect to `mongodb://127.0.0.1:27017/arclight_dfir`, verify seeding without duplicating records, and wait for a successful connection before opening the HTTP port.
+
+### Running Backend Tests
+```bash
+npm run test:cases       # Case management integration tests
+npm run test:dashboard   # Dashboard analytics integration tests
+npm run test:audit       # Audit logging and export tests
+node src/scratch/verify_persistence.js  # End-to-end local MongoDB persistence check
+```
