@@ -284,6 +284,295 @@ flowchart TD
 
 ---
 
+## Frontend → Backend → Database Flow
+
+TRACE AI follows a decoupled, layered architectural request flow:
+
+```mermaid
+flowchart LR
+    A[React Frontend] --> B[Express REST API]
+    B --> C[Controllers]
+    C --> D[Services]
+    D --> E[Mongoose Models]
+    E --> F[(MongoDB)]
+```
+
+### Layered Request Lifecycle
+1. **React Frontend**: The client interface initiates asynchronous HTTP requests via native `fetch` service modules. When accessing protected endpoints, it attaches the JWT access token in the `Authorization: Bearer <token>` header.
+2. **Express REST API (`/api/*`)**: The Express routing layer receives the HTTP request and executes middleware pipelines in sequence:
+   - Security headers enforcement via `helmet`
+   - Cross-Origin Resource Sharing verification via `cors`
+   - Tiered rate limiting via `express-rate-limit`
+   - JSON / URL-encoded body parsing
+   - Authentication & RBAC clearance verification via `authenticate` and `authorizeRoles`
+   - Payload schema validation via `express-validator`
+3. **Controllers (`server/src/controllers/`)**: Parse HTTP parameters, validate request boundaries, and orchestrate calls to underlying services. Controllers never execute low-level database queries or business algorithms directly; they format and return standardized JSON responses or pass errors to `errorHandler.js`.
+4. **Services (`server/src/services/`)**: Encapsulate the core business logic of the platform, including streaming file hashing, deterministic forensic parsing, IOC detection regexes, timeline sequencing, MITRE ATT&CK correlation, LangGraph AI graph execution, and PDF report assembly.
+5. **Mongoose Models (`server/src/models/`)**: Define strict data schemas, field types, validation constraints, default values, and index specifications for MongoDB collections.
+6. **MongoDB Database (`arclight_dfir`)**: Provides persistent, high-throughput document storage for all operational and forensic data, executing indexed queries scoped by `caseId`.
+
+---
+
+## Backend Architecture
+
+TRACE AI employs a modern **Node.js** (v18+) runtime paired with the **Express 5** framework to deliver a modular, asynchronous, and secure RESTful backend.
+
+### Backend Responsibilities
+
+The backend server coordinates the entire digital investigation lifecycle:
+
+- **REST API Routing**: Exposes structured, version-controlled HTTP endpoints under `/api/*`.
+- **Authentication & Authorization**: Manages operator registration, cryptographic email verification tokens, login credential validation, and Google OAuth SSO clearance.
+- **Token Management**: Issues and validates cryptographically signed JWT access tokens and manages refresh token lifecycles.
+- **User & RBAC Clearance**: Enforces fine-grained role-based permissions (`Super Admin`, `Admin`, `Investigator`, `Analyst`) across sensitive endpoints.
+- **Case Management**: Manages case lifecycles (`Active`, `Under Investigation`, `Contained`, `Resolved`, `Closed`), incident classification, severity ratings, and investigation parameters.
+- **Evidence Ingestion**: Handles single-file, multi-file, and directory uploads through streaming multipart form-data parsers with disk storage bounds.
+- **SHA-256 Hashing & Integrity Verification**: Calculates streaming cryptographic digests upon receipt and provides on-demand hash re-verification against evidence records.
+- **Evidence Parsing**: Coordinates high-performance deterministic streaming parsers for forensic log formats (`TXT`, `LOG`, `SYSLOG`, `JSON`, `JSONL`, `CSV`) while safely flagging unsupported binary formats.
+- **IOC Detection & Normalization**: Harvests threat indicators (IPs, domains, URLs, hashes, emails, usernames) from parsed records, deduplicates matches, and calculates confidence scores.
+- **Forensic Timeline Generation**: Extracts disparate timestamp formats, normalizes them to coordinated UTC ISO strings, and constructs chronological event sequences.
+- **MITRE ATT&CK Mapping**: Correlates observed behaviors against the local Enterprise ATT&CK v14.1 catalog and manages the analyst validation lifecycle (`candidate`, `confirmed`, `rejected`).
+- **AI Investigation Orchestration**: Directs multi-stage reasoning workflows via LangGraph state graphs and coordinates local inference with Ollama Mistral under strict token budgets.
+- **Operational Audit Logging**: Writes immutable audit records tracking all authentication events, clearance modifications, evidence uploads, and report downloads.
+- **Report & PDF Generation**: Compiles case telemetry, cryptographic evidence lists, IOC tables, and AI narratives into formatted, multi-page PDF documents using PDFKit.
+
+### Backend Request Flow
+
+All backend interactions adhere to a unidirectional layered flow:
+
+```
+React Frontend
+      ↓  (HTTP REST Request / Bearer JWT)
+Express REST API (Routes & Middleware)
+      ↓  (Validated Request Data)
+Controllers (Request Coordination)
+      ↓  (Domain Operations)
+Services (Forensics, LangGraph, Parsers, PDF)
+      ↓  (Schema Operations)
+Mongoose Models (Validation & Mapping)
+      ↓  (BSON Queries / Persistence)
+MongoDB (Local Database)
+```
+
+### Backend Directory Structure
+
+Inspecting `server/src/` reflects the layered separation of concerns:
+
+```
+server/
+└── src/
+    ├── config/          # Environment configuration, database connection, Firebase Admin, and Multer upload limits
+    ├── controllers/     # HTTP request coordinators (auth, cases, evidence, ioc, timeline, mitre, ai, reports, audit, user)
+    ├── middleware/      # JWT authentication, RBAC clearance, request logging, centralized error handling, and input validation
+    ├── models/          # Mongoose document schemas (User, Case, Evidence, IOC, TimelineEvent, MitreMapping, InvestigationRun, AuditLog, Report)
+    ├── routes/          # Express route definitions mapping HTTP paths to controllers
+    ├── services/        # Specialized domain services (forensicParser, timeline, iocDetection, mitreCatalog, investigationWorkflow, ollama, reportGenerator, socket)
+    ├── scratch/         # Automated test suites and verification scripts
+    ├── utils/           # Database seeding, helper utilities, and formatting helpers
+    ├── validators/      # Express-validator schema rules for request payloads
+    ├── app.js           # Express application configuration, middleware mounting, and route registration
+    └── server.js        # Entry point: database connection bootstrapping, HTTP listener startup, and WebSocket initialization
+```
+
+---
+
+## Backend API
+
+The platform exposes dedicated REST route groups mounted in `server/src/app.js`. Each group encapsulates a specific functional domain:
+
+### Primary Route Groups
+
+| Route Group | Base Path | Core Responsibilities |
+|---|---|---|
+| **Authentication** | `/api/auth` | User registration, email verification (`/verify-email`), verification resend, login credential checking, Google SSO (`/google`), forgot/reset password tokens, logout, and authenticated operator profile retrieval (`/profile`). |
+| **Cases** | `/api/cases` | Full CRUD operations for incident cases, plus case-scoped forensic actions: triggering IOC detection (`/:caseId/ioc/detect`), generating timelines (`/:caseId/timeline/generate`), mapping MITRE ATT&CK techniques (`/:caseId/mitre/generate`), and launching AI investigations (`/:caseId/ai/investigate`). |
+| **Evidence** | `/api/evidence` | Ingestion of files and folders via multipart form-data (`/upload`), batch-level querying (`/batch/:batchId`), case-specific evidence listing (`/case/:caseId`), on-demand SHA-256 integrity verification, evidence metadata updates, and artifact file downloads. |
+| **Reports** | `/api/reports` | Report compilation from active case state (`/generate`), global report archival listing, single report JSON retrieval, binary PDF report streaming (`/:id/download`), and report deletion. |
+| **Audit Logs** | `/api/audit` | Querying the immutable system audit trail with filtering by actor, action type, target resource, and date range (`/`), as well as multi-format exporting (`/export` supporting CSV and JSON formats). |
+
+### Additional Supporting Route Groups
+
+- **Dashboard (`/api/dashboard`)**: Aggregates high-level telemetry, including active case counts, severity distributions, total ingested artifacts, and recent operational activity.
+- **Timeline (`/api/timeline`)**: Global and case-scoped querying of normalized chronological forensic events and statistical distributions.
+- **IOCs (`/api/ioc`)**: Standalone querying, filtering, and statistical analysis of detected Indicators of Compromise across cases.
+- **MITRE ATT&CK (`/api/mitre`)**: Technique candidate inspection, status updates (`confirmed`/`rejected`), and query access to the local Enterprise catalog.
+- **AI Engine (`/api/ai`)**: Manages and queries historical LangGraph investigation runs and execution statuses.
+- **User Management (`/api/users`)**: Administrator endpoints for viewing operator accounts, updating clearance roles, and managing platform access.
+- **Notifications (`/api/notifications`)**: Real-time user alert dispatching and notification acknowledgment.
+- **Settings (`/api/settings`)**: Platform-wide configuration and investigator preferences.
+
+---
+
+## Database Architecture
+
+TRACE AI relies on **MongoDB** as its primary persistent document store, interfaced through the **Mongoose 8** Object Data Modeling (ODM) library.
+
+### What GitHub Stores vs. What MongoDB Stores
+
+To maintain security, privacy, and forensic hygiene, code storage is strictly decoupled from runtime investigation data:
+
+```
+┌────────────────────────────────────────────────────────┐
+│               GitHub Repository (Version Control)      │
+│  • Application Source Code (React, Express, LangGraph) │
+│  • Configuration Templates (.env.example)              │
+│  • Architecture Guides & Technical Documentation       │
+│  • Dependency Manifests (package.json, lockfiles)      │
+└────────────────────────────────────────────────────────┘
+                           ≠  (NEVER COMMITTED)
+┌────────────────────────────────────────────────────────┐
+│               Local MongoDB Database (Runtime Storage) │
+│  • User Credentials & Clearance Roles                  │
+│  • Incident Cases & Metadata                           │
+│  • Forensic Evidence Records & SHA-256 Hashes          │
+│  • Extracted IOCs & Forensic Timelines                 │
+│  • MITRE ATT&CK Correlations & Analyst Reviews         │
+│  • AI Investigation Reasoning Runs & Narratives        │
+│  • Immutable Operational Audit Trail Logs              │
+│  • Generated Report Document Records                   │
+└────────────────────────────────────────────────────────┘
+```
+
+- **GitHub does NOT store your database**: Cloning the repository downloads the codebase and dependencies, but zero cases, zero user accounts, and zero evidence records.
+- **MongoDB stores ALL application runtime data**: All investigative assets and user credentials reside exclusively within the local host's MongoDB data directory.
+
+### Implemented Database Models (Mongoose Schemas)
+
+The database schema is defined in `server/src/models/` and maps directly to the following collections:
+
+1. **`User` (`server/src/models/User.js`)**: Operator accounts, email addresses, bcrypt-hashed passwords, assigned RBAC roles, email verification status, and hashed single-use reset tokens.
+2. **`Case` (`server/src/models/Case.js`)**: Incident cases with unique identifiers, title, description, incident classification (e.g. Unauthorized Access), severity (`Low`, `Medium`, `High`, `Critical`), investigation status, target host, source/destination IPs, and assigned investigator IDs.
+3. **`Evidence` (`server/src/models/Evidence.js`)**: Ingested forensic files with original filename, storage filepath, MIME type, file size, streaming SHA-256 digest, parser status (`Uploaded`, `Processing`, `Parsed`, `Unsupported`, `Failed`), parser type, extracted artifact counts, and chain of custody metadata.
+4. **`IOC` (`server/src/models/IOC.js`)**: Threat indicators with normalized values, indicator type (`ip`, `domain`, `url`, `email`, `hash_md5`, `hash_sha1`, `hash_sha256`, `user`, `host`, `process`, `event_id`), severity rating, confidence scores, and provenance references to originating evidence files.
+5. **`TimelineEvent` (`server/src/models/TimelineEvent.js`)**: Normalized chronological events with ISO-8601 timestamps, event classification, title, summary, detailed description, source evidence IDs, and associated IOC IDs.
+6. **`MitreMapping` (`server/src/models/MitreMapping.js`)**: Mapped adversary behaviors containing technique ID, technique name, tactic ID, tactic name, confidence score, analyst review status (`candidate`, `confirmed`, `rejected`), rationale, and supporting evidence references.
+7. **`InvestigationRun` (`server/src/models/InvestigationRun.js`)**: Records of LangGraph reasoning executions, including execution run ID, LLM model identifier (`mistral:latest`), execution duration, candidate hypotheses with supporting evidence IDs, executive summary, identified visibility gaps, and recommended actions.
+8. **`AuditLog` (`server/src/models/AuditLog.js`)**: Append-only audit records containing timestamps, action names, actor IDs, operator emails, clearance roles, target resources, client IP addresses, user agents, and execution outcomes.
+9. **`Report` (`server/src/models/Report.js`)**: Generated case reports storing compiled case metrics, executive summaries, risk scores, PDF file disk paths, examiner sign-offs, and creation timestamps.
+10. **`Notification` (`server/src/models/Notification.js`)**: In-app user notifications and system alerts.
+11. **`Settings` (`server/src/models/Settings.js`)**: Platform-wide configuration flags and preferences.
+
+---
+
+## MongoDB Connection
+
+### Development Connection Configuration
+
+The backend connects to MongoDB using the connection URI defined in `server/.env`:
+
+```env
+MONGO_URI=mongodb://127.0.0.1:27017/arclight_dfir
+```
+
+### Connection Characteristics
+- **Community Server**: Relies on a standard local MongoDB Community Server installation listening on default port `27017`.
+- **Mongoose Initialization**: Managed by `server/src/config/database.js` using `mongoose.connect(mongoUri, { serverSelectionTimeoutMS: 5000 })`. If MongoDB is not running, the server fails fast with clear, actionable diagnostic instructions.
+- **Automatic Database Creation**: If the database `arclight_dfir` does not exist when the backend first connects, MongoDB automatically creates it when the first document is written.
+- **Authentication**: Local development configurations do not require a database username or password. If connecting to a secured or remote MongoDB instance, credentials can be supplied safely via the URI without modifying application code.
+- **Data Isolation**: All collections and physical data files reside on the local machine's disk drive (e.g., `C:\Program Files\MongoDB\Server\7.0\data\` on Windows or `/var/lib/mongodb` on Linux). Data is never sent to GitHub or external cloud databases.
+
+---
+
+## Database Setup on a New Laptop
+
+When setting up TRACE AI on a fresh workstation or laptop, follow this step-by-step checklist:
+
+### Step 1: Install MongoDB Community Server
+Download and run the official installer for your operating system:
+- **Windows / macOS / Linux**: Download from [MongoDB Community Server Download Center](https://www.mongodb.com/try/download/community).
+- On Windows, ensure the option **"Install MongoDB as a Service"** is checked during setup.
+- (Optional) Install **MongoDB Compass** if you prefer a visual GUI to inspect collections.
+
+### Step 2: Start the MongoDB Service
+Confirm that the MongoDB daemon is active:
+- **Windows (PowerShell as Administrator)**:
+  ```powershell
+  Get-Service MongoDB
+  # If stopped, run:
+  Start-Service MongoDB
+  ```
+- **macOS**:
+  ```bash
+  brew services start mongodb-community
+  ```
+- **Linux (Ubuntu/Debian)**:
+  ```bash
+  sudo systemctl start mongod
+  sudo systemctl enable mongod
+  ```
+
+### Step 3: Verify MongoDB Is Running
+Verify that port `27017` is actively listening:
+- **Windows (PowerShell)**:
+  ```powershell
+  Test-NetConnection -ComputerName 127.0.0.1 -Port 27017
+  ```
+- **macOS / Linux**:
+  ```bash
+  mongosh --eval "db.runCommand({ ping: 1 })"
+  ```
+  *(Expected: `{ ok: 1 }`)*
+
+### Step 4: Clone the GitHub Repository
+```bash
+git clone https://github.com/akashcshanthi-alt/AI-DFIR-Platform.git
+cd AI-DFIR-Platform
+```
+
+### Step 5: Create `server/.env`
+Create the environment configuration file inside the `server/` directory:
+```bash
+# In the project root:
+cp server/.env.example server/.env
+# Or manually create server/.env in your code editor
+```
+
+### Step 6: Configure `MONGO_URI`
+Ensure `server/.env` contains the local database connection string:
+```env
+MONGO_URI=mongodb://127.0.0.1:27017/arclight_dfir
+
+# Ensure required JWT placeholders are also defined:
+JWT_SECRET=replace_with_a_secure_random_secret_at_least_32_characters
+JWT_REFRESH_SECRET=replace_with_a_secure_random_refresh_secret_at_least_32_characters
+JWT_EXPIRES_IN=7d
+PORT=5000
+NODE_ENV=development
+FRONTEND_URL=http://localhost:5173
+```
+
+### Step 7: Install Node.js Dependencies
+```bash
+npm install
+npm install --prefix client
+npm install --prefix server
+```
+
+### Step 8: Start the Backend Server
+```bash
+node server/src/server.js
+```
+
+### Step 9: Confirm Successful Database Connection
+Verify that the terminal displays successful database connection logs:
+```text
+[Database] Attempting connection to MongoDB at [mongodb://127.0.0.1:27017/arclight_dfir]...
+[Database] Connected to MongoDB database successfully: "arclight_dfir" at 127.0.0.1:27017
+[TRACE AI Server] Listening successfully on port 5000 in [development] mode.
+```
+
+### Step 10: Start the Frontend Client
+In a separate terminal:
+```bash
+npm run dev --prefix client
+```
+Open [http://localhost:5173](http://localhost:5173) in your browser. You can now register a local operator account, create your first case, and begin ingesting evidence.
+
+> **CRITICAL SETUP NOTE:**  
+> Cloning the GitHub repository downloads **only the application code**. MongoDB database data and uploaded evidence files are **never** included in the repository. When starting the application on a new laptop, you start with a clean, freshly initialized database.
+
+---
+
 ## 7. Technology Stack
 
 | Layer | Technology | Purpose |
